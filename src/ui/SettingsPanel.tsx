@@ -41,11 +41,33 @@ export function SettingsPanel({
         {num('marginalRatePct', '가정 한계세율 (%)', true, '금융소득 종합과세(연 2,000만원 초과) 시 적용될 본인의 종합소득 한계세율 가정. 초과 배당에 (한계세율 − 원천 15%)를 추가 과세하는 근사.')}
         {num('otherFinancialIncomeKrw', '기타 금융소득 (₩/년)', false, '이 포트폴리오 밖에서 발생하는 연간 이자·배당 소득. 종합과세 임계(2,000만원) 판정에 합산됩니다.')}
         <div className="flex flex-col gap-1">
-          <label className={labelCls}>시작일 (빈칸 = 자동)</label>
+          <label className={labelCls}>
+            시작일 (빈칸 = 자동)
+            <HelpTip title="시작일">
+              비교 시작 날짜. 비워두면 선택한 자산들이 모두 데이터를 가진 가장 이른
+              날부터 시작합니다. 자산 중 하나라도 이 날짜에 데이터가 없으면 그
+              자산의 데이터 시작일로 자동 조정됩니다 (결과에 안내 표시).
+            </HelpTip>
+          </label>
           <input
             type="date"
             value={shared.startDate}
             onChange={(e) => onChange((p) => ({ ...p, startDate: e.target.value }))}
+            className={inputCls}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className={labelCls}>
+            종료일 (빈칸 = 최신)
+            <HelpTip title="종료일">
+              비교 종료 날짜. 특정 구간(예: 닷컴버블 1998~2003, 금융위기 2007~2009)만
+              잘라서 볼 때 시작일과 함께 지정하세요.
+            </HelpTip>
+          </label>
+          <input
+            type="date"
+            value={shared.endDate}
+            onChange={(e) => onChange((p) => ({ ...p, endDate: e.target.value }))}
             className={inputCls}
           />
         </div>

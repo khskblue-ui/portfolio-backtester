@@ -15,6 +15,7 @@
 import { fetchWithTimeout } from '../fetchUtil'
 import type { DailySeries, AlignedDataBundle, AlignedSeries } from './types'
 import { CASH_TICKER } from './types'
+import { ASSET_CATALOG } from './catalog'
 
 /** 크립토 티커 판별 (Yahoo -USD 표기) — 365일 거래 → 공통 캘린더 강제 대상 */
 export function isCryptoTicker(ticker: string): boolean {
@@ -41,34 +42,77 @@ function toLocalDate(ts: number, gmtoffset: number): string {
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 /**
+ * 재시도 공통 fetch — 429(레이트리밋)·5xx는 지수 백오프, 그 외 4xx는 즉시 실패.
+ * @param retryBaseMs 백오프 기본 간격 (테스트 주입용, 기본 1500ms)
+ */
+async function fetchWithRetry(url: string, ticker: string, retryBaseMs: number): Promise<Response> {
+  const MAX_ATTEMPTS = 4
+  let lastStatus = 0
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) await sleep(retryBaseMs * 2 ** (attempt - 1)) // 1.5s → 3s → 6s
+    const res = await fetchWithTimeout(url, 20000)
+    if (res.ok) return res
+    lastStatus = res.status
+    if (res.status !== 429 && res.status < 500) break
+  }
+  const hint =
+    lastStatus === 429
+      ? ' — 요청 과다. 잠시 후 다시 시도하세요'
+      : lastStatus === 404
+        ? ' — 존재하지 않는 티커입니다. 심볼을 확인하세요'
+        : ''
+  throw new Error(`${ticker} 데이터 조회 실패 (HTTP ${lastStatus}${hint})`)
+}
+
+/**
  * 단일 티커의 전 기간 일별 시계열 조회 (비조정 open/close + adjclose + 배당 이벤트)
- *
- * Yahoo는 range=max 요청에 레이트리밋(429)을 자주 걸므로 지수 백오프로 재시도.
- * @param opts.retryBaseMs 백오프 기본 간격 (테스트 주입용, 기본 1500ms)
  */
 export async function fetchDailySeries(
   ticker: string,
   opts?: { retryBaseMs?: number }
 ): Promise<DailySeries> {
   const url = `/yf/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=max&events=div&includeAdjustedClose=true`
-  const retryBaseMs = opts?.retryBaseMs ?? 1500
-  const MAX_ATTEMPTS = 4
+  const res = await fetchWithRetry(url, ticker, opts?.retryBaseMs ?? 1500)
+  const json = await res.json()
+  return parseYahooChart(json, ticker)
+}
 
-  let lastStatus = 0
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    if (attempt > 0) await sleep(retryBaseMs * 2 ** (attempt - 1)) // 1.5s → 3s → 6s
-    const res = await fetchWithTimeout(url, 20000)
-    if (res.ok) {
-      const json = await res.json()
-      return parseYahooChart(json, ticker)
-    }
-    lastStatus = res.status
-    // 429(레이트리밋)·5xx만 재시도 가치가 있음 — 404 등은 즉시 실패
-    if (res.status !== 429 && res.status < 500) break
+// ─── Stooq 소스 (장기 히스토리 — 금 현물 등, §3 유니버스 확장) ─────────────────
+
+/**
+ * Stooq 일별 CSV 조회 — Yahoo에 없는 장기 히스토리(XAUUSD 금 현물 1968~ 등).
+ * 배당 이벤트 없음(현물·지수 전용). 카탈로그에서 source='stooq'로 지정된 티커에 사용.
+ */
+export async function fetchStooqSeries(
+  ticker: string,
+  opts?: { retryBaseMs?: number }
+): Promise<DailySeries> {
+  const url = `/stooq/q/d/l/?s=${encodeURIComponent(ticker.toLowerCase())}&i=d`
+  const res = await fetchWithRetry(url, ticker, opts?.retryBaseMs ?? 1500)
+  return parseStooqCsv(await res.text(), ticker)
+}
+
+/** Stooq CSV(Date,Open,High,Low,Close[,Volume]) → DailySeries (순수 함수) */
+export function parseStooqCsv(csv: string, ticker: string): DailySeries {
+  const lines = csv.trim().split(/\r?\n/)
+  if (lines.length < 2 || !lines[0].startsWith('Date')) {
+    throw new Error(`${ticker} 데이터 없음 (Stooq 심볼을 확인하세요)`)
   }
-  throw new Error(
-    `${ticker} 데이터 조회 실패 (HTTP ${lastStatus}${lastStatus === 429 ? ' — 요청 과다. 잠시 후 다시 시도하세요' : ''})`
-  )
+  const dates: string[] = []
+  const open: number[] = []
+  const close: number[] = []
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(',')
+    const d = cols[0]
+    const o = Number(cols[1])
+    const c = Number(cols[4])
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || !(o > 0) || !(c > 0)) continue
+    dates.push(d)
+    open.push(o)
+    close.push(c)
+  }
+  if (dates.length === 0) throw new Error(`${ticker} 유효한 가격 데이터 없음 (Stooq)`)
+  return { ticker, dates, open, close, adjClose: [...close], dividends: {} }
 }
 
 /** Yahoo v8 chart 응답 → DailySeries (순수 함수 — 테스트/스모크 재사용) */
@@ -152,19 +196,25 @@ export function alignToCommonCalendar(
     firstDates[s.ticker] = s.dates[0]
     if (s.dates[0] > latestStart) latestStart = s.dates[0]
   }
-  const clipWarnings: string[] = []
-  for (const s of seriesList) {
-    if (s.dates[0] < latestStart) {
-      clipWarnings.push(
-        `${s.ticker}는 ${s.dates[0]}부터 데이터가 있으나, 최늦 시작 자산에 맞춰 ${latestStart}부터로 클립됩니다`
-      )
-    }
-  }
-
   const startDate = options?.startDate && options.startDate > latestStart ? options.startDate : latestStart
   const endDate = options?.endDate ?? '9999-12-31'
   const dates = [...calendar].filter((d) => d >= startDate && d <= endDate).sort()
-  if (dates.length < 2) throw new Error('공통 거래일이 부족합니다 (자산 시작일이 겹치지 않음)')
+  if (dates.length < 2) throw new Error('공통 거래일이 부족합니다 (자산 시작일·종료일 범위를 확인하세요)')
+
+  // 히스토리가 가장 짧은 자산이 비교 시작일을 결정 — 원인 자산을 지목해 설명 (§3.3)
+  const clipWarnings: string[] = []
+  const bindingTickers = seriesList.filter((s) => s.dates[0] === latestStart).map((s) => s.ticker)
+  const someClipped = seriesList.some((s) => s.dates[0] < latestStart)
+  if (someClipped && !(options?.startDate && options.startDate >= latestStart)) {
+    const head = options?.startDate
+      ? `지정한 시작일(${options.startDate})보다 늦은 ${dates[0]}부터 비교합니다`
+      : `비교 기간은 ${dates[0]}부터입니다`
+    clipWarnings.push(
+      `${head} — ${bindingTickers.join(', ')}의 데이터가 이때부터 존재하기 때문입니다. ` +
+        `모든 전략을 같은 기간·같은 데이터로 비교해야 공정하므로, 히스토리가 가장 짧은 자산에 기간을 맞춥니다. ` +
+        `더 긴 과거가 필요하면 해당 자산을 장기 히스토리 대체 티커(입력창 자동완성 참고)로 바꾸세요`
+    )
+  }
 
   const series: Record<string, AlignedSeries> = {}
   for (const s of seriesList) {
@@ -298,7 +348,9 @@ export async function loadDataBundle(
   tickers: string[],
   options?: { startDate?: string; endDate?: string; forceRefresh?: boolean }
 ): Promise<AlignedDataBundle> {
-  const unique = [...new Set(tickers.map((t) => t.toUpperCase()))].filter((t) => t !== CASH_TICKER)
+  const unique = [...new Set(tickers.map((t) => t.trim().toUpperCase()))].filter(
+    (t) => t !== '' && t !== CASH_TICKER
+  )
   if (unique.length === 0) throw new Error('시장 자산이 없습니다 (CASH만으로는 백테스트 불가)')
 
   const seriesList: DailySeries[] = []
@@ -312,7 +364,8 @@ export async function loadDataBundle(
       }
     }
     if (fetchedFromNetwork) await sleep(INTER_FETCH_DELAY_MS)
-    const fetched = await fetchDailySeries(t)
+    const source = ASSET_CATALOG.find((e) => e.ticker === t)?.source
+    const fetched = source === 'stooq' ? await fetchStooqSeries(t) : await fetchDailySeries(t)
     fetchedFromNetwork = true
     writeCache(t, fetched)
     seriesList.push(fetched)

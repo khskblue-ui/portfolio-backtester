@@ -26,6 +26,7 @@ export interface SharedSettings {
   otherFinancialIncomeKrw: number
   cryptoTaxEnabled: boolean
   startDate: string
+  endDate: string
 }
 
 export const defaultSharedSettings = (): SharedSettings => ({
@@ -41,6 +42,7 @@ export const defaultSharedSettings = (): SharedSettings => ({
   otherFinancialIncomeKrw: 0,
   cryptoTaxEnabled: false,
   startDate: '',
+  endDate: '',
 })
 
 /** 공통 설정을 전략에 주입 — 실행 직전에 적용해 전략 간 가정 불일치를 차단 */
@@ -65,7 +67,12 @@ export function applyShared(s: StrategyConfig, g: SharedSettings): StrategyConfi
 }
 
 export const fmtUsd = (v: number) => '$' + v.toLocaleString('en-US', { maximumFractionDigits: 0 })
+/** 손익용 부호 표기: +$1,234 / −$1,234 */
+export const fmtSignedUsd = (v: number) =>
+  `${v < 0 ? '−' : '+'}$${Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
 export const fmtPct = (v: number) => (Number.isFinite(v) ? `${v.toFixed(1)}%` : '—')
+export const fmtSignedPct = (v: number) =>
+  Number.isFinite(v) ? `${v < 0 ? '−' : '+'}${Math.abs(v).toFixed(1)}%` : '—'
 
 export const inputCls =
   'w-full min-w-0 border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'

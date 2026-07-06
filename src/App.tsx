@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, TrendingUp, X } from 'lucide-react'
 import {
   loadDataBundle,
@@ -49,7 +49,9 @@ export default function App() {
 
   // ── 설정 (localStorage 자동 저장 — 백엔드 없는 독립 툴의 저장 수단) ──
   const [strategies, setStrategies] = usePersistentState<StrategyConfig[]>('bt_strategies_v1', defaultStrategies)
-  const [shared, setShared] = usePersistentState<SharedSettings>('bt_shared_v1', defaultSharedSettings)
+  const [sharedStored, setShared] = usePersistentState<SharedSettings>('bt_shared_v1', defaultSharedSettings)
+  // 저장된 설정에 새 필드(예: endDate)가 없어도 기본값으로 채움 — 스키마 확장 호환
+  const shared = useMemo(() => ({ ...defaultSharedSettings(), ...sharedStored }), [sharedStored])
 
   // ── 실행 상태 ──
   const [running, setRunning] = useState(false)
@@ -67,6 +69,10 @@ export default function App() {
       setNotice('전략이 없습니다 — 전략을 추가하세요')
       return
     }
+    if (shared.startDate && shared.endDate && shared.endDate <= shared.startDate) {
+      setNotice('종료일이 시작일보다 빠릅니다 — 날짜를 확인하세요')
+      return
+    }
     const applied = strategies.map((s) => applyShared(s, shared))
     for (const s of applied) {
       const errors = validateStrategy(s)
@@ -80,6 +86,7 @@ export default function App() {
       const tickers = applied.flatMap((s) => s.sleeves.map((x) => x.ticker))
       const b = await loadDataBundle(tickers, {
         startDate: shared.startDate || undefined,
+        endDate: shared.endDate || undefined,
         forceRefresh,
       })
       setBundle(b)
@@ -253,7 +260,7 @@ export default function App() {
 
         {/* 결과 */}
         {runs && bundle && runs.length > 0 && (
-          <ResultsSection runs={runs} bundle={bundle} palette={palette} taxEnabled={shared.taxEnabled} />
+          <ResultsSection runs={runs} bundle={bundle} palette={palette} theme={theme} taxEnabled={shared.taxEnabled} />
         )}
 
         {/* 티커 자동완성 카탈로그 — 장기 히스토리(^GSPC 1927~ 등) 포함 */}

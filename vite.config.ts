@@ -21,6 +21,12 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      // Stooq: 장기 히스토리 CSV (금 현물 XAUUSD 1968~ 등) — 프로덕션은 functions/stooq
+      '/stooq': {
+        target: 'https://stooq.com',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/stooq/, ''),
+      },
       // Yahoo Finance: 프로덕션은 Cloudflare Pages Function(functions/yf)이 담당 —
       // dev 서버에서도 동일한 /yf/* 경로가 동작하도록 프록시
       '/yf': {

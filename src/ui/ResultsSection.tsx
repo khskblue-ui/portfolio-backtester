@@ -11,7 +11,7 @@ import {
 } from 'recharts'
 import { assetCautionFor, type StrategyRun, type AlignedDataBundle } from '@/core'
 import { HelpTip } from './HelpTip'
-import { cardCls, fmtUsd, fmtPct } from './common'
+import { cardCls, fmtUsd, fmtSignedUsd, fmtPct, fmtSignedPct } from './common'
 
 /**
  * 결과 섹션 (§7) — TWRR 기준 정렬 비교표 + growth-of-$1 오버레이 +
@@ -21,11 +21,13 @@ export function ResultsSection({
   runs,
   bundle,
   palette,
+  theme,
   taxEnabled,
 }: {
   runs: StrategyRun[]
   bundle: AlignedDataBundle
   palette: string[]
+  theme: 'light' | 'dark'
   taxEnabled: boolean
 }) {
   const [taxView, setTaxView] = useState<'postTax' | 'preTax'>('postTax')
@@ -37,20 +39,33 @@ export function ResultsSection({
     return m
   }, [runs, palette])
 
+  const colorByName = useMemo(() => {
+    const m = new Map<string, string>()
+    runs.forEach((r, i) => m.set(r.config.name, palette[i % palette.length]))
+    return m
+  }, [runs, palette])
+
   // §7: TWRR 기준 정렬
   const sorted = useMemo(
     () => [...runs].sort((a, b) => b[taxView].metrics.twrrAnnualPct - a[taxView].metrics.twrrAnnualPct),
     [runs, taxView]
   )
 
-  // growth-of-$1 오버레이 데이터 (다운샘플 ~500 포인트)
+  // 누적 수익률 오버레이 데이터 (다운샘플 ~500 포인트)
+  // 각 포인트에 평가액·투입원금을 동봉 — 커서 툴팁에서 원금/수익금/수익률 표시용
   const chartData = useMemo(() => {
     const n = runs[0][taxView].metrics.growthOf1.length
     const step = Math.max(1, Math.ceil(n / 500))
     const rows: Record<string, string | number>[] = []
     const pushRow = (i: number) => {
-      const row: Record<string, string | number> = { date: runs[0][taxView].metrics.growthOf1[i].date }
-      for (const r of runs) row[r.config.name] = Number(r[taxView].metrics.growthOf1[i].value.toFixed(4))
+      const row: Record<string, string | number> = {
+        date: runs[0][taxView].metrics.growthOf1[i].date,
+        __contrib: runs[0][taxView].result.daily[i].cumContributions,
+      }
+      for (const r of runs) {
+        row[r.config.name] = Number(r[taxView].metrics.growthOf1[i].value.toFixed(4))
+        row[`${r.config.name}__value`] = r[taxView].result.daily[i].value
+      }
       rows.push(row)
     }
     for (let i = 0; i < n; i += step) pushRow(i)
@@ -91,6 +106,8 @@ export function ResultsSection({
   }, [runs, taxView])
 
   const gridColor = 'rgba(128,128,128,0.15)'
+  // (가시성) 축 라벨은 배경과 대비되는 회색 — 다크에서 기본값(#666)이 묻히는 문제 수정
+  const axisTickColor = theme === 'dark' ? '#9ca3af' : '#6b7280'
 
   return (
     <div className="space-y-4">
@@ -139,22 +156,35 @@ export function ResultsSection({
         </div>
       )}
 
-      {/* growth-of-$1 오버레이 (6.2: 낙폭·비교는 TWRR 기준) */}
+      {/* 누적 수익률 오버레이 (6.2: 낙폭·비교는 TWRR 기준) */}
       <div className={`${cardCls} p-5`}>
         <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">
-          $1 성장 곡선 (TWRR 기준{taxEnabled ? (taxView === 'postTax' ? ' · 세후' : ' · 세전') : ''})
+          누적 수익률 (TWRR 기준{taxEnabled ? (taxView === 'postTax' ? ' · 세후' : ' · 세전') : ''})
+          <HelpTip title="누적 수익률 곡선">
+            납입 타이밍 효과를 제거한 전략 자체의 누적 수익률(시간가중)입니다.
+            곡선 위에 커서를 올리면 그 시점의 투입 원금·평가액·수익금을 보여줍니다 —
+            평가액 기준 수익률은 납입 타이밍이 섞여 곡선(TWRR)과 다를 수 있습니다.
+          </HelpTip>
         </h3>
         <p className="text-xs text-gray-400 mb-3">납입 타이밍 효과를 제거한 전략 자체 성과 — 공정 비교 잣대</p>
         <ResponsiveContainer width="100%" height={340}>
           <LineChart data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
-            <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={60} tickFormatter={(d: string) => d.slice(0, 7)} />
-            <YAxis tick={{ fontSize: 11 }} width={44} domain={['auto', 'auto']} tickFormatter={(v: number) => `${v}x`} />
-            <Tooltip
-              formatter={(v) => `${Number(v ?? 0).toFixed(3)}x`}
-              labelStyle={{ fontSize: 12 }}
-              contentStyle={{ fontSize: 12, borderRadius: 8 }}
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 11, fill: axisTickColor }}
+              stroke={axisTickColor}
+              minTickGap={60}
+              tickFormatter={(d: string) => d.slice(0, 7)}
             />
+            <YAxis
+              tick={{ fontSize: 11, fill: axisTickColor }}
+              stroke={axisTickColor}
+              width={48}
+              domain={['auto', 'auto']}
+              tickFormatter={(g: number) => `${g >= 1 ? '+' : ''}${((g - 1) * 100).toFixed(0)}%`}
+            />
+            <Tooltip content={<MoneyTooltip colorByName={colorByName} />} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             {runs.map((r) => (
               <Line
@@ -309,6 +339,62 @@ export function ResultsSection({
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+// ─── 차트 커서 툴팁 — 그 시점의 투입 원금·평가액·수익금(률) ────────────────────
+
+interface TooltipEntry {
+  dataKey?: string | number
+  payload?: Record<string, string | number>
+}
+
+function MoneyTooltip({
+  active,
+  payload,
+  label,
+  colorByName,
+}: {
+  active?: boolean
+  payload?: TooltipEntry[]
+  label?: string | number
+  colorByName: Map<string, string>
+}) {
+  if (!active || !payload || payload.length === 0) return null
+  const row = payload[0].payload ?? {}
+  const contrib = Number(row['__contrib'] ?? 0)
+
+  // 평가액 큰 순으로 정렬
+  const entries = payload
+    .map((p) => {
+      const name = String(p.dataKey ?? '')
+      const value = Number(row[`${name}__value`] ?? 0)
+      return { name, value, profit: value - contrib }
+    })
+    .sort((a, b) => b.value - a.value)
+
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg p-3 text-xs space-y-1.5 max-w-xs">
+      <div className="font-semibold text-gray-800 dark:text-gray-100">{label}</div>
+      <div className="text-gray-500 dark:text-gray-400 pb-1 border-b border-gray-100 dark:border-gray-700">
+        투입 원금 {fmtUsd(contrib)}
+      </div>
+      {entries.map((e) => (
+        <div key={e.name} className="flex items-baseline gap-1.5">
+          <span
+            className="w-2 h-2 rounded-full flex-shrink-0 self-center"
+            style={{ backgroundColor: colorByName.get(e.name) }}
+          />
+          <span className="text-gray-600 dark:text-gray-300 truncate">{e.name}</span>
+          <span className="ml-auto text-right whitespace-nowrap">
+            <span className="font-semibold text-gray-800 dark:text-gray-100">{fmtUsd(e.value)}</span>
+            <span className={e.profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>
+              {' '}{fmtSignedUsd(e.profit)} ({fmtSignedPct(contrib > 0 ? (e.profit / contrib) * 100 : 0)})
+            </span>
+          </span>
+        </div>
+      ))}
     </div>
   )
 }

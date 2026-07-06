@@ -449,6 +449,7 @@ export function validateStrategy(config: StrategyConfig, bundle?: AlignedDataBun
   if (config.sleeves.filter((s) => s.ticker !== CASH_TICKER).length === 0) errors.push('시장 자산 슬리브 없음')
   const tickerSet = new Set(config.sleeves.map((s) => s.ticker))
   if (tickerSet.size !== config.sleeves.length) errors.push('중복 티커')
+  if (config.sleeves.some((s) => s.ticker.trim() === '')) errors.push('빈 티커 — 심볼을 입력하거나 해당 행을 삭제하세요')
 
   if (config.contribution.initialUsd <= 0 && config.contribution.monthlyUsd <= 0)
     errors.push('초기 투자금 또는 월 적립금이 필요')

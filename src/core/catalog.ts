@@ -15,10 +15,12 @@ export interface CatalogEntry {
   ticker: string
   label: string
   group: AssetGroup
-  /** Yahoo 데이터 대략 시작 연도 */
+  /** 데이터 대략 시작 연도 */
   startYear: number
   /** 에피스테믹 주의사항 — 결과 화면 경고로도 노출 */
   note?: string
+  /** 데이터 소스 — 생략 시 yahoo. stooq는 배당 이벤트 없음(현물·지수 전용) */
+  source?: 'stooq'
 }
 
 const PRICE_INDEX_NOTE = '가격지수 — 배당 미포함(총수익·배당세 과소). 매매 불가 지수를 보유 가능으로 가정'
@@ -42,6 +44,20 @@ export const ASSET_CATALOG: CatalogEntry[] = [
   { ticker: 'VXUS', label: '미국 제외 전세계', group: '주식 ETF', startYear: 2011 },
   { ticker: 'SCHD', label: '미국 배당성장', group: '주식 ETF', startYear: 2011 },
 
+  // ── 채권 뮤추얼펀드: ETF 이전 시대(80~90년대) 커버, 분배금 포함 ──
+  {
+    ticker: 'VUSTX', label: '미국 장기국채 펀드', group: '채권/현금 ETF', startYear: 1986,
+    note: '뮤추얼펀드 — NAV 1일 1회(시가=종가 가정), 분배금 포함. TLT(2002~) 이전 시대 커버',
+  },
+  {
+    ticker: 'VFITX', label: '미국 중기국채 펀드', group: '채권/현금 ETF', startYear: 1991,
+    note: '뮤추얼펀드 — NAV 1일 1회(시가=종가 가정), 분배금 포함. IEF(2002~) 이전 시대 커버',
+  },
+  {
+    ticker: 'VBMFX', label: '미국 종합채권 펀드', group: '채권/현금 ETF', startYear: 1986,
+    note: '뮤추얼펀드 — NAV 1일 1회(시가=종가 가정), 분배금 포함. AGG(2003~) 이전 시대 커버',
+  },
+
   // ── 채권/현금 ETF ──
   { ticker: 'TLT', label: '미국 장기국채 20년+', group: '채권/현금 ETF', startYear: 2002 },
   { ticker: 'IEF', label: '미국 중기국채 7-10년', group: '채권/현금 ETF', startYear: 2002 },
@@ -54,6 +70,10 @@ export const ASSET_CATALOG: CatalogEntry[] = [
   { ticker: 'GLD', label: '금 ETF', group: '원자재', startYear: 2004 },
   { ticker: 'IAU', label: '금 ETF (저보수)', group: '원자재', startYear: 2005 },
   { ticker: 'GC=F', label: '금 선물 (장기)', group: '원자재', startYear: 2000, note: '선물 근월물 — 롤오버 왜곡 가능. 보관·롤 비용 미반영' },
+  {
+    ticker: 'XAUUSD', label: '금 현물 스팟 (최장)', group: '원자재', startYear: 1968, source: 'stooq',
+    note: '금 현물 스팟(Stooq) — 90년대 이전 커버. 보관비용·매매 스프레드·ETF 보수 미반영',
+  },
 
   // ── 크립토 ──
   { ticker: 'BTC-USD', label: '비트코인', group: '크립토', startYear: 2014 },

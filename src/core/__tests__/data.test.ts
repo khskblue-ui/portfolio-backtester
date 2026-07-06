@@ -38,12 +38,28 @@ describe('공통 거래 캘린더 (3.3)', () => {
     expect(bundle.series['BTC-USD'].close).toHaveLength(EQUITY_DATES.length)
   })
 
-  it('비정렬 시작일: 최늦 시작일로 클립 + 경고', () => {
+  it('비정렬 시작일: 히스토리 가장 짧은 자산에 맞춰 클립 + 원인 자산 지목 경고', () => {
     const late = series('BTC-USD', CRYPTO_DATES.slice(6)) // 01-07부터
     const bundle = alignToCommonCalendar([series('VOO', EQUITY_DATES), late])
     expect(bundle.dates[0]).toBe('2023-01-09') // 01-07(토) 이후 첫 거래일
     expect(bundle.clipWarnings.length).toBeGreaterThan(0)
-    expect(bundle.clipWarnings[0]).toContain('VOO')
+    // 경고는 클립"당한" 자산이 아니라 기간을 결정한 "원인" 자산(BTC-USD)을 지목해야 함
+    expect(bundle.clipWarnings[0]).toContain('BTC-USD')
+    expect(bundle.clipWarnings[0]).toContain('2023-01-09')
+    expect(bundle.clipWarnings[0]).toContain('때문')
+  })
+
+  it('사용자 지정 시작일보다 늦어지는 경우 경고에 지정일 명시', () => {
+    const late = series('BTC-USD', CRYPTO_DATES.slice(6))
+    const bundle = alignToCommonCalendar([series('VOO', EQUITY_DATES), late], { startDate: '2023-01-02' })
+    expect(bundle.clipWarnings[0]).toContain('2023-01-02')
+    expect(bundle.clipWarnings[0]).toContain('BTC-USD')
+  })
+
+  it('종료일 지정: 해당일 이후 데이터 제외', () => {
+    const bundle = alignToCommonCalendar([series('VOO', EQUITY_DATES)], { endDate: '2023-01-10' })
+    expect(bundle.dates[bundle.dates.length - 1]).toBe('2023-01-10')
+    expect(bundle.dates[0]).toBe('2023-01-02')
   })
 
   it('주말 배당(ex-date 캘린더 밖)은 다음 거래일로 이월 — 현금흐름 유실 방지', () => {
@@ -159,5 +175,43 @@ describe('자산 카탈로그 (장기 히스토리 대체)', async () => {
     expect(assetCautionFor('^UNKNOWN_INDEX')).toMatch(/배당 미포함/) // 패턴 감지
     expect(assetCautionFor('GC=F')).toMatch(/롤오버/)
     expect(assetCautionFor('SPY')).toBeNull()
+  })
+})
+
+describe('Stooq CSV 파싱 (장기 히스토리 소스)', async () => {
+  const { parseStooqCsv } = await import('../data')
+
+  it('정상 CSV → DailySeries (배당 없음)', () => {
+    const csv = 'Date,Open,High,Low,Close,Volume\n1990-01-02,401.5,403.0,400.1,402.3,0\n1990-01-03,402.3,404.0,401.0,403.8,0\n'
+    const s = parseStooqCsv(csv, 'XAUUSD')
+    expect(s.dates).toEqual(['1990-01-02', '1990-01-03'])
+    expect(s.open[0]).toBeCloseTo(401.5, 10)
+    expect(s.close[1]).toBeCloseTo(403.8, 10)
+    expect(Object.keys(s.dividends)).toHaveLength(0)
+  })
+
+  it('무효 행(결측·0가격)은 건너뜀', () => {
+    const csv = 'Date,Open,High,Low,Close,Volume\n1990-01-02,401.5,403,400,402.3,0\nbad,row,,,,\n1990-01-04,0,0,0,0,0\n1990-01-05,405,406,404,405.5,0\n'
+    const s = parseStooqCsv(csv, 'XAUUSD')
+    expect(s.dates).toEqual(['1990-01-02', '1990-01-05'])
+  })
+
+  it('심볼 없음 응답 → 안내 에러', () => {
+    expect(() => parseStooqCsv('No data', 'NOPE')).toThrow(/Stooq/)
+  })
+})
+
+describe('빈 티커 검증 (HTTP 404 원인 차단)', async () => {
+  const { validateStrategy } = await import('../engine')
+  const { cleanStrategy } = await import('./helpers')
+
+  it('빈 티커 슬리브 → 검증 에러 (조회 전에 차단)', () => {
+    const s = cleanStrategy({
+      sleeves: [
+        { ticker: 'VOO', targetWeight: 1 },
+        { ticker: '', targetWeight: 0 },
+      ],
+    })
+    expect(validateStrategy(s).some((e) => e.includes('빈 티커'))).toBe(true)
   })
 })
