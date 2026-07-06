@@ -38,15 +38,37 @@ function toLocalDate(ts: number, gmtoffset: number): string {
   return new Date((ts + gmtoffset) * 1000).toISOString().slice(0, 10)
 }
 
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
 /**
  * 단일 티커의 전 기간 일별 시계열 조회 (비조정 open/close + adjclose + 배당 이벤트)
+ *
+ * Yahoo는 range=max 요청에 레이트리밋(429)을 자주 걸므로 지수 백오프로 재시도.
+ * @param opts.retryBaseMs 백오프 기본 간격 (테스트 주입용, 기본 1500ms)
  */
-export async function fetchDailySeries(ticker: string): Promise<DailySeries> {
+export async function fetchDailySeries(
+  ticker: string,
+  opts?: { retryBaseMs?: number }
+): Promise<DailySeries> {
   const url = `/yf/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=max&events=div&includeAdjustedClose=true`
-  const res = await fetchWithTimeout(url, 20000)
-  if (!res.ok) throw new Error(`${ticker} 데이터 조회 실패 (HTTP ${res.status})`)
-  const json = await res.json()
-  return parseYahooChart(json, ticker)
+  const retryBaseMs = opts?.retryBaseMs ?? 1500
+  const MAX_ATTEMPTS = 4
+
+  let lastStatus = 0
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) await sleep(retryBaseMs * 2 ** (attempt - 1)) // 1.5s → 3s → 6s
+    const res = await fetchWithTimeout(url, 20000)
+    if (res.ok) {
+      const json = await res.json()
+      return parseYahooChart(json, ticker)
+    }
+    lastStatus = res.status
+    // 429(레이트리밋)·5xx만 재시도 가치가 있음 — 404 등은 즉시 실패
+    if (res.status !== 429 && res.status < 500) break
+  }
+  throw new Error(
+    `${ticker} 데이터 조회 실패 (HTTP ${lastStatus}${lastStatus === 429 ? ' — 요청 과다. 잠시 후 다시 시도하세요' : ''})`
+  )
 }
 
 /** Yahoo v8 chart 응답 → DailySeries (순수 함수 — 테스트/스모크 재사용) */
@@ -262,9 +284,15 @@ function writeCache(ticker: string, data: DailySeries): void {
   }
 }
 
+/** 네트워크 조회 간 간격 — Yahoo 레이트리밋(429) 회피. 캐시 히트엔 미적용 */
+const INTER_FETCH_DELAY_MS = 400
+
 /**
  * 전략들이 참조하는 모든 티커(CASH 제외)를 조회·정렬한 번들 반환.
  * forceRefresh=false면 24시간 localStorage 캐시 사용.
+ *
+ * ⚠ 병렬 조회 금지 — Yahoo는 동시 range=max 요청에 429를 던짐.
+ * 순차 조회 + 요청 간 딜레이 + fetchDailySeries의 백오프 재시도 조합.
  */
 export async function loadDataBundle(
   tickers: string[],
@@ -273,17 +301,22 @@ export async function loadDataBundle(
   const unique = [...new Set(tickers.map((t) => t.toUpperCase()))].filter((t) => t !== CASH_TICKER)
   if (unique.length === 0) throw new Error('시장 자산이 없습니다 (CASH만으로는 백테스트 불가)')
 
-  const seriesList = await Promise.all(
-    unique.map(async (t) => {
-      if (!options?.forceRefresh) {
-        const cached = readCache(t)
-        if (cached) return cached
+  const seriesList: DailySeries[] = []
+  let fetchedFromNetwork = false
+  for (const t of unique) {
+    if (!options?.forceRefresh) {
+      const cached = readCache(t)
+      if (cached) {
+        seriesList.push(cached)
+        continue
       }
-      const fetched = await fetchDailySeries(t)
-      writeCache(t, fetched)
-      return fetched
-    })
-  )
+    }
+    if (fetchedFromNetwork) await sleep(INTER_FETCH_DELAY_MS)
+    const fetched = await fetchDailySeries(t)
+    fetchedFromNetwork = true
+    writeCache(t, fetched)
+    seriesList.push(fetched)
+  }
 
   return alignToCommonCalendar(seriesList, options)
 }

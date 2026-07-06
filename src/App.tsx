@@ -6,6 +6,7 @@ import {
   validateStrategy,
   defaultStrategies,
   emptyStrategy,
+  ASSET_CATALOG,
   type StrategyConfig,
   type StrategyRun,
   type AlignedDataBundle,
@@ -254,6 +255,15 @@ export default function App() {
         {runs && bundle && runs.length > 0 && (
           <ResultsSection runs={runs} bundle={bundle} palette={palette} taxEnabled={shared.taxEnabled} />
         )}
+
+        {/* 티커 자동완성 카탈로그 — 장기 히스토리(^GSPC 1927~ 등) 포함 */}
+        <datalist id="asset-catalog">
+          {ASSET_CATALOG.map((a) => (
+            <option key={a.ticker} value={a.ticker}>
+              {`${a.label} · ${a.startYear}~ · ${a.group}${a.note ? ' ⚠' : ''}`}
+            </option>
+          ))}
+        </datalist>
 
         <footer className="text-center text-xs text-gray-400 dark:text-gray-600 pt-4 pb-8">
           데이터: Yahoo Finance (일별 EOD) · 모든 금액 USD · 결과는 원화 실현손익이 아닙니다

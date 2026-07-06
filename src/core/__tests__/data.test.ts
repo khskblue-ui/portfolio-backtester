@@ -87,3 +87,77 @@ describe('크립토 판별', () => {
     expect(isCryptoTicker('VOO')).toBe(false)
   })
 })
+
+describe('429 레이트리밋 재시도 (fetchDailySeries)', async () => {
+  const { fetchDailySeries } = await import('../data')
+  const { vi } = await import('vitest')
+
+  const okPayload = {
+    chart: {
+      result: [
+        {
+          meta: { gmtoffset: 0 },
+          timestamp: [1672617600, 1672704000],
+          indicators: { quote: [{ open: [100, 101], close: [101, 102] }], adjclose: [{ adjclose: [101, 102] }] },
+        },
+      ],
+    },
+  }
+  const res = (status: number, body?: unknown) =>
+    new Response(body != null ? JSON.stringify(body) : '', { status })
+
+  it('429 두 번 후 성공 → 재시도로 복구', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(res(429))
+      .mockResolvedValueOnce(res(429))
+      .mockResolvedValueOnce(res(200, okPayload))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const series = await fetchDailySeries('SPY', { retryBaseMs: 1 })
+      expect(series.dates).toHaveLength(2)
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('429 지속 → 4회 시도 후 안내 메시지와 함께 실패', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(res(429))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await expect(fetchDailySeries('SPY', { retryBaseMs: 1 })).rejects.toThrow(/429.*요청 과다/)
+      expect(fetchMock).toHaveBeenCalledTimes(4)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('404 등 4xx는 재시도 없이 즉시 실패', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(res(404))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await expect(fetchDailySeries('NOPE', { retryBaseMs: 1 })).rejects.toThrow(/404/)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
+describe('자산 카탈로그 (장기 히스토리 대체)', async () => {
+  const { ASSET_CATALOG, assetCautionFor } = await import('../catalog')
+
+  it('티커 중복 없음 + 닷컴버블 커버 자산 존재 (2000년 이전 시작)', () => {
+    const tickers = ASSET_CATALOG.map((a) => a.ticker)
+    expect(new Set(tickers).size).toBe(tickers.length)
+    expect(ASSET_CATALOG.some((a) => a.startYear <= 1995)).toBe(true)
+  })
+
+  it('지수/선물엔 주의사항, 일반 ETF엔 없음', () => {
+    expect(assetCautionFor('^GSPC')).toMatch(/배당 미포함/)
+    expect(assetCautionFor('^UNKNOWN_INDEX')).toMatch(/배당 미포함/) // 패턴 감지
+    expect(assetCautionFor('GC=F')).toMatch(/롤오버/)
+    expect(assetCautionFor('SPY')).toBeNull()
+  })
+})

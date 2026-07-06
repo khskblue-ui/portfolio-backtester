@@ -27,6 +27,11 @@ export default defineConfig({
         target: 'https://query1.finance.yahoo.com',
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/yf/, ''),
+        // 프로덕션 프록시(functions/yf)와 동일한 브라우저 UA — 429 완화
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
       },
     },
   },

@@ -7,6 +7,7 @@ import {
   type SellMode,
 } from '@/core'
 import { NumberInput } from './NumberInput'
+import { HelpTip } from './HelpTip'
 import { cardCls, inputCls, selectCls, labelCls } from './common'
 
 /** 전략 편집 카드 — 슬리브·적립 배분·리밸런싱 규칙 DSL */
@@ -51,7 +52,14 @@ export function StrategyCard({
       {/* 슬리브 */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <span className={labelCls}>자산 배분</span>
+          <span className={labelCls}>
+            자산 배분
+            <HelpTip title="자산 배분">
+              보유할 자산(티커)과 목표 비중 — 합계 100%. 입력창에서 자동완성으로 장기 히스토리
+              자산(^GSPC 1927~, SPY 1993~ 등)을 고를 수 있습니다. CASH는 현금 슬리브(유휴현금
+              금리 적용), ^로 시작하면 지수 자체 보유 가정(배당 미포함 주의).
+            </HelpTip>
+          </span>
           <span className={`text-xs font-mono ${Math.abs(weightSum - 1) > 1e-6 ? 'text-red-500 font-bold' : 'text-gray-400'}`}>
             합 {(weightSum * 100).toFixed(0)}%
           </span>
@@ -67,6 +75,7 @@ export function StrategyCard({
                 }))
               }
               placeholder="티커 (VOO, BTC-USD, CASH)"
+              list="asset-catalog"
               className={`${inputCls} flex-1 font-mono uppercase`}
             />
             <div className="flex items-center gap-1 w-20 flex-shrink-0">
@@ -124,7 +133,16 @@ export function StrategyCard({
       {/* 규칙 DSL */}
       <div className="grid grid-cols-2 gap-2">
         <div className="flex flex-col gap-1">
-          <label className={labelCls}>적립 배분</label>
+          <label className={labelCls}>
+            적립 배분
+            <HelpTip title="적립 배분">
+              매달 들어오는 적립금을 어느 자산에 나눠 살지 정하는 규칙.
+              <br />· <b>미달 슬리브 우선</b>: 목표 대비 부족한 자산부터, 부족분에 비례해 채움 —
+              적립만으로 자연스럽게 리밸런싱 효과
+              <br />· <b>목표비중 비례</b>: 현재 상태와 무관하게 항상 목표 비중대로
+              <br />· <b>고정 분할</b>: 자산별로 직접 정한 비율대로 (적립% 입력란이 생김)
+            </HelpTip>
+          </label>
           <select
             value={strategy.contribution.allocation}
             onChange={(e) =>
@@ -138,7 +156,17 @@ export function StrategyCard({
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label className={labelCls}>리밸런싱 트리거</label>
+          <label className={labelCls}>
+            리밸런싱 트리거
+            <HelpTip title="리밸런싱 트리거" align="right">
+              무너진 비중을 언제 목표로 되돌릴지 정하는 조건.
+              <br />· <b>없음</b>: 리밸런싱 안 함 (적립 배분만)
+              <br />· <b>주기</b>: N개월마다 정기 실행
+              <br />· <b>밴드</b>: 비중이 목표 ±X%p를 벗어나는 순간
+              <br />· <b>밴드 + 주기</b>: 둘 중 하나라도 충족되면
+              <br />잦은 리밸런싱은 매도 → 양도세·비용을 만듭니다. 세후 결과로 비교하세요.
+            </HelpTip>
+          </label>
           <select
             value={strategy.rebalance.trigger}
             onChange={(e) => onChange((s) => ({ ...s, rebalance: { ...s.rebalance, trigger: e.target.value as RebalanceTrigger } }))}
@@ -151,7 +179,16 @@ export function StrategyCard({
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label className={labelCls}>매도 정책</label>
+          <label className={labelCls}>
+            매도 정책
+            <HelpTip title="매도 정책">
+              트리거가 발동했을 때 매도를 허용할지.
+              <br />· <b>매도 허용</b>: 초과 자산을 팔아 목표 비중 복원
+              <br />· <b>무매도</b>: 절대 팔지 않음 — 적립을 미달 자산에 몰아주는 것만으로 조정.
+              양도세가 이연되지만, 과대 비중을 오래 못 닫을 수 있음(경고 표시)
+              <br />· <b>무매도 + 주기 매도만</b>: 평소엔 무매도, N개월마다만 매도 허용
+            </HelpTip>
+          </label>
           <select
             value={strategy.rebalance.mode}
             onChange={(e) => onChange((s) => ({ ...s, rebalance: { ...s.rebalance, mode: e.target.value as SellMode } }))}

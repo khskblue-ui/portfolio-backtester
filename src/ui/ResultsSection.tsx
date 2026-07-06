@@ -9,7 +9,8 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
-import type { StrategyRun, AlignedDataBundle } from '@/core'
+import { assetCautionFor, type StrategyRun, type AlignedDataBundle } from '@/core'
+import { HelpTip } from './HelpTip'
 import { cardCls, fmtUsd, fmtPct } from './common'
 
 /**
@@ -71,6 +72,18 @@ export function ResultsSection({
     return agg
   }, [runs])
 
+  // 지수/선물 등 "실매매 불가 자산" 가정 경고 (카탈로그 note + ^/=F 패턴)
+  const assetCautions = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const r of runs) {
+      for (const s of r.config.sleeves) {
+        const caution = assetCautionFor(s.ticker)
+        if (caution && !seen.has(s.ticker)) seen.set(s.ticker, caution)
+      }
+    }
+    return [...seen.entries()]
+  }, [runs])
+
   const years = useMemo(() => {
     const set = new Set<number>()
     for (const r of runs) for (const a of r[taxView].metrics.annualReturns) set.add(a.year)
@@ -109,8 +122,11 @@ export function ResultsSection({
       </div>
 
       {/* 데이터·엔진 경고 */}
-      {(bundle.clipWarnings.length > 0 || engineWarnings.length > 0) && (
+      {(bundle.clipWarnings.length > 0 || engineWarnings.length > 0 || assetCautions.length > 0) && (
         <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-3 text-xs text-gray-600 dark:text-gray-300 space-y-1">
+          {assetCautions.map(([ticker, caution]) => (
+            <p key={`caution-${ticker}`}>⚠ [{ticker}] {caution}</p>
+          ))}
           {bundle.clipWarnings.map((w, i) => (
             <p key={`clip-${i}`}>⚠ {w}</p>
           ))}
@@ -161,11 +177,40 @@ export function ResultsSection({
           <thead>
             <tr className="text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
               <th className="text-left px-4 py-3 font-medium">전략</th>
-              <th className="text-right px-3 py-3 font-medium">TWRR/년</th>
-              <th className="text-right px-3 py-3 font-medium">MWRR/년</th>
-              <th className="text-right px-3 py-3 font-medium">MDD</th>
-              <th className="text-right px-3 py-3 font-medium">수면하(일)</th>
-              <th className="text-right px-3 py-3 font-medium">변동성/년</th>
+              <th className="text-right px-3 py-3 font-medium">
+                TWRR/년
+                <HelpTip title="TWRR (시간가중수익률)" align="right">
+                  납입 타이밍의 운(運)을 제거한 <b>전략 자체</b>의 연환산 성과.
+                  적립 시점과 무관하므로 전략끼리 공정하게 비교하는 잣대입니다. 표는 이 값으로 정렬됩니다.
+                </HelpTip>
+              </th>
+              <th className="text-right px-3 py-3 font-medium">
+                MWRR/년
+                <HelpTip title="MWRR (금액가중수익률·IRR)" align="right">
+                  납입 타이밍까지 반영한 <b>내 돈의 실제 경험</b> 수익률.
+                  상승 직전에 많이 넣었으면 TWRR보다 높고, 반대면 낮습니다.
+                </HelpTip>
+              </th>
+              <th className="text-right px-3 py-3 font-medium">
+                MDD
+                <HelpTip title="MDD (최대 낙폭)" align="right">
+                  고점 대비 최대 하락률. 적립이 포트 가치를 부풀려 낙폭을 가리는 것을 막기 위해
+                  포트 가치가 아닌 <b>$1 성장 곡선(TWRR)</b> 기준으로 계산합니다.
+                </HelpTip>
+              </th>
+              <th className="text-right px-3 py-3 font-medium">
+                수면하(일)
+                <HelpTip title="수면하 기간" align="right">
+                  전고점을 깨고 내려가 회복하기까지 걸린 <b>최장 거래일 수</b>.
+                  "얼마나 오래 물려있었나"의 지표입니다.
+                </HelpTip>
+              </th>
+              <th className="text-right px-3 py-3 font-medium">
+                변동성/년
+                <HelpTip title="연환산 변동성" align="right">
+                  일간 수익률 표준편차 × √252. 곡선이 얼마나 출렁였는지 — 낮을수록 순한 전략.
+                </HelpTip>
+              </th>
               <th className="text-right px-3 py-3 font-medium">최종 가치</th>
               <th className="text-right px-3 py-3 font-medium">총 납입</th>
               <th className="text-right px-3 py-3 font-medium">세금</th>

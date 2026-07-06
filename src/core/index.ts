@@ -13,6 +13,7 @@ export { loadDataBundle, alignToCommonCalendar, fetchDailySeries, isCryptoTicker
 export { runBacktest, validateStrategy } from './engine'
 export { computeMetrics, xirr } from './metrics'
 export { defaultTaxConfig } from './tax'
+export { ASSET_CATALOG, assetCautionFor, type CatalogEntry, type AssetGroup } from './catalog'
 export * from './presets'
 
 export interface StrategyRun {
