@@ -6,8 +6,8 @@
  * 의사결정은 pendingOrders에 쌓이고 다음 루프의 시가에서만 체결됨).
  *
  * ### 하루 처리 순서 (고정)
- * 1) 배당 입금 — ex-date에 "오늘 체결 전" 보유분 기준 (ex-date 매수자는 미수령)
- * 2) 유휴현금 이자 (실제 경과일수 기준 — 4.5)
+ * 1) 유휴현금 이자 (실제 경과일수 기준 — 4.5, 당일 배당 입금 전 잔고에만)
+ * 2) 배당 입금 — ex-date에 "오늘 체결 전" 보유분 기준 (ex-date 매수자는 미수령)
  * 3) 전일 결정 오더 체결 (t 시가): 매도 먼저 → 매수(현금 부족 시 예산 스케일)
  * 4) 외부 현금 유입 (초기 납입 / 월 적립 — 매월 첫 거래일)
  * 5) 종가 평가
@@ -113,7 +113,16 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     const date = dates[i]
     const isMonthStart = i > 0 && monthOf(dates[i - 1]) !== monthOf(date)
 
-    // ── 1) 배당 (오늘 체결 전 보유분 = ex-date 전일 보유자) ──
+    // ── 1) 유휴현금 이자 (실제 경과일 — 주말·휴장 포함) ──
+    // 배당 입금보다 먼저: 오늘 막 입금될 배당에 직전 기간 이자가 붙는 과대계상 방지
+    if (i > 0 && cash > 0 && cashYield > 0) {
+      const dt = daysBetween(dates[i - 1], date)
+      const interest = cash * (Math.pow(1 + cashYield, dt / 365) - 1)
+      cash += interest
+      cashLedger += interest
+    }
+
+    // ── 2) 배당 (오늘 체결 전 보유분 = ex-date 전일 보유자) ──
     for (const s of marketSleeves) {
       const div = bundle.series[s.ticker].divPerShare[i]
       if (div > 0 && state[s.ticker].shares > 0) {
@@ -125,14 +134,6 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
         dividendsWithheldUsd += withheldUsd
         yearGrossDividends += gross
       }
-    }
-
-    // ── 2) 유휴현금 이자 (실제 경과일 — 주말·휴장 포함) ──
-    if (i > 0 && cash > 0 && cashYield > 0) {
-      const dt = daysBetween(dates[i - 1], date)
-      const interest = cash * (Math.pow(1 + cashYield, dt / 365) - 1)
-      cash += interest
-      cashLedger += interest
     }
 
     // ── 3) 오더 체결 (t 시가) — 매도 먼저, 매수는 가용현금 내 스케일 ──

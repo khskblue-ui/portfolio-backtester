@@ -136,3 +136,28 @@ describe('연도별 수익률 (6.4 서브기간)', () => {
     expect(m.annualReturns[1].returnPct).toBeCloseTo(21, 6)
   })
 })
+
+describe('검증 워크플로 확정 이슈 회귀 테스트', () => {
+  it('포트 가치가 음수로 떨어져도 growth ≥ 0, MDD ≥ −100% (r 클램프)', () => {
+    // 극단 엣지: 연말 세금 차감으로 가치가 일시 음수 → 전액 손실(−100%)로 클램프
+    const m = computeMetrics(
+      makeResult([
+        { date: '2023-01-02', value: 100, flow: 100 },
+        { date: '2023-01-03', value: -10 }, // r_raw = −110% → 클램프 −100%
+        { date: '2023-01-04', value: 50 },
+      ])
+    )
+    expect(m.growthOf1[1].value).toBe(0)
+    expect(m.growthOf1[2].value).toBe(0) // 전액 손실 후엔 0 유지 (복구 착시 방지)
+    expect(m.maxDrawdownPct).toBeGreaterThanOrEqual(-100)
+    expect(m.maxDrawdownPct).toBeCloseTo(-100, 6)
+  })
+
+  it('단기간 고수익도 XIRR 산출 (브래킷 1e6): 31일 +50% ≈ 연 11,739%', () => {
+    const r = xirr([
+      { date: '2024-01-01', amount: -1000 },
+      { date: '2024-02-01', amount: 1500 },
+    ])
+    expect(r).toBeCloseTo(Math.pow(1.5, 365 / 31) - 1, 4)
+  })
+})

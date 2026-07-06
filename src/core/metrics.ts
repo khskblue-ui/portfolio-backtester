@@ -25,7 +25,9 @@ export function computeMetrics(result: BacktestResult): Metrics {
   for (let t = 1; t < n; t++) {
     const prev = daily[t - 1].value
     if (prev > 0) {
-      const r = (daily[t].value - daily[t].externalFlow) / prev - 1
+      // r ≥ −1 클램프: 극단 엣지(연말 세금 차감으로 가치가 음수)에서 r<−1이
+      // 곱해지면 growth가 음수·MDD<−100%가 되는 불변식 위반 방지 — 전액 손실로 처리
+      const r = Math.max(-1, (daily[t].value - daily[t].externalFlow) / prev - 1)
       dailyReturns.push(r)
       g *= 1 + r
     } else {
@@ -112,7 +114,7 @@ export function xirr(flows: { date: string; amount: number }[]): number {
     flows.reduce((sum, f, i) => sum + f.amount / Math.pow(1 + rate, yearsFrom[i]), 0)
 
   let lo = -0.9999
-  let hi = 100
+  let hi = 1e6 // 단기간 백테스트의 연환산(예: 1개월 +50% ≈ 연 117배)도 브래킷 안에 들어오도록
   let fLo = npv(lo)
   const fHi = npv(hi)
   if (fLo * fHi > 0) return NaN

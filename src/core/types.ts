@@ -176,7 +176,7 @@ export interface TradeLogEntry {
   shares: number
   price: number
   fee: number
-  /** 매도 시 실현손익 (이동평균 원가 기준, 매도 수수료 차감 전) */
+  /** 매도 시 실현손익 = 양도가액(매도 수수료 차감 후) − 이동평균 취득가액(매수 수수료 포함) — 세법 규약 */
   realizedPnl?: number
   /** 체결 사유 */
   reason: 'initial' | 'contribution' | 'rebalance' | 'cash_sweep' | 'forced_tax_sale'

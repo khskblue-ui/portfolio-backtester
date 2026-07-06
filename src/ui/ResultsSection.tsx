@@ -231,8 +231,8 @@ export function ResultsSection({
               <th className="text-right px-3 py-3 font-medium">
                 수면하(일)
                 <HelpTip title="수면하 기간" align="right">
-                  전고점을 깨고 내려가 회복하기까지 걸린 <b>최장 거래일 수</b>.
-                  "얼마나 오래 물려있었나"의 지표입니다.
+                  전고점 아래에 머문 <b>최장 연속 거래일 수</b> — 기간 말까지
+                  회복하지 못한 진행 중 낙폭도 포함합니다. "얼마나 오래 물려있었나"의 지표입니다.
                 </HelpTip>
               </th>
               <th className="text-right px-3 py-3 font-medium">
