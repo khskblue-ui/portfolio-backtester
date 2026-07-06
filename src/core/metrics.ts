@@ -1,0 +1,131 @@
+/**
+ * 백테스트 지표 (PRD §6)
+ *
+ * - ⚠ 적립식은 CAGR만으론 오답(6.1): MWRR(현금흐름 반영)과 TWRR(전략 자체) 둘 다.
+ * - ⚠ 낙폭은 포트 가치가 아니라 growth-of-$1(TWRR) 시계열에서(6.2) —
+ *   적립이 가치를 부풀려 진짜 전략 낙폭을 가리기 때문.
+ *
+ * TWRR 규약: 외부 현금흐름은 당일 종가 직전 유입으로 간주 —
+ * r_t = (V_t − F_t) / V_{t−1} − 1 (엔진의 4단계 유입 순서와 일치)
+ */
+
+import type { BacktestResult, Metrics } from './types'
+
+const TRADING_DAYS_PER_YEAR = 252
+
+export function computeMetrics(result: BacktestResult): Metrics {
+  const { daily } = result
+  const n = daily.length
+
+  // ── growth-of-$1 (TWRR) ──
+  const growthOf1: { date: string; value: number }[] = []
+  const dailyReturns: number[] = []
+  let g = 1
+  growthOf1.push({ date: daily[0].date, value: 1 })
+  for (let t = 1; t < n; t++) {
+    const prev = daily[t - 1].value
+    if (prev > 0) {
+      const r = (daily[t].value - daily[t].externalFlow) / prev - 1
+      dailyReturns.push(r)
+      g *= 1 + r
+    } else {
+      dailyReturns.push(0)
+    }
+    growthOf1.push({ date: daily[t].date, value: g })
+  }
+
+  // TWRR 연환산 — 실제 경과 연수 기준
+  const years = (Date.parse(daily[n - 1].date) - Date.parse(daily[0].date)) / (365.25 * 86_400_000)
+  const twrrAnnualPct = years > 0 && g > 0 ? (Math.pow(g, 1 / years) - 1) * 100 : 0
+
+  // ── MDD & 수면하 기간 (growth-of-$1 기준 — 6.2) ──
+  let peak = growthOf1[0].value
+  let maxDrawdownPct = 0
+  let maxUnderwaterDays = 0
+  let underwaterRun = 0
+  for (const p of growthOf1) {
+    if (p.value >= peak) {
+      peak = p.value
+      underwaterRun = 0
+    } else {
+      underwaterRun++
+      if (underwaterRun > maxUnderwaterDays) maxUnderwaterDays = underwaterRun
+      const dd = (p.value / peak - 1) * 100
+      if (dd < maxDrawdownPct) maxDrawdownPct = dd
+    }
+  }
+
+  // ── 변동성 (일간 → 연환산) ──
+  const mean = dailyReturns.length > 0 ? dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length : 0
+  const variance =
+    dailyReturns.length > 1
+      ? dailyReturns.reduce((a, b) => a + (b - mean) ** 2, 0) / (dailyReturns.length - 1)
+      : 0
+  const volAnnualPct = Math.sqrt(variance) * Math.sqrt(TRADING_DAYS_PER_YEAR) * 100
+
+  // ── 연도별 TWRR (서브기간 견고성 — 6.4) ──
+  const annualReturns: { year: number; returnPct: number }[] = []
+  let yearProd = 1
+  let curYear = Number(daily[0].date.slice(0, 4))
+  for (let t = 1; t < n; t++) {
+    const y = Number(daily[t].date.slice(0, 4))
+    if (y !== curYear) {
+      annualReturns.push({ year: curYear, returnPct: (yearProd - 1) * 100 })
+      curYear = y
+      yearProd = 1
+    }
+    yearProd *= 1 + dailyReturns[t - 1]
+  }
+  annualReturns.push({ year: curYear, returnPct: (yearProd - 1) * 100 })
+
+  // ── MWRR (XIRR — 6.1) ──
+  const flows: { date: string; amount: number }[] = []
+  for (const d of daily) {
+    if (d.externalFlow > 0) flows.push({ date: d.date, amount: -d.externalFlow })
+  }
+  flows.push({ date: daily[n - 1].date, amount: daily[n - 1].value })
+  const mwrrAnnualPct = xirr(flows) * 100
+
+  return {
+    twrrAnnualPct,
+    mwrrAnnualPct,
+    growthOf1,
+    maxDrawdownPct,
+    maxUnderwaterDays,
+    volAnnualPct,
+    annualReturns,
+    finalValue: result.finalValue,
+    totalContributions: result.totalContributions,
+  }
+}
+
+/**
+ * XIRR — 이분법 (결정론, Newton 발산 리스크 회피)
+ * @returns 연환산 수익률 (해 없으면 NaN)
+ */
+export function xirr(flows: { date: string; amount: number }[]): number {
+  if (flows.length < 2) return NaN
+  const t0 = Date.parse(flows[0].date)
+  const yearsFrom = flows.map((f) => (Date.parse(f.date) - t0) / (365 * 86_400_000))
+
+  const npv = (rate: number) =>
+    flows.reduce((sum, f, i) => sum + f.amount / Math.pow(1 + rate, yearsFrom[i]), 0)
+
+  let lo = -0.9999
+  let hi = 100
+  let fLo = npv(lo)
+  const fHi = npv(hi)
+  if (fLo * fHi > 0) return NaN
+  for (let iter = 0; iter < 200; iter++) {
+    const mid = (lo + hi) / 2
+    const fMid = npv(mid)
+    if (Math.abs(fMid) < 1e-10 || hi - lo < 1e-10) return mid
+    if (fLo * fMid < 0) {
+      hi = mid
+    } else {
+      lo = mid
+      fLo = fMid
+    }
+  }
+  return (lo + hi) / 2
+}

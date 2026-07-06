@@ -1,0 +1,6 @@
+# Cloudflare Pages 설정
+# 배포: npm run deploy (= npm run build && wrangler pages deploy dist)
+
+name = "portfolio-backtester"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-11-01"

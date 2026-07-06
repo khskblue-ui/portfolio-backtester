@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+/* ── Dark mode via .dark class on <html> ─────────────────── */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Base ────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Pretendard', 'Noto Sans KR',
+               'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'kern' 1;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+/* ── Scrollbar (webkit) ──────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 9999px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #4b5563;
+}
