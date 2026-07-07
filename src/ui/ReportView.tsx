@@ -59,13 +59,13 @@ export function ReportView({
         <div className="flex gap-2">
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700"
+            className="flex items-center gap-1.5 px-4 py-2 rounded text-sm font-semibold bg-zinc-900 text-white hover:bg-black"
           >
             <Printer className="w-4 h-4" /> 인쇄 / PDF 저장
           </button>
           <button
             onClick={onClose}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-100"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-100"
           >
             <X className="w-4 h-4" /> 닫기
           </button>
@@ -80,7 +80,7 @@ export function ReportView({
         </p>
 
         {/* 공통 가정 */}
-        <div className="border border-gray-200 rounded-xl p-4 mb-4">
+        <div className="border border-gray-200 rounded-md p-4 mb-4">
           <h2 className="font-bold mb-2">공통 가정 (모든 전략 동일 적용)</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1 text-gray-700">
             <span>초기 투자금 {fmtUsd(shared.initialUsd)}</span>
@@ -95,7 +95,7 @@ export function ReportView({
         </div>
 
         {/* 에피스테믹 고지 (§11 — 보고서에도 필수) */}
-        <div className="border border-amber-300 bg-amber-50 rounded-xl p-4 mb-6 text-amber-900">
+        <div className="border border-amber-300 bg-amber-50 rounded-md p-4 mb-6 text-amber-900">
           <b>이 보고서는 예측이 아닙니다.</b> 과거 한 번의 경로에 대한 시뮬레이션이며, 모든 금액은
           USD로 원화 실현손익과 다릅니다(환율 미반영). 세금은 가정 환율·단일 한계세율 기반 근사입니다.
           파라미터를 결과가 좋아질 때까지 튜닝하면 그 결과는 의미를 잃습니다.
@@ -103,7 +103,7 @@ export function ReportView({
 
         {/* 비교 요약 */}
         <h2 className="text-lg font-bold mb-2">전략 비교 요약 {shared.taxEnabled && '(세후)'}</h2>
-        <table className="w-full mb-6 text-xs">
+        <table className="ledger-table w-full mb-6 text-xs">
           <thead>
             <tr>
               <th className={thCls}>전략</th>
@@ -154,7 +154,7 @@ export function ReportView({
 
         {/* 데이터·자산 주의 */}
         {(bundle.clipWarnings.length > 0 || runs.some((r) => r.config.sleeves.some((s) => assetCautionFor(s.ticker)))) && (
-          <div className="border border-gray-200 rounded-xl p-3 mb-6 text-xs text-gray-600 space-y-0.5">
+          <div className="border border-gray-200 rounded-md p-3 mb-6 text-xs text-gray-600 space-y-0.5">
             {bundle.clipWarnings.map((w, i) => (
               <p key={i}>⚠ {w}</p>
             ))}
@@ -253,7 +253,7 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
       </div>
 
       <h3 className="font-semibold text-gray-600 mb-1">핵심 지표 {taxEnabled && <span className="font-normal text-gray-400">— 세후 vs 세전 (세금 드래그 −{drag.toFixed(2)}%p/년)</span>}</h3>
-      <table className="w-full text-xs mb-4">
+      <table className="ledger-table w-full text-xs mb-4">
         <thead>
           <tr>
             <th className={thCls}>지표</th>

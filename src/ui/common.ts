@@ -75,9 +75,14 @@ export const fmtSignedPct = (v: number) =>
   Number.isFinite(v) ? `${v < 0 ? '−' : '+'}${Math.abs(v).toFixed(1)}%` : '—'
 
 export const inputCls =
-  'w-full min-w-0 border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+  'w-full min-w-0 bg-white dark:bg-[#1b2029] border border-[#d5cdb9] dark:border-[#2e3646] dark:text-zinc-100 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-500 focus:border-zinc-500 dark:focus:ring-zinc-400'
 export const selectCls =
-  'border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
-export const labelCls = 'text-xs font-medium text-gray-600 dark:text-gray-300'
+  'bg-white dark:bg-[#1b2029] border border-[#d5cdb9] dark:border-[#2e3646] dark:text-zinc-100 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-500 focus:border-zinc-500 dark:focus:ring-zinc-400'
+export const labelCls = 'text-xs font-medium text-zinc-600 dark:text-zinc-400'
 export const cardCls =
-  'bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700'
+  'bg-[#fbfaf5] dark:bg-[#161a22] rounded-md border border-[#ddd6c4] dark:border-[#262c39]'
+/** 주 액션 버튼 — 잉크 블랙 (다크: 웜 화이트). 파란 기본값 탈피 */
+export const btnPrimaryCls = 'btn-primary'
+/** 보조 버튼 — 헤어라인 */
+export const btnGhostCls =
+  'border border-[#cfc7b2] dark:border-[#2e3646] text-zinc-700 dark:text-zinc-300 hover:bg-[#eee9db] dark:hover:bg-[#1e242f]'

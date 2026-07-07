@@ -42,18 +42,18 @@ export function HelpTip({
         onClick={() => setOpen((o) => !o)}
         className={`w-3.5 h-3.5 rounded-full border text-[9px] font-bold leading-none flex items-center justify-center transition-colors
           ${open
-            ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-            : 'border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500 hover:border-blue-400 hover:text-blue-500'}`}
+            ? 'border-emerald-700 text-emerald-700 dark:border-emerald-400 dark:text-emerald-400'
+            : 'border-zinc-400 dark:border-zinc-600 text-zinc-400 dark:text-zinc-500 hover:border-emerald-600 hover:text-emerald-700 dark:hover:text-emerald-400'}`}
       >
         ?
       </button>
       {open && (
         <span
           className={`absolute top-full mt-1.5 z-50 w-80 max-w-[80vw] ${align === 'right' ? 'right-0' : 'left-0'}
-            bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg p-3
-            text-xs font-normal text-gray-600 dark:text-gray-300 whitespace-normal text-left leading-relaxed`}
+            bg-[#fffdf7] dark:bg-[#1a1f29] border border-[#d5cdb9] dark:border-[#2e3646] rounded shadow-lg p-3
+            text-xs font-normal text-zinc-600 dark:text-zinc-300 whitespace-normal text-left leading-relaxed`}
         >
-          <span className="block font-semibold text-gray-800 dark:text-gray-100 mb-1">{title}</span>
+          <span className="block font-semibold text-zinc-900 dark:text-zinc-100 mb-1">{title}</span>
           {children}
         </span>
       )}

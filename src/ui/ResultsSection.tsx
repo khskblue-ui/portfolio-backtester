@@ -112,14 +112,15 @@ export function ResultsSection({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-base font-semibold text-gray-800 dark:text-gray-100">
+        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+          <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">RESULTS</span>
           결과{' '}
           <span className="text-xs font-normal text-gray-400">
             {bundle.dates[0]} ~ {bundle.dates[bundle.dates.length - 1]} · {bundle.dates.length}거래일 · 스냅샷 {bundle.snapshotHash}
           </span>
         </h2>
         {taxEnabled && (
-          <div className="flex rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden text-xs font-medium">
+          <div className="flex rounded border border-[#cfc7b2] dark:border-[#2e3646] overflow-hidden text-xs font-medium">
             {(
               [
                 { key: 'postTax', label: '세후' },
@@ -129,7 +130,7 @@ export function ResultsSection({
               <button
                 key={key}
                 onClick={() => setTaxView(key)}
-                className={`px-3 py-1.5 ${taxView === key ? 'bg-blue-600 text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                className={`px-3 py-1.5 font-mono tracking-wider ${taxView === key ? 'ink-chip' : 'text-zinc-500 dark:text-zinc-400 hover:bg-[#eee9db] dark:hover:bg-[#1e242f]'}`}
               >
                 {label}
               </button>
@@ -140,7 +141,7 @@ export function ResultsSection({
 
       {/* 데이터·엔진 경고 */}
       {(bundle.clipWarnings.length > 0 || engineWarnings.length > 0 || assetCautions.length > 0) && (
-        <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-3 text-xs text-gray-600 dark:text-gray-300 space-y-1">
+        <div className="bg-[#f4f0e4] dark:bg-[#151a24] border-l-4 border-zinc-400 dark:border-zinc-600 rounded-sm p-3 text-xs text-zinc-600 dark:text-zinc-300 space-y-1">
           {assetCautions.map(([ticker, caution]) => (
             <p key={`caution-${ticker}`}>⚠ [{ticker}] {caution}</p>
           ))}
@@ -158,7 +159,7 @@ export function ResultsSection({
 
       {/* 누적 수익률 오버레이 (6.2: 낙폭·비교는 TWRR 기준) */}
       <div className={`${cardCls} p-5`}>
-        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1">
           누적 수익률 (TWRR 기준{taxEnabled ? (taxView === 'postTax' ? ' · 세후' : ' · 세전') : ''})
           <HelpTip title="누적 수익률 곡선">
             납입 타이밍 효과를 제거한 전략 자체의 누적 수익률(시간가중)입니다.
@@ -203,9 +204,9 @@ export function ResultsSection({
 
       {/* 비교 테이블 (§7 TWRR 정렬) */}
       <div className={`${cardCls} overflow-x-auto`}>
-        <table className="w-full text-xs min-w-[880px]">
+        <table className="ledger-table w-full text-xs min-w-[880px]">
           <thead>
-            <tr className="text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
+            <tr className="text-zinc-500 dark:text-zinc-500 border-b border-[#d5cdb9] dark:border-[#2e3646]">
               <th className="text-left px-4 py-3 font-medium">전략</th>
               <th className="text-right px-3 py-3 font-medium">
                 TWRR/년
@@ -273,7 +274,7 @@ export function ResultsSection({
               const m = r[taxView].metrics
               const res = r[taxView].result
               return (
-                <tr key={r.config.id} className="border-b border-gray-50 dark:border-gray-700/50 text-gray-700 dark:text-gray-200">
+                <tr key={r.config.id} className="border-b border-[#ece7d8] dark:border-[#1e2430] text-zinc-800 dark:text-zinc-200">
                   <td className="px-4 py-2.5 font-medium">
                     <span className="inline-block w-2.5 h-2.5 rounded-full mr-2" style={{ backgroundColor: colorOf.get(r.config.id) }} />
                     {r.config.name}
@@ -301,7 +302,7 @@ export function ResultsSection({
       {/* 세금 드래그 요약 (5.5 — 이 툴의 핵심 가치) */}
       {taxEnabled && (
         <div className={`${cardCls} p-5`}>
-          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-3">
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3">
             세금 드래그 (세전 − 세후)
             <HelpTip title="세금 드래그 — 세금이 깎아먹는 연 수익률">
               <b>같은 전략을 세금 없이 돌렸을 때</b>와 실제 세금(양도세 + 배당
@@ -317,12 +318,12 @@ export function ResultsSection({
               const drag = r.preTax.metrics.twrrAnnualPct - r.postTax.metrics.twrrAnnualPct
               const res = r.postTax.result
               return (
-                <div key={r.config.id} className="border border-gray-100 dark:border-gray-700 rounded-xl p-3">
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                <div key={r.config.id} className="border border-[#e3ddcb] dark:border-[#242a37] rounded p-3">
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
                     <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: colorOf.get(r.config.id) }} />
                     {r.config.name}
                   </div>
-                  <div className="text-sm font-bold text-gray-800 dark:text-gray-100">−{drag.toFixed(2)}%p/년</div>
+                  <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100">−{drag.toFixed(2)}%p/년</div>
                   <div className="text-xs text-gray-400 mt-0.5">
                     양도세 {fmtUsd(res.totalTaxesUsd)} + 배당 원천 {fmtUsd(res.dividendsWithheldUsd)} — 실현익 과세와 원천징수가 만드는 복리 드래그
                   </div>
@@ -336,13 +337,13 @@ export function ResultsSection({
       {/* 연도별 수익률 (6.4 서브기간 견고성) */}
       <div className={`${cardCls} overflow-x-auto`}>
         <div className="px-4 pt-4">
-          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
             연도별 TWRR <span className="text-xs font-normal text-gray-400">— 한 경로 안의 서브기간 견고성 확인</span>
           </h3>
         </div>
-        <table className="w-full text-xs min-w-[560px]">
+        <table className="ledger-table w-full text-xs min-w-[560px]">
           <thead>
-            <tr className="text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
+            <tr className="text-zinc-500 dark:text-zinc-500 border-b border-[#d5cdb9] dark:border-[#2e3646]">
               <th className="text-left px-4 py-3 font-medium">연도</th>
               {sorted.map((r) => (
                 <th key={r.config.id} className="text-right px-3 py-3 font-medium">
@@ -354,7 +355,7 @@ export function ResultsSection({
           </thead>
           <tbody>
             {years.map((y) => (
-              <tr key={y} className="border-b border-gray-50 dark:border-gray-700/50 text-gray-700 dark:text-gray-200">
+              <tr key={y} className="border-b border-[#ece7d8] dark:border-[#1e2430] text-zinc-800 dark:text-zinc-200">
                 <td className="px-4 py-2">{y}</td>
                 {sorted.map((r) => {
                   const a = r[taxView].metrics.annualReturns.find((x) => x.year === y)
@@ -405,9 +406,9 @@ function MoneyTooltip({
     .sort((a, b) => b.value - a.value)
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg p-3 text-xs space-y-1.5 max-w-xs">
-      <div className="font-semibold text-gray-800 dark:text-gray-100">{label}</div>
-      <div className="text-gray-500 dark:text-gray-400 pb-1 border-b border-gray-100 dark:border-gray-700">
+    <div className="rounded border border-[#d5cdb9] dark:border-[#2e3646] bg-[#fffdf7] dark:bg-[#1a1f29] shadow-lg p-3 text-xs space-y-1.5 max-w-xs">
+      <div className="font-semibold text-zinc-900 dark:text-zinc-100">{label}</div>
+      <div className="text-zinc-500 dark:text-zinc-400 pb-1 border-b border-[#d5cdb9] dark:border-[#2e3646]">
         투입 원금 {fmtUsd(contrib)}
       </div>
       {entries.map((e) => (
@@ -416,9 +417,9 @@ function MoneyTooltip({
             className="w-2 h-2 rounded-full flex-shrink-0 self-center"
             style={{ backgroundColor: colorByName.get(e.name) }}
           />
-          <span className="text-gray-600 dark:text-gray-300 truncate">{e.name}</span>
+          <span className="text-zinc-600 dark:text-zinc-300 truncate">{e.name}</span>
           <span className="ml-auto text-right whitespace-nowrap">
-            <span className="font-semibold text-gray-800 dark:text-gray-100">{fmtUsd(e.value)}</span>
+            <span className="font-semibold text-zinc-900 dark:text-zinc-100">{fmtUsd(e.value)}</span>
             <span className={e.profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>
               {' '}{fmtSignedUsd(e.profit)} ({fmtSignedPct(contrib > 0 ? (e.profit / contrib) * 100 : 0)})
             </span>

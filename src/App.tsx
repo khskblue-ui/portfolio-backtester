@@ -18,6 +18,8 @@ import {
   MAX_STRATEGIES,
   defaultSharedSettings,
   applyShared,
+  btnPrimaryCls,
+  btnGhostCls,
   type SharedSettings,
 } from '@/ui/common'
 import { EpistemicsBanner } from '@/ui/EpistemicsBanner'
@@ -145,24 +147,26 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
+    <div className="min-h-screen masthead-rule bg-[#f2efe6] dark:bg-[#0e1015] text-zinc-900 dark:text-zinc-100">
       <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
         {/* 헤더 */}
         <header className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
-              <TrendingUp className="w-5 h-5 text-white" strokeWidth={2.5} />
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 ink-chip rounded flex items-center justify-center flex-shrink-0">
+              <TrendingUp className="w-5 h-5" strokeWidth={2.5} />
             </div>
             <div>
-              <h1 className="text-xl font-bold leading-tight">포트폴리오 백테스터</h1>
-              <p className="text-xs text-gray-400 leading-tight">적립·리밸런싱 규칙 DSL · 한국 세제 · 다중 전략 비교</p>
+              <h1 className="text-xl font-bold leading-tight tracking-tight">포트폴리오 백테스터</h1>
+              <p className="text-[10px] font-mono tracking-[0.18em] text-zinc-500 leading-tight mt-0.5">
+                BACKTEST · 적립/리밸런싱 DSL · 한국 세제 · 다중 전략
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
               title="테마 전환"
-              className="p-2 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className={`p-2 rounded ${btnGhostCls}`}
             >
               {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
@@ -175,21 +179,21 @@ export default function App() {
                 setShowReport(true)
               }}
               title="백테스트 결과 보고서 (PDF 저장)"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium ${btnGhostCls}`}
             >
               <FileText className="w-4 h-4" /> 보고서 (PDF)
             </button>
             <button
               onClick={exportConfig}
               title="전략·설정을 JSON 파일로 백업"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium ${btnGhostCls}`}
             >
               <Download className="w-4 h-4" /> 설정 저장
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
               title="백업한 설정 JSON 불러오기"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium ${btnGhostCls}`}
             >
               <Upload className="w-4 h-4" /> 설정 불러오기
             </button>
@@ -207,14 +211,14 @@ export default function App() {
             <button
               onClick={() => run(true)}
               disabled={running}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
+              className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium ${btnGhostCls} disabled:opacity-50`}
             >
               <RefreshCw className="w-4 h-4" /> 데이터 새로고침
             </button>
             <button
               onClick={() => run(false)}
               disabled={running}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 shadow-sm"
+              className={`flex items-center gap-1.5 px-4 py-2 rounded text-sm font-semibold ${btnPrimaryCls} disabled:opacity-50`}
             >
               <Play className="w-4 h-4" />
               {running ? '실행 중…' : '백테스트 실행'}
@@ -224,7 +228,7 @@ export default function App() {
 
         {/* 알림 배너 */}
         {notice && (
-          <div className="flex items-center justify-between gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl px-4 py-3 text-sm text-red-700 dark:text-red-300">
+          <div className="flex items-center justify-between gap-2 bg-[#fdf1ef] dark:bg-[#231416] border-l-4 border-red-700 dark:border-red-500 rounded-sm px-4 py-3 text-sm text-red-800 dark:text-red-300">
             <span>{notice}</span>
             <button onClick={() => setNotice(null)} className="p-1 hover:opacity-70 flex-shrink-0">
               <X className="w-4 h-4" />
@@ -239,10 +243,13 @@ export default function App() {
         {/* 전략 목록 */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold text-gray-800 dark:text-gray-100">전략 ({strategies.length})</h2>
+            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+              <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">STRATEGIES</span>
+              전략 ({strategies.length})
+            </h2>
             <button
               onClick={addStrategy}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium ${btnGhostCls}`}
             >
               <Plus className="w-4 h-4" /> 전략 추가
             </button>
@@ -292,7 +299,7 @@ export default function App() {
           ))}
         </datalist>
 
-        <footer className="text-center text-xs text-gray-400 dark:text-gray-600 pt-4 pb-8">
+        <footer className="text-center text-[11px] font-mono tracking-wide text-zinc-400 dark:text-zinc-600 border-t border-[#ddd6c4] dark:border-[#262c39] pt-5 pb-8">
           데이터: Yahoo Finance (일별 EOD) · 모든 금액 USD · 결과는 원화 실현손익이 아닙니다
         </footer>
       </div>

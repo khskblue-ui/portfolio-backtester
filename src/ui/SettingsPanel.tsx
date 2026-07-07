@@ -28,8 +28,9 @@ export function SettingsPanel({
 
   return (
     <div className={`${cardCls} p-5 space-y-4`}>
-      <h2 className="text-base font-semibold text-gray-800 dark:text-gray-100">
-        공통 설정 <span className="text-xs font-normal text-gray-400">— 모든 전략에 동일 적용 (공정 비교)</span>
+      <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+        <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">ASSUMPTIONS</span>
+        공통 설정 <span className="text-xs font-normal text-zinc-400">— 모든 전략에 동일 적용 (공정 비교)</span>
       </h2>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {num('initialUsd', '초기 투자금 (USD)', false, '시작 시점에 한 번에 넣는 금액. 첫 거래일 종가에 유입돼 다음 거래일 시가로 매수됩니다.')}
@@ -79,7 +80,7 @@ export function SettingsPanel({
               { key: 'cryptoTaxEnabled', label: '가상자산 과세 가정' },
             ] as const
           ).map(({ key, label }) => (
-            <label key={key} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+            <label key={key} className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
               <input
                 type="checkbox"
                 checked={shared[key]}
