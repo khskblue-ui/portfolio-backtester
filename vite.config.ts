@@ -26,6 +26,11 @@ export default defineConfig({
         target: 'https://stooq.com',
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/stooq/, ''),
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Referer: 'https://stooq.com/',
+        },
       },
       // Yahoo Finance: 프로덕션은 Cloudflare Pages Function(functions/yf)이 담당 —
       // dev 서버에서도 동일한 /yf/* 경로가 동작하도록 프록시

@@ -49,7 +49,7 @@ export function HelpTip({
       </button>
       {open && (
         <span
-          className={`absolute top-full mt-1.5 z-50 w-64 max-w-[75vw] ${align === 'right' ? 'right-0' : 'left-0'}
+          className={`absolute top-full mt-1.5 z-50 w-80 max-w-[80vw] ${align === 'right' ? 'right-0' : 'left-0'}
             bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg p-3
             text-xs font-normal text-gray-600 dark:text-gray-300 whitespace-normal text-left leading-relaxed`}
         >

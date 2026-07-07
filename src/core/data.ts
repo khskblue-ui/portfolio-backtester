@@ -96,7 +96,15 @@ export async function fetchStooqSeries(
 export function parseStooqCsv(csv: string, ticker: string): DailySeries {
   const lines = csv.trim().split(/\r?\n/)
   if (lines.length < 2 || !lines[0].startsWith('Date')) {
-    throw new Error(`${ticker} 데이터 없음 (Stooq 심볼을 확인하세요)`)
+    // Stooq는 실패해도 HTTP 200으로 안내 페이지를 주므로 본문을 보고 원인 분류
+    if (/przekroczony|limit/i.test(csv)) {
+      throw new Error(`${ticker} — Stooq 일일 다운로드 한도 초과. 잠시 후(또는 내일) 재시도하거나 GC=F(금 선물, 2000~)로 대체하세요`)
+    }
+    if (/no data|brak danych/i.test(csv)) {
+      throw new Error(`${ticker} — Stooq에 해당 심볼 데이터 없음. GC=F(금 선물, 2000~)로 대체하세요`)
+    }
+    const head = csv.trim().slice(0, 80).replace(/\s+/g, ' ')
+    throw new Error(`${ticker} — Stooq 응답이 CSV가 아닙니다 (수신: "${head}"). 재시도하거나 GC=F로 대체하세요`)
   }
   const dates: string[] = []
   const open: number[] = []

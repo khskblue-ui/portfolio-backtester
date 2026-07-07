@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, TrendingUp, X } from 'lucide-react'
+import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, TrendingUp, X, FileText } from 'lucide-react'
 import {
   loadDataBundle,
   runComparison,
@@ -24,6 +24,7 @@ import { EpistemicsBanner } from '@/ui/EpistemicsBanner'
 import { SettingsPanel } from '@/ui/SettingsPanel'
 import { StrategyCard } from '@/ui/StrategyCard'
 import { ResultsSection } from '@/ui/ResultsSection'
+import { ReportView } from '@/ui/ReportView'
 
 type Theme = 'light' | 'dark'
 
@@ -58,6 +59,7 @@ export default function App() {
   const [runs, setRuns] = useState<StrategyRun[] | null>(null)
   const [bundle, setBundle] = useState<AlignedDataBundle | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [showReport, setShowReport] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const updateStrategy = (id: string, updater: (s: StrategyConfig) => StrategyConfig) =>
@@ -165,18 +167,31 @@ export default function App() {
               {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
             <button
-              onClick={exportConfig}
-              title="설정 JSON 내보내기"
+              onClick={() => {
+                if (!runs || !bundle) {
+                  setNotice('보고서를 만들려면 먼저 백테스트를 실행하세요')
+                  return
+                }
+                setShowReport(true)
+              }}
+              title="백테스트 결과 보고서 (PDF 저장)"
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
             >
-              <Download className="w-4 h-4" /> 내보내기
+              <FileText className="w-4 h-4" /> 보고서 (PDF)
+            </button>
+            <button
+              onClick={exportConfig}
+              title="전략·설정을 JSON 파일로 백업"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <Download className="w-4 h-4" /> 설정 저장
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
-              title="설정 JSON 가져오기"
+              title="백업한 설정 JSON 불러오기"
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
             >
-              <Upload className="w-4 h-4" /> 가져오기
+              <Upload className="w-4 h-4" /> 설정 불러오기
             </button>
             <input
               ref={fileInputRef}
@@ -261,6 +276,11 @@ export default function App() {
         {/* 결과 */}
         {runs && bundle && runs.length > 0 && (
           <ResultsSection runs={runs} bundle={bundle} palette={palette} theme={theme} taxEnabled={shared.taxEnabled} />
+        )}
+
+        {/* 보고서 (PDF) 오버레이 */}
+        {showReport && runs && bundle && (
+          <ReportView runs={runs} bundle={bundle} shared={shared} onClose={() => setShowReport(false)} />
         )}
 
         {/* 티커 자동완성 카탈로그 — 장기 히스토리(^GSPC 1927~ 등) 포함 */}

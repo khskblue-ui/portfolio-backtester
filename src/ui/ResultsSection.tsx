@@ -209,36 +209,56 @@ export function ResultsSection({
               <th className="text-left px-4 py-3 font-medium">전략</th>
               <th className="text-right px-3 py-3 font-medium">
                 TWRR/년
-                <HelpTip title="TWRR (시간가중수익률)" align="right">
-                  납입 타이밍의 운(運)을 제거한 <b>전략 자체</b>의 연환산 성과.
-                  적립 시점과 무관하므로 전략끼리 공정하게 비교하는 잣대입니다. 표는 이 값으로 정렬됩니다.
+                <HelpTip title="TWRR/년 — 전략 자체의 연평균 수익률" align="right">
+                  이 <b>규칙(전략) 자체</b>가 1년에 평균 몇 %씩 불렸는지입니다.
+                  돈을 언제 넣었는지의 "운"은 제거합니다.
+                  <br />예: TWRR 8%/년 = 처음부터 목돈을 넣고 이 규칙대로만 굴렸다면
+                  매년 평균 8%씩 복리로 늘었다는 뜻.
+                  <br />적립 시점과 무관해서 <b>전략끼리 비교할 때 공정한 기준</b>이고,
+                  이 표도 이 값으로 정렬돼 있습니다.
                 </HelpTip>
               </th>
               <th className="text-right px-3 py-3 font-medium">
                 MWRR/년
-                <HelpTip title="MWRR (금액가중수익률·IRR)" align="right">
-                  납입 타이밍까지 반영한 <b>내 돈의 실제 경험</b> 수익률.
-                  상승 직전에 많이 넣었으면 TWRR보다 높고, 반대면 낮습니다.
+                <HelpTip title="MWRR/년 — 내 돈의 실제 연평균 수익률" align="right">
+                  <b>내 계좌의 돈</b>이 실제로 1년에 몇 %씩 불었는지입니다.
+                  적립을 언제 얼마나 넣었는지(타이밍)까지 반영합니다.
+                  <br />예: 폭등 <b>직전</b>에 큰돈을 넣었다면 MWRR이 TWRR보다 높고,
+                  고점에서 몰아 넣었다면 낮습니다.
+                  <br />TWRR과 차이가 크다 = 전략보다 <b>납입 타이밍</b>이 내 결과를
+                  좌우했다는 신호입니다.
                 </HelpTip>
               </th>
               <th className="text-right px-3 py-3 font-medium">
                 MDD
-                <HelpTip title="MDD (최대 낙폭)" align="right">
-                  고점 대비 최대 하락률. 적립이 포트 가치를 부풀려 낙폭을 가리는 것을 막기 위해
-                  포트 가치가 아닌 <b>$1 성장 곡선(TWRR)</b> 기준으로 계산합니다.
+                <HelpTip title="MDD — 최악의 순간 하락폭" align="right">
+                  기간 중 <b>최고점 대비 가장 깊게 빠졌던 비율</b>입니다.
+                  <br />예: MDD −40% = 한때 자산이 고점의 60%까지 녹는 구간을
+                  버텨야 했다는 뜻 — "이 전략을 유지하려면 이만큼의 하락을 견딜 수
+                  있어야 한다"는 멘탈 시험지입니다.
+                  <br />매달 적립하면 계좌 잔액은 계속 커져 하락이 안 보이므로,
+                  적립 효과를 제거한 수익률 곡선(TWRR)에서 계산합니다.
                 </HelpTip>
               </th>
               <th className="text-right px-3 py-3 font-medium">
                 수면하(일)
-                <HelpTip title="수면하 기간" align="right">
-                  전고점 아래에 머문 <b>최장 연속 거래일 수</b> — 기간 말까지
-                  회복하지 못한 진행 중 낙폭도 포함합니다. "얼마나 오래 물려있었나"의 지표입니다.
+                <HelpTip title="수면하(일) — 본전 이하로 지낸 최장 기간" align="right">
+                  이전 최고 기록(전고점)을 되찾지 못한 채 <b>그 아래에 머문 가장 긴
+                  연속 거래일 수</b>입니다. 기간 끝까지 회복 못 한 구간도 포함합니다.
+                  <br />예: 수면하 250일 ≈ 약 1년 내내 "계좌가 최고점보다 낮은 상태"
+                  (1년 = 거래일 약 252일).
+                  <br />숫자가 클수록 <b>오래 물려있는 고통</b>이 긴 전략입니다.
                 </HelpTip>
               </th>
               <th className="text-right px-3 py-3 font-medium">
                 변동성/년
-                <HelpTip title="연환산 변동성" align="right">
-                  일간 수익률 표준편차 × √252. 곡선이 얼마나 출렁였는지 — 낮을수록 순한 전략.
+                <HelpTip title="변동성/년 — 출렁임의 크기 (손실 크기 아님!)" align="right">
+                  하루하루 수익률이 얼마나 <b>출렁이는지</b>를 1년 단위로 환산한
+                  값입니다. 손실률이 아니라 <b>흔들림의 폭</b>입니다.
+                  <br />감 잡기: 미국 주식 지수 15~20%, 채권 5~10%, 비트코인 60~80%+.
+                  <br /><b>100%를 넘을 수도 있나?</b> 네 — 하루 ±6% 이상 출렁이는
+                  자산은 연환산(×√252)하면 100%를 넘습니다. "1년에 100% 잃는다"는
+                  뜻이 아니라 결과의 불확실성이 그만큼 크다는 뜻입니다.
                 </HelpTip>
               </th>
               <th className="text-right px-3 py-3 font-medium">최종 가치</th>
@@ -281,7 +301,17 @@ export function ResultsSection({
       {/* 세금 드래그 요약 (5.5 — 이 툴의 핵심 가치) */}
       {taxEnabled && (
         <div className={`${cardCls} p-5`}>
-          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-3">세금 드래그 (세전 − 세후)</h3>
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-3">
+            세금 드래그 (세전 − 세후)
+            <HelpTip title="세금 드래그 — 세금이 깎아먹는 연 수익률">
+              <b>같은 전략을 세금 없이 돌렸을 때</b>와 실제 세금(양도세 + 배당
+              원천징수 15%)을 내면서 돌렸을 때의 연 수익률 차이입니다.
+              <br />예: −0.50%p/년 = 세금 때문에 매년 수익률이 0.5%포인트씩
+              깎였다는 뜻. 복리로 쌓이면 장기에선 큰 금액입니다.
+              <br />리밸런싱 매도가 잦을수록 이익 실현 → 과세가 앞당겨져 드래그가
+              커집니다. <b>무매도 전략과 비교</b>해보면 세금 이연의 가치가 보입니다.
+            </HelpTip>
+          </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {sorted.map((r) => {
               const drag = r.preTax.metrics.twrrAnnualPct - r.postTax.metrics.twrrAnnualPct

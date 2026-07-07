@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/yf/:path*", "destination": "https://query1.finance.yahoo.com/:path*" },
+    { "source": "/stooq/:path*", "destination": "https://stooq.com/:path*" }
+  ],
+  "headers": [
+    {
+      "source": "/yf/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }]
+    },
+    {
+      "source": "/stooq/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }]
+    }
+  ]
+}

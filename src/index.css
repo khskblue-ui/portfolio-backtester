@@ -39,3 +39,25 @@ body {
 .dark ::-webkit-scrollbar-thumb {
   background: #4b5563;
 }
+
+/* ── 보고서 인쇄 (PDF 저장) ──────────────────────────────── */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-report,
+  .print-report * {
+    visibility: visible;
+  }
+  .print-report {
+    position: absolute !important;
+    inset: 0;
+    overflow: visible !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .page-break {
+    break-before: page;
+  }
+}
