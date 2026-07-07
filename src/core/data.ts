@@ -25,7 +25,7 @@ export function isCryptoTicker(ticker: string): boolean {
 // ─── Yahoo 조회 ───────────────────────────────────────────────────────────────
 
 interface YahooChartResult {
-  meta?: { gmtoffset?: number }
+  meta?: { gmtoffset?: number; dataGranularity?: string; firstTradeDate?: number | null }
   timestamp?: number[]
   events?: { dividends?: Record<string, { amount: number; date: number }> }
   indicators?: {
@@ -66,15 +66,77 @@ async function fetchWithRetry(url: string, ticker: string, retryBaseMs: number):
 
 /**
  * 단일 티커의 전 기간 일별 시계열 조회 (비조정 open/close + adjclose + 배당 이벤트)
+ *
+ * ⚠ Yahoo는 히스토리가 아주 긴 심볼(예: ^GSPC 1927~)에 interval=1d&range=max를
+ * 요청하면 "조용히" 월/분기 해상도로 강등해 반환한다(meta.dataGranularity로만 확인
+ * 가능). 이를 그대로 쓰면 캘린더가 오염돼 변동성·수면하 등 모든 지표가 왜곡되므로,
+ * 강등 감지 시 20년 청크의 period1/period2 요청으로 일별 데이터를 강제 수집한다.
  */
 export async function fetchDailySeries(
   ticker: string,
   opts?: { retryBaseMs?: number }
 ): Promise<DailySeries> {
-  const url = `/yf/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=max&events=div&includeAdjustedClose=true`
-  const res = await fetchWithRetry(url, ticker, opts?.retryBaseMs ?? 1500)
-  const json = await res.json()
-  return parseYahooChart(json, ticker)
+  const base = `/yf/v8/finance/chart/${encodeURIComponent(ticker)}`
+  const common = 'events=div&includeAdjustedClose=true'
+  const retryBaseMs = opts?.retryBaseMs ?? 1500
+
+  const res = await fetchWithRetry(`${base}?interval=1d&range=max&${common}`, ticker, retryBaseMs)
+  const json: unknown = await res.json()
+  const meta = (json as { chart?: { result?: YahooChartResult[] } })?.chart?.result?.[0]?.meta
+  const granularity = meta?.dataGranularity
+
+  if (!granularity || granularity === '1d') {
+    return parseYahooChart(json, ticker)
+  }
+
+  // ── 강등 감지 → 20년 청크 재조회 ──
+  const CHUNK_SEC = Math.floor(20 * 365.25 * 86_400)
+  const firstTrade = typeof meta?.firstTradeDate === 'number' ? meta.firstTradeDate : 0
+  const nowSec = Math.ceil(Date.now() / 1000) + 86_400
+  const chunks: DailySeries[] = []
+
+  for (let start = firstTrade; start < nowSec; start += CHUNK_SEC) {
+    const end = Math.min(start + CHUNK_SEC, nowSec)
+    await sleep(INTER_FETCH_DELAY_MS)
+    const r = await fetchWithRetry(
+      `${base}?interval=1d&period1=${Math.floor(start)}&period2=${Math.ceil(end)}&${common}`,
+      ticker,
+      retryBaseMs
+    )
+    const cj: unknown = await r.json().catch(() => null)
+    const chunkResult = (cj as { chart?: { result?: YahooChartResult[] } })?.chart?.result?.[0]
+    if (!chunkResult?.timestamp?.length) continue // 상장 전/데이터 없는 구간 — 스킵
+    const cg = chunkResult.meta?.dataGranularity
+    if (cg && cg !== '1d') {
+      throw new Error(`${ticker} — Yahoo가 일별 데이터를 제공하지 않습니다 (수신 해상도: ${cg})`)
+    }
+    chunks.push(parseYahooChart(cj, ticker))
+  }
+
+  if (chunks.length === 0) throw new Error(`${ticker} 유효한 가격 데이터 없음`)
+  return mergeDailySeries(chunks, ticker)
+}
+
+/** 청크 병합 — 날짜 오름차순, 경계 중복 제거, 배당 통합 */
+export function mergeDailySeries(chunks: DailySeries[], ticker: string): DailySeries {
+  const sorted = [...chunks].sort((a, b) => (a.dates[0] < b.dates[0] ? -1 : 1))
+  const dates: string[] = []
+  const open: number[] = []
+  const close: number[] = []
+  const adjClose: number[] = []
+  const dividends: Record<string, number> = {}
+  for (const c of sorted) {
+    for (let i = 0; i < c.dates.length; i++) {
+      if (dates.length > 0 && c.dates[i] <= dates[dates.length - 1]) continue
+      dates.push(c.dates[i])
+      open.push(c.open[i])
+      close.push(c.close[i])
+      adjClose.push(c.adjClose[i])
+    }
+    for (const [d, amt] of Object.entries(c.dividends)) dividends[d] = amt
+  }
+  if (dates.length === 0) throw new Error(`${ticker} 유효한 가격 데이터 없음`)
+  return { ticker, dates, open, close, adjClose, dividends }
 }
 
 // ─── Stooq 소스 (장기 히스토리 — 금 현물 등, §3 유니버스 확장) ─────────────────
@@ -211,6 +273,16 @@ export function alignToCommonCalendar(
 
   // 히스토리가 가장 짧은 자산이 비교 시작일을 결정 — 원인 자산을 지목해 설명 (§3.3)
   const clipWarnings: string[] = []
+
+  // 방어선: 캘린더가 일별이 아니면(평균 간격 > 5일) 지표 왜곡 경고
+  const spanDays = (Date.parse(dates[dates.length - 1]) - Date.parse(dates[0])) / 86_400_000
+  const avgGap = spanDays / (dates.length - 1)
+  if (avgGap > 5) {
+    clipWarnings.push(
+      `데이터 해상도 경고: 거래일 간격이 평균 ${avgGap.toFixed(1)}일 — 일별 데이터가 아닌 자산이 섞여 ` +
+        `변동성·수면하·MDD 등 지표가 심하게 왜곡됩니다. 데이터 새로고침을 시도하거나 해당 자산을 교체하세요`
+    )
+  }
   const bindingTickers = seriesList.filter((s) => s.dates[0] === latestStart).map((s) => s.ticker)
   const someClipped = seriesList.some((s) => s.dates[0] < latestStart)
   if (someClipped && !(options?.startDate && options.startDate >= latestStart)) {
@@ -314,7 +386,8 @@ export function hashBundle(bundle: AlignedDataBundle): string {
 
 // ─── 캐시 + 번들 로드 ─────────────────────────────────────────────────────────
 
-const CACHE_PREFIX = 'bt_series_v1_'
+// v2: Yahoo 해상도 강등(분기봉) 데이터가 v1 캐시에 남아있을 수 있어 버전 범프
+const CACHE_PREFIX = 'bt_series_v2_'
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 
 interface CachedSeries {

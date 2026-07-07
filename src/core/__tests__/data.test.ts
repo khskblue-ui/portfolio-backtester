@@ -215,3 +215,100 @@ describe('빈 티커 검증 (HTTP 404 원인 차단)', async () => {
     expect(validateStrategy(s).some((e) => e.includes('빈 티커'))).toBe(true)
   })
 })
+
+describe('Yahoo 해상도 강등 감지 (^GSPC 등 초장기 히스토리)', async () => {
+  const { fetchDailySeries, mergeDailySeries } = await import('../data')
+  const { vi } = await import('vitest')
+
+  const DAY = 86_400
+  const payload = (timestamps: number[], price: number, granularity: string, firstTradeDate?: number) => ({
+    chart: {
+      result: [
+        {
+          meta: { gmtoffset: 0, dataGranularity: granularity, firstTradeDate },
+          timestamp: timestamps,
+          indicators: {
+            quote: [{ open: timestamps.map(() => price), close: timestamps.map(() => price) }],
+            adjclose: [{ adjclose: timestamps.map(() => price) }],
+          },
+        },
+      ],
+    },
+  })
+  const res = (body: unknown) => new Response(JSON.stringify(body), { status: 200 })
+
+  it('range=max가 3mo로 강등되면 period 청크(1d)로 재조회·병합', async () => {
+    const first = Date.parse('1990-01-01T00:00:00Z') / 1000 // 20년 청크 2개 발생
+    const t1 = Date.parse('1995-01-02T00:00:00Z') / 1000
+    const t2 = Date.parse('2015-01-05T00:00:00Z') / 1000
+    const fetchMock = vi
+      .fn()
+      // 1) range=max → 분기 강등
+      .mockResolvedValueOnce(res(payload([first, first + 90 * DAY], 100, '3mo', first)))
+      // 2) 청크1 (1990~2010): 이틀치 일별
+      .mockResolvedValueOnce(res(payload([t1, t1 + DAY], 50, '1d')))
+      // 3) 청크2 (2010~현재): 경계 중복 1건 + 새 데이터
+      .mockResolvedValueOnce(res(payload([t1 + DAY, t2], 60, '1d')))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const s = await fetchDailySeries('^GSPC', { retryBaseMs: 1 })
+      expect(s.dates).toEqual(['1995-01-02', '1995-01-03', '2015-01-05']) // 중복 제거·정렬
+      expect(fetchMock.mock.calls[1][0]).toContain('period1=') // 청크는 period 방식
+      expect(fetchMock.mock.calls[1][0]).toContain('interval=1d')
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  }, 15000)
+
+  it('청크마저 1d가 아니면 명시적 실패 (조용한 왜곡 금지)', async () => {
+    const first = Date.parse('2010-01-01T00:00:00Z') / 1000
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(res(payload([first], 100, '1mo', first)))
+      .mockResolvedValueOnce(res(payload([first], 100, '1mo')))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await expect(fetchDailySeries('^GSPC', { retryBaseMs: 1 })).rejects.toThrow(/일별 데이터를 제공하지/)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  }, 15000)
+
+  it('상장 전 빈 청크는 건너뜀', async () => {
+    const first = Date.parse('1990-01-01T00:00:00Z') / 1000
+    const t2 = Date.parse('2015-01-05T00:00:00Z') / 1000
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(res(payload([first], 100, '3mo', first)))
+      .mockResolvedValueOnce(res({ chart: { result: [{ meta: { dataGranularity: '1d' }, timestamp: [] }] } }))
+      .mockResolvedValueOnce(res(payload([t2], 60, '1d')))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const s = await fetchDailySeries('^GSPC', { retryBaseMs: 1 })
+      expect(s.dates).toEqual(['2015-01-05'])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  }, 15000)
+
+  it('mergeDailySeries: 배당 통합 + 경계 중복 제거', () => {
+    const a = { ticker: 'X', dates: ['2020-01-02', '2020-01-03'], open: [1, 2], close: [1, 2], adjClose: [1, 2], dividends: { '2020-01-02': 0.5 } }
+    const b = { ticker: 'X', dates: ['2020-01-03', '2020-01-06'], open: [2, 3], close: [2, 3], adjClose: [2, 3], dividends: { '2020-01-06': 0.7 } }
+    const m = mergeDailySeries([b, a], 'X')
+    expect(m.dates).toEqual(['2020-01-02', '2020-01-03', '2020-01-06'])
+    expect(m.dividends).toEqual({ '2020-01-02': 0.5, '2020-01-06': 0.7 })
+  })
+})
+
+describe('캘린더 해상도 방어선', async () => {
+  const { alignToCommonCalendar } = await import('../data')
+
+  it('평균 간격 > 5일이면 지표 왜곡 경고', () => {
+    // 분기 간격 데이터 (강등 미탐지로 새어 들어온 상황 가정)
+    const dates = ['2020-01-02', '2020-04-01', '2020-07-01', '2020-10-01', '2021-01-04']
+    const s = { ticker: 'BAD', dates, open: dates.map(() => 100), close: dates.map(() => 100), adjClose: dates.map(() => 100), dividends: {} }
+    const bundle = alignToCommonCalendar([s])
+    expect(bundle.clipWarnings.some((w) => w.includes('해상도'))).toBe(true)
+  })
+})
