@@ -71,8 +71,8 @@ export const ASSET_CATALOG: CatalogEntry[] = [
   { ticker: 'IAU', label: '금 ETF (저보수)', group: '원자재', startYear: 2005 },
   { ticker: 'GC=F', label: '금 선물 (장기)', group: '원자재', startYear: 2000, note: '선물 근월물 — 롤오버 왜곡 가능. 보관·롤 비용 미반영' },
   {
-    ticker: 'XAUUSD', label: '금 현물 스팟 (최장)', group: '원자재', startYear: 1968, source: 'stooq',
-    note: '금 현물 스팟(Stooq) — 90년대 이전 커버. 보관비용·스프레드·보수 미반영. Stooq 한도/차단 시 GC=F로 대체',
+    ticker: 'CEF', label: '금·은 실물 신탁 (최장)', group: '원자재', startYear: 1986,
+    note: '실물 금(~2/3)+은(~1/3) 폐쇄형 신탁 — 순수 금이 아니고 NAV 대비 프리미엄/디스카운트가 변동. 80~90년대에 실제 매매 가능했던 금 노출',
   },
 
   // ── 크립토 ──
