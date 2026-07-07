@@ -3,17 +3,22 @@
 설정형 포트폴리오 백테스터 — 적립·리밸런싱 규칙 DSL, 한국 세제 엔진, 다중 전략 비교.
 **완전 독립 실행형 앱**입니다 (백엔드·로그인 없음, 데이터는 브라우저가 Yahoo Finance에서 직접 조회).
 
+**공개 서비스: https://portfolio-backtester-chi.vercel.app/** (Vercel — main 푸시 시 자동 배포)
+
 스펙 문서: [`docs/PRD.md`](docs/PRD.md) (v1.1) — 코드의 섹션 주석(§3, §4.2, 5.2 …)은 이 문서를 가리킵니다.
 
 ## 빠른 시작
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173 (dev 서버가 /yf → Yahoo 프록시)
-npm test         # 엔진 검증 스위트 (골든마스터·손계산 대조·프로퍼티, 58 tests)
+npm run dev      # http://localhost:5173 (dev 서버가 /yf·/stooq 프록시)
+npm test         # 엔진 검증 스위트 (골든마스터·손계산 대조·프로퍼티)
 npm run build    # tsc + vite 프로덕션 빌드
-npm run deploy   # Cloudflare Pages 배포 (functions/yf가 프로덕션 프록시)
 ```
+
+배포는 Vercel git 연동으로 main 푸시 시 자동 (vercel.json: /yf 외부 리라이트 +
+/stooq → api/stooq 서버리스 함수). Cloudflare Pages 배포도 지원 (`npm run deploy`,
+functions/ 프록시 동봉).
 
 ## 무엇이 다른가 (vs Portfolio Visualizer)
 
