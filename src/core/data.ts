@@ -16,6 +16,7 @@ import { fetchWithTimeout } from '../fetchUtil'
 import type { DailySeries, AlignedDataBundle, AlignedSeries } from './types'
 import { CASH_TICKER } from './types'
 import { ASSET_CATALOG } from './catalog'
+import { buildLeveragedSeries, RATE_TICKER } from './synthetic'
 
 /** 크립토 티커 판별 (Yahoo -USD 표기) — 365일 거래 → 공통 캘린더 강제 대상 */
 export function isCryptoTicker(ticker: string): boolean {
@@ -434,23 +435,44 @@ export async function loadDataBundle(
   )
   if (unique.length === 0) throw new Error('시장 자산이 없습니다 (CASH만으로는 백테스트 불가)')
 
-  const seriesList: DailySeries[] = []
-  let fetchedFromNetwork = false
+  // 합성 레버리지(-SIM) 해석: 실제 조회 대상 = 비합성 티커 + 합성의 기초 + 금리(^IRX)
+  const entryOf = (t: string) => ASSET_CATALOG.find((e) => e.ticker === t)
+  const toFetch = new Set<string>()
+  let anySynthetic = false
   for (const t of unique) {
+    const syn = entryOf(t)?.synthetic
+    if (syn) {
+      anySynthetic = true
+      toFetch.add(syn.base.toUpperCase())
+    } else {
+      toFetch.add(t)
+    }
+  }
+  if (anySynthetic) toFetch.add(RATE_TICKER)
+
+  const raw = new Map<string, DailySeries>()
+  let fetchedFromNetwork = false
+  for (const t of toFetch) {
     if (!options?.forceRefresh) {
       const cached = readCache(t)
       if (cached) {
-        seriesList.push(cached)
+        raw.set(t, cached)
         continue
       }
     }
     if (fetchedFromNetwork) await sleep(INTER_FETCH_DELAY_MS)
-    const source = ASSET_CATALOG.find((e) => e.ticker === t)?.source
+    const source = entryOf(t)?.source
     const fetched = source === 'stooq' ? await fetchStooqSeries(t) : await fetchDailySeries(t)
     fetchedFromNetwork = true
     writeCache(t, fetched)
-    seriesList.push(fetched)
+    raw.set(t, fetched)
   }
+
+  const seriesList: DailySeries[] = unique.map((t) => {
+    const syn = entryOf(t)?.synthetic
+    if (!syn) return raw.get(t)!
+    return buildLeveragedSeries(t, raw.get(syn.base.toUpperCase())!, raw.get(RATE_TICKER)!, syn)
+  })
 
   return alignToCommonCalendar(seriesList, options)
 }

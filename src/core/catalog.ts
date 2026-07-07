@@ -9,7 +9,9 @@
  * 가격에 내재돼 배당 현금흐름·배당세가 계산되지 않음 — 엔진이 결과 화면에 플래그.
  */
 
-export type AssetGroup = '지수 (장기 히스토리)' | '주식 ETF' | '채권/현금 ETF' | '원자재' | '크립토'
+export type AssetGroup = '지수 (장기 히스토리)' | '주식 ETF' | '레버리지 (합성 소급)' | '채권/현금 ETF' | '원자재' | '크립토'
+
+import type { SyntheticSpec } from './synthetic'
 
 export interface CatalogEntry {
   ticker: string
@@ -21,6 +23,8 @@ export interface CatalogEntry {
   note?: string
   /** 데이터 소스 — 생략 시 yahoo. stooq는 배당 이벤트 없음(현물·지수 전용) */
   source?: 'stooq'
+  /** 합성 레버리지 스펙 — 기초 ETF에서 소급 시뮬레이션 (synthetic.ts) */
+  synthetic?: SyntheticSpec
 }
 
 const PRICE_INDEX_NOTE = '가격지수 — 배당 미포함(총수익·배당세 과소). 매매 불가 지수를 보유 가능으로 가정'
@@ -43,6 +47,30 @@ export const ASSET_CATALOG: CatalogEntry[] = [
   { ticker: 'QQQM', label: '나스닥 100 (저보수)', group: '주식 ETF', startYear: 2020 },
   { ticker: 'VXUS', label: '미국 제외 전세계', group: '주식 ETF', startYear: 2011 },
   { ticker: 'SCHD', label: '미국 배당성장', group: '주식 ETF', startYear: 2011 },
+
+  // ── 레버리지: 실물 + 합성 소급 (상장 전 시대 시뮬레이션) ──
+  { ticker: 'TQQQ', label: '나스닥100 3배 (실물)', group: '레버리지 (합성 소급)', startYear: 2010, note: '일간 3배 레버리지 — 장기 보유 시 변동성 잠식. 상장 전 구간은 TQQQ-SIM 사용' },
+  { ticker: 'QLD', label: '나스닥100 2배 (실물)', group: '레버리지 (합성 소급)', startYear: 2006, note: '일간 2배 레버리지 — 상장 전 구간은 QLD-SIM 사용' },
+  {
+    ticker: 'TQQQ-SIM', label: '나스닥100 3배 합성 (닷컴버블 소급)', group: '레버리지 (합성 소급)', startYear: 1999,
+    synthetic: { base: 'QQQ', leverage: 3, expensePct: 0.86, borrowSpreadPct: 0.6 },
+    note: '가상 합성 자산 — 실존 ETF가 아니라 QQQ 일간수익×3 − 차입비용(^IRX 실제 단기금리+0.6%) − 보수의 소급 시뮬레이션. 스왑 스프레드·추적오차 미반영(실제보다 소폭 낙관적), 배당 내재(배당세 미계산). 실물 상장 이후 구간에서 실제 ETF와 겹쳐 검증 가능',
+  },
+  {
+    ticker: 'QLD-SIM', label: '나스닥100 2배 합성 (닷컴버블 소급)', group: '레버리지 (합성 소급)', startYear: 1999,
+    synthetic: { base: 'QQQ', leverage: 2, expensePct: 0.95, borrowSpreadPct: 0.6 },
+    note: '가상 합성 자산 — 실존 ETF가 아니라 QQQ 일간수익×2 − 차입비용(^IRX 실제 단기금리+0.6%) − 보수의 소급 시뮬레이션. 스왑 스프레드·추적오차 미반영(실제보다 소폭 낙관적), 배당 내재(배당세 미계산). 실물 상장 이후 구간에서 실제 ETF와 겹쳐 검증 가능',
+  },
+  {
+    ticker: 'UPRO-SIM', label: 'S&P500 3배 합성 (1993~ 소급)', group: '레버리지 (합성 소급)', startYear: 1993,
+    synthetic: { base: 'SPY', leverage: 3, expensePct: 0.91, borrowSpreadPct: 0.6 },
+    note: '가상 합성 자산 — 실존 ETF가 아니라 SPY 일간수익×3 − 차입비용(^IRX 실제 단기금리+0.6%) − 보수의 소급 시뮬레이션. 스왑 스프레드·추적오차 미반영(실제보다 소폭 낙관적), 배당 내재(배당세 미계산). 실물 상장 이후 구간에서 실제 ETF와 겹쳐 검증 가능',
+  },
+  {
+    ticker: 'SSO-SIM', label: 'S&P500 2배 합성 (1993~ 소급)', group: '레버리지 (합성 소급)', startYear: 1993,
+    synthetic: { base: 'SPY', leverage: 2, expensePct: 0.89, borrowSpreadPct: 0.6 },
+    note: '가상 합성 자산 — 실존 ETF가 아니라 SPY 일간수익×2 − 차입비용(^IRX 실제 단기금리+0.6%) − 보수의 소급 시뮬레이션. 스왑 스프레드·추적오차 미반영(실제보다 소폭 낙관적), 배당 내재(배당세 미계산). 실물 상장 이후 구간에서 실제 ETF와 겹쳐 검증 가능',
+  },
 
   // ── 채권 뮤추얼펀드: ETF 이전 시대(80~90년대) 커버, 분배금 포함 ──
   {
@@ -87,5 +115,6 @@ export function assetCautionFor(ticker: string): string | null {
   if (entry?.note) return entry.note
   if (t.startsWith('^')) return PRICE_INDEX_NOTE
   if (t.endsWith('=F')) return '선물 근월물 — 롤오버 왜곡 가능'
+  if (t.endsWith('-SIM')) return '가상 합성 자산 — 실존 상품이 아닌 시뮬레이션'
   return null
 }
