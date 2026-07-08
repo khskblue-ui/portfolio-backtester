@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { X, TrendingUp, Landmark, Coins, HelpCircle, Lightbulb, Scale } from 'lucide-react'
+import { X, TrendingUp, Landmark, Coins, Banknote, HelpCircle, Lightbulb, Scale } from 'lucide-react'
 import type { EraStory, AssetStory } from './eraStories'
 import { STORY_EPISTEMICS } from './eraStories'
 
@@ -75,9 +75,10 @@ export function EraStoryModal({
 
           {/* 자산별 */}
           <div className="space-y-4 border-t border-[#e0e3eb] dark:border-[#2a2e39] pt-4">
-            {assetSection('주식', TrendingUp, 'text-[#2962ff] dark:text-[#5b8aff]', story.stock)}
-            {assetSection('장기국채', Landmark, 'text-emerald-700 dark:text-emerald-400', story.bond)}
-            {assetSection('금', Coins, 'text-amber-600 dark:text-amber-400', story.gold)}
+            {assetSection('주식 (S&P500 총수익)', TrendingUp, 'text-[#2962ff] dark:text-[#5b8aff]', story.stock)}
+            {assetSection('장기국채 (미 10년물 근사)', Landmark, 'text-emerald-700 dark:text-emerald-400', story.bond)}
+            {assetSection('금 (현물)', Coins, 'text-amber-600 dark:text-amber-400', story.gold)}
+            {story.cash && assetSection('현금 (3개월 단기국채)', Banknote, 'text-slate-500 dark:text-slate-400', story.cash)}
           </div>
 
           {/* 교훈 */}

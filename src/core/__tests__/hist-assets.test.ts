@@ -77,6 +77,7 @@ describe('데이터 — 번들 자산 로드·혼합 차단', () => {
     expect(isBundleTicker('SPX-HIST')).toBe(true)
     expect(isBundleTicker('UST10-HIST')).toBe(true)
     expect(isBundleTicker('GOLD-HIST')).toBe(true)
+    expect(isBundleTicker('BILL-HIST')).toBe(true)
     expect(isBundleTicker('VOO')).toBe(false)
   })
 

@@ -49,6 +49,10 @@ export const ASSET_CATALOG: CatalogEntry[] = [
     ticker: 'GOLD-HIST', label: '금 (역사 월간)', group: '역사 월간 (1871~)', startYear: 1871, source: 'bundle',
     note: HIST_NOTE_COMMON + '. 금: 1933-1974 미국 민간 금보유 금지·공정가($20.67→$35) 시대 주의',
   },
+  {
+    ticker: 'BILL-HIST', label: '단기국채/현금 (역사 월간)', group: '역사 월간 (1871~)', startYear: 1871, source: 'bundle',
+    note: HIST_NOTE_COMMON + '. 현금: 3개월 T-bill(1934~, FRED TB3MS) + 1934년 이전 NY 상업어음 금리(NBER — 신용 프리미엄만큼 소폭 높음) 월 복리. 고정 유휴현금 금리 대신 실제 역사 단기금리로 현금을 보유하는 용도',
+  },
 
   // ── 지수: 닷컴버블·블랙먼데이 등 과거 구간용 장기 히스토리 ──
   { ticker: '^GSPC', label: 'S&P 500 지수', group: '지수 (장기 히스토리)', startYear: 1927, note: PRICE_INDEX_NOTE },

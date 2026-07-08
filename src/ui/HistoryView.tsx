@@ -37,7 +37,7 @@ interface Episode {
   recovery: string | null
   underwaterMonths: number
   depthPct: number
-  assets: { stock: EpisodeAssets; bond: EpisodeAssets; gold: EpisodeAssets }
+  assets: { stock: EpisodeAssets; bond: EpisodeAssets; gold: EpisodeAssets; bill?: EpisodeAssets }
 }
 interface HistoryData {
   meta: { sources: string[]; method: Record<string, string>; dataEnd: string }
@@ -46,9 +46,11 @@ interface HistoryData {
     stock: number[]
     bond: (number | null)[]
     gold: (number | null)[]
+    bill: (number | null)[]
     stockNom: number[]
     bondNom: (number | null)[]
     goldNom: (number | null)[]
+    billNom: (number | null)[]
   }
   macro: {
     cpiYoY: (number | null)[]
@@ -107,6 +109,7 @@ const SERIES_COLORS = {
   stock: { light: '#2a78d6', dark: '#3987e5' },
   bond: { light: '#1baf7a', dark: '#199e70' },
   gold: { light: '#eda100', dark: '#c98500' },
+  bill: { light: '#64748b', dark: '#94a3b8' },
   cpi: { light: '#c2410c', dark: '#f97316' },
   rate: { light: '#0f766e', dark: '#2dd4bf' },
   real: { light: '#7c3aed', dark: '#a78bfa' },
@@ -157,8 +160,8 @@ export function HistoryView({
     if (!data) return null
     const s = data.series
     return basis === 'real'
-      ? { stock: s.stock, bond: s.bond, gold: s.gold }
-      : { stock: s.stockNom, bond: s.bondNom, gold: s.goldNom }
+      ? { stock: s.stock, bond: s.bond, gold: s.gold, bill: s.bill }
+      : { stock: s.stockNom, bond: s.bondNom, gold: s.goldNom, bill: s.billNom }
   }, [data, basis])
 
   // 전체 차트 데이터 (주식 총수익, 로그 스케일)
@@ -187,9 +190,10 @@ export function HistoryView({
     for (let i = from; i <= to; i++) {
       rows.push({
         ym: dates[i],
-        주식: normAt(pick.stock, i),
-        장기국채: normAt(pick.bond, i),
-        금: normAt(pick.gold, i),
+        'S&P500 총수익': normAt(pick.stock, i),
+        '미 10년 국채': normAt(pick.bond, i),
+        '금 현물': normAt(pick.gold, i),
+        '현금(3개월물)': normAt(pick.bill, i),
         'CPI 인플레': data.macro.cpiYoY[i],
         '10년물 금리': data.macro.gs10[i],
         실질금리: data.macro.realRate10[i],
@@ -244,7 +248,9 @@ export function HistoryView({
             ))}
           </div>
         </div>
-        <p className="text-xs text-zinc-400 mb-3">음영 구간 = 실질 기준 −25% 이상 낙폭 + 3년 이상 수면하 · 클릭해 상세 보기</p>
+        <p className="text-xs text-zinc-400 mb-3">
+          기준: S&P500 지수(1957년 이전은 Cowles·S&P90 소급 합성) 배당 재투자 총수익 · 음영 구간 = 실질 기준 −25% 이상 낙폭 + 3년 이상 수면하 · 클릭해 상세 보기
+        </p>
         <ResponsiveContainer width="100%" height={320}>
           <LineChart data={overviewData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" vertical={false} />
@@ -279,6 +285,9 @@ export function HistoryView({
       </div>
 
       {/* 구간 카드 */}
+      <p className="text-[11px] text-zinc-400 -mb-2">
+        카드 수치 기준 — 주식: S&P500 총수익 · 채권: 미 10년물 국채 총수익 근사(GS10 파생) · 금: 현물가 · 전부 실질(CPI 조정), 주식 고점→회복 시점 누적. 현금(3개월 T-bill)은 구간 상세에서
+      </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {data.episodes.map((e) => {
           const info = EPISODE_INFO[e.peak]
@@ -380,14 +389,16 @@ export function HistoryView({
                 contentStyle={tooltipContentStyle}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="주식" stroke={c('stock')} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="장기국채" stroke={c('bond')} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="금" stroke={c('gold')} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="S&P500 총수익" stroke={c('stock')} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="미 10년 국채" stroke={c('bond')} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="금 현물" stroke={c('gold')} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="현금(3개월물)" stroke={c('bill')} strokeWidth={1.6} strokeDasharray="5 3" dot={false} />
             </LineChart>
           </ResponsiveContainer>
           <p className="text-[11px] text-zinc-400 leading-relaxed">
-            자산 추이는 {basisLabel} 기준(토글 연동)·고점=100. 장기국채는 GS10 수익률 파생 만기고정 근사(실제 지수 아님) ·
-            금은 1933-1974 미국 민간보유 금지·공정가 시대 주의
+            자산 추이는 {basisLabel} 기준(토글 연동)·고점=100 · 주식 = S&P500 총수익(1957 이전 소급 합성) ·
+            국채 = 미 10년물 총수익 근사(GS10 수익률 파생 만기고정 — 실제 지수 아님) ·
+            현금 = 3개월 T-bill(1934 이전은 NY 상업어음 금리 접합) 복리 · 금 = 현물가, 1933-1974 미국 민간보유 금지·공정가 시대 주의
           </p>
 
           {/* 매크로 배경 */}

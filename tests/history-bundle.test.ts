@@ -9,13 +9,22 @@ describe('역사 차트 번들 (public/data/history.json) 무결성', async () =
   const { readFileSync } = await import('node:fs')
   const h = JSON.parse(readFileSync(new URL('../public/data/history.json', import.meta.url), 'utf8'))
 
-  it('시리즈 길이 일치 + 1900-01 시작 = 100', () => {
+  it('시리즈 길이 일치 + 1900-01 시작 = 100 + 2023-06 이후 연장', () => {
     const s = h.series
     expect(s.dates[0]).toBe('1900-01')
-    expect(s.stock.length).toBe(s.dates.length)
-    expect(s.bond.length).toBe(s.dates.length)
-    expect(s.gold.length).toBe(s.dates.length)
+    for (const k of ['stock', 'bond', 'gold', 'bill', 'stockNom', 'bondNom', 'goldNom', 'billNom']) {
+      expect(s[k].length, k).toBe(s.dates.length)
+    }
     expect(s.stock[0]).toBeCloseTo(100, 6)
+    // FRED/^SP500TR 연장이 적용됐는지 (Shiller 미러 한계 2023-06 초과)
+    expect(h.meta.dataEnd > '2024-01').toBe(true)
+  })
+
+  it('현금(단기국채) 시리즈 — 1929 디플레 실질 플러스 / 1946 금융억압 실질 마이너스', () => {
+    interface Ep { peak: string; assets: Record<string, { toTroughPct: number | null; toRecoveryPct: number | null } | null> }
+    const ep = (p: string): Ep => h.episodes.find((e: Ep) => e.peak.startsWith(p))
+    expect(ep('1929-09').assets.bill!.toTroughPct).toBeGreaterThan(20)
+    expect(ep('1946-04').assets.bill!.toRecoveryPct).toBeLessThan(-15)
   })
 
   it('검증된 3대 구간이 리서치 수치와 일치 (데이터 드리프트 가드)', () => {
