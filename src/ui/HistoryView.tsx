@@ -135,6 +135,20 @@ export function HistoryView({
   const axisTickColor = theme === 'dark' ? '#9ca3af' : '#6b7280'
   const c = (k: keyof typeof SERIES_COLORS) => SERIES_COLORS[k][theme]
 
+  // recharts 기본 툴팁은 흰 배경에 글자색을 부모에서 상속 — 다크에서 날짜 라벨이
+  // 밝은 글자색을 물려받아 안 보이므로 배경·글자색을 테마에 맞게 명시
+  const tooltipContentStyle = {
+    fontSize: 12,
+    borderRadius: 8,
+    background: theme === 'dark' ? '#1e222d' : '#ffffff',
+    border: `1px solid ${theme === 'dark' ? '#363a45' : '#e0e3eb'}`,
+  }
+  const tooltipLabelStyle = {
+    fontSize: 12,
+    fontWeight: 600,
+    color: theme === 'dark' ? '#e4e4e7' : '#18181b',
+  }
+
   // 기준(실질/명목)에 따른 시리즈 선택
   const pick = useMemo(() => {
     if (!data) return null
@@ -242,8 +256,8 @@ export function HistoryView({
             />
             <Tooltip
               formatter={(v) => [`${Number(v).toFixed(0)} (1900=100)`, `${basisLabel} 총수익`]}
-              labelStyle={{ fontSize: 12 }}
-              contentStyle={{ fontSize: 12, borderRadius: 6 }}
+              labelStyle={tooltipLabelStyle}
+              contentStyle={tooltipContentStyle}
             />
             {data.episodes.map((e) => (
               <ReferenceArea
@@ -350,8 +364,8 @@ export function HistoryView({
               <YAxis tick={{ fontSize: 11, fill: axisTickColor }} stroke={axisTickColor} width={44} domain={['auto', 'auto']} tickFormatter={(v: number) => String(Math.round(v))} />
               <Tooltip
                 formatter={(v) => `${Number(v).toFixed(1)} (고점=100)`}
-                labelStyle={{ fontSize: 12 }}
-                contentStyle={{ fontSize: 12, borderRadius: 6 }}
+                labelStyle={tooltipLabelStyle}
+                contentStyle={tooltipContentStyle}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Line type="monotone" dataKey="주식" stroke={c('stock')} strokeWidth={2} dot={false} />
@@ -399,8 +413,8 @@ export function HistoryView({
               />
               <Tooltip
                 formatter={(v, name) => [name === 'CAPE' ? Number(v).toFixed(1) : `${Number(v).toFixed(1)}%`, name]}
-                labelStyle={{ fontSize: 12 }}
-                contentStyle={{ fontSize: 12, borderRadius: 6 }}
+                labelStyle={tooltipLabelStyle}
+                contentStyle={tooltipContentStyle}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <ReferenceLine yAxisId="pct" y={0} stroke={axisTickColor} strokeDasharray="4 3" strokeOpacity={0.5} />
