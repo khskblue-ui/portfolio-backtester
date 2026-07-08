@@ -6,7 +6,7 @@ import { AlertTriangle } from 'lucide-react'
  */
 export function EpistemicsBanner() {
   return (
-    <div className="bg-[#faf4e0] dark:bg-[#1d1a10] border-l-4 border-amber-700 dark:border-amber-500 rounded-sm p-4 text-xs text-amber-900 dark:text-amber-200/90 space-y-1">
+    <div className="bg-[#faf4e0] dark:bg-[#1d1a10] border-l-4 border-amber-700 dark:border-amber-500 rounded-lg p-4 text-xs text-amber-900 dark:text-amber-200/90 space-y-1">
       <div className="flex items-center gap-1.5 font-semibold text-sm">
         <AlertTriangle className="w-4 h-4" /> 백테스트는 예측이 아닙니다
       </div>

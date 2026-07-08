@@ -120,7 +120,7 @@ export function ResultsSection({
           </span>
         </h2>
         {taxEnabled && (
-          <div className="flex rounded border border-[#cfc7b2] dark:border-[#2e3646] overflow-hidden text-xs font-medium">
+          <div className="flex rounded border border-[#cfd5e1] dark:border-[#363a45] overflow-hidden text-xs font-medium">
             {(
               [
                 { key: 'postTax', label: '세후' },
@@ -130,7 +130,7 @@ export function ResultsSection({
               <button
                 key={key}
                 onClick={() => setTaxView(key)}
-                className={`px-3 py-1.5 font-mono tracking-wider ${taxView === key ? 'ink-chip' : 'text-zinc-500 dark:text-zinc-400 hover:bg-[#eee9db] dark:hover:bg-[#1e242f]'}`}
+                className={`px-3 py-1.5 font-mono tracking-wider ${taxView === key ? 'ink-chip' : 'text-zinc-500 dark:text-zinc-400 hover:bg-[#edf1f7] dark:hover:bg-[#2a2e39]'}`}
               >
                 {label}
               </button>
@@ -141,7 +141,7 @@ export function ResultsSection({
 
       {/* 데이터·엔진 경고 */}
       {(bundle.clipWarnings.length > 0 || engineWarnings.length > 0 || assetCautions.length > 0) && (
-        <div className="bg-[#f4f0e4] dark:bg-[#151a24] border-l-4 border-zinc-400 dark:border-zinc-600 rounded-sm p-3 text-xs text-zinc-600 dark:text-zinc-300 space-y-1">
+        <div className="bg-[#f3f5f9] dark:bg-[#171c28] border-l-4 border-zinc-400 dark:border-zinc-600 rounded-lg p-3 text-xs text-zinc-600 dark:text-zinc-300 space-y-1">
           {assetCautions.map(([ticker, caution]) => (
             <p key={`caution-${ticker}`}>⚠ [{ticker}] {caution}</p>
           ))}
@@ -206,7 +206,7 @@ export function ResultsSection({
       <div className={`${cardCls} overflow-x-auto`}>
         <table className="ledger-table w-full text-xs min-w-[880px]">
           <thead>
-            <tr className="text-zinc-500 dark:text-zinc-500 border-b border-[#d5cdb9] dark:border-[#2e3646]">
+            <tr className="text-zinc-500 dark:text-zinc-500 border-b border-[#d3d8e3] dark:border-[#363a45]">
               <th className="text-left px-4 py-3 font-medium">전략</th>
               <th className="text-right px-3 py-3 font-medium">
                 TWRR/년
@@ -276,7 +276,7 @@ export function ResultsSection({
               const m = r[taxView].metrics
               const res = r[taxView].result
               return (
-                <tr key={r.config.id} className="border-b border-[#ece7d8] dark:border-[#1e2430] text-zinc-800 dark:text-zinc-200">
+                <tr key={r.config.id} className="border-b border-[#e9edf4] dark:border-[#262b38] text-zinc-800 dark:text-zinc-200">
                   <td className="px-4 py-2.5 font-medium">
                     <span className="inline-block w-2.5 h-2.5 rounded-full mr-2" style={{ backgroundColor: colorOf.get(r.config.id) }} />
                     {r.config.name}
@@ -320,7 +320,7 @@ export function ResultsSection({
               const drag = r.preTax.metrics.twrrAnnualPct - r.postTax.metrics.twrrAnnualPct
               const res = r.postTax.result
               return (
-                <div key={r.config.id} className="border border-[#e3ddcb] dark:border-[#242a37] rounded p-3">
+                <div key={r.config.id} className="border border-[#dfe3ec] dark:border-[#2a2e39] rounded p-3">
                   <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
                     <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: colorOf.get(r.config.id) }} />
                     {r.config.name}
@@ -345,7 +345,7 @@ export function ResultsSection({
         </div>
         <table className="ledger-table w-full text-xs min-w-[560px]">
           <thead>
-            <tr className="text-zinc-500 dark:text-zinc-500 border-b border-[#d5cdb9] dark:border-[#2e3646]">
+            <tr className="text-zinc-500 dark:text-zinc-500 border-b border-[#d3d8e3] dark:border-[#363a45]">
               <th className="text-left px-4 py-3 font-medium">연도</th>
               {sorted.map((r) => (
                 <th key={r.config.id} className="text-right px-3 py-3 font-medium">
@@ -357,7 +357,7 @@ export function ResultsSection({
           </thead>
           <tbody>
             {years.map((y) => (
-              <tr key={y} className="border-b border-[#ece7d8] dark:border-[#1e2430] text-zinc-800 dark:text-zinc-200">
+              <tr key={y} className="border-b border-[#e9edf4] dark:border-[#262b38] text-zinc-800 dark:text-zinc-200">
                 <td className="px-4 py-2">{y}</td>
                 {sorted.map((r) => {
                   const a = r[taxView].metrics.annualReturns.find((x) => x.year === y)
@@ -408,9 +408,9 @@ function MoneyTooltip({
     .sort((a, b) => b.value - a.value)
 
   return (
-    <div className="rounded border border-[#d5cdb9] dark:border-[#2e3646] bg-[#fffdf7] dark:bg-[#1a1f29] shadow-lg p-3 text-xs space-y-1.5 max-w-xs">
+    <div className="rounded border border-[#d3d8e3] dark:border-[#363a45] bg-[#ffffff] dark:bg-[#1e222d] shadow-lg p-3 text-xs space-y-1.5 max-w-xs">
       <div className="font-semibold text-zinc-900 dark:text-zinc-100">{label}</div>
-      <div className="text-zinc-500 dark:text-zinc-400 pb-1 border-b border-[#d5cdb9] dark:border-[#2e3646]">
+      <div className="text-zinc-500 dark:text-zinc-400 pb-1 border-b border-[#d3d8e3] dark:border-[#363a45]">
         투입 원금 {fmtUsd(contrib)}
       </div>
       {entries.map((e) => (

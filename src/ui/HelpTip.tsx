@@ -89,7 +89,7 @@ export function HelpTip({
           <span
             ref={popRef}
             style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxHeight }}
-            className="z-[60] block overflow-y-auto bg-[#fffdf7] dark:bg-[#1a1f29] border border-[#d5cdb9] dark:border-[#2e3646] rounded shadow-lg p-3
+            className="z-[60] block overflow-y-auto bg-[#ffffff] dark:bg-[#1e222d] border border-[#d3d8e3] dark:border-[#363a45] rounded shadow-lg p-3
               text-xs font-normal text-zinc-600 dark:text-zinc-300 whitespace-normal text-left leading-relaxed"
           >
             <span className="block font-semibold text-zinc-900 dark:text-zinc-100 mb-1">{title}</span>

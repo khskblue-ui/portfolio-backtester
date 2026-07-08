@@ -83,32 +83,27 @@ code {
   letter-spacing: -0.01em;
 }
 
-/* ── 잉크/크림 반전 요소 (dark: variant 명시도 동률 회피) ────── */
+/* ── 액센트 요소 (dark: variant 명시도 동률 회피를 위한 실클래스) ── */
 .btn-primary {
-  background: #18181b;
-  color: #f5f2ea;
+  background: #2962ff;
+  color: #fff;
 }
 .btn-primary:hover {
-  background: #000;
+  background: #1e53e5;
 }
 .dark .btn-primary {
-  background: #ece7da;
-  color: #18181b;
+  background: #2962ff;
+  color: #fff;
 }
 .dark .btn-primary:hover {
-  background: #fff;
+  background: #3d74ff;
 }
+/* 토글·칩 활성 상태 — 프라이머리 블루 */
 .ink-chip {
-  background: #18181b;
-  color: #f5f2ea;
+  background: #2962ff;
+  color: #fff;
 }
 .dark .ink-chip {
-  background: #ece7da;
-  color: #18181b;
-}
-.masthead-rule {
-  border-top: 4px solid #18181b;
-}
-.dark .masthead-rule {
-  border-top-color: #ece7da;
+  background: #2962ff;
+  color: #fff;
 }

@@ -211,7 +211,7 @@ export function HistoryView({
             </HelpTip>
           </h2>
           {/* 실질/명목 토글 */}
-          <div className="flex rounded border border-[#d5cdb9] dark:border-[#2e3646] overflow-hidden text-xs font-mono">
+          <div className="flex rounded border border-[#d3d8e3] dark:border-[#363a45] overflow-hidden text-xs font-mono">
             {(['real', 'nominal'] as const).map((b) => (
               <button
                 key={b}
@@ -419,7 +419,7 @@ export function HistoryView({
       )}
 
       {/* 에피스테믹 각주 */}
-      <div className="bg-[#faf4e0] dark:bg-[#1d1a10] border-l-4 border-amber-700 dark:border-amber-500 rounded-sm p-3 text-[11px] text-amber-900 dark:text-amber-200/90 leading-relaxed">
+      <div className="bg-[#faf4e0] dark:bg-[#1d1a10] border-l-4 border-amber-700 dark:border-amber-500 rounded-lg p-3 text-[11px] text-amber-900 dark:text-amber-200/90 leading-relaxed">
         <b>읽는 법 주의</b> — 기본 화면은 "명목 주가"가 아니라 <b>배당 재투자 + 인플레이션 보정(실질)</b> 기준입니다
         (우상단 토글로 명목 전환). 흔히 인용되는 "대공황 −84%, 1954년 회복"은 명목 가격 기준이고, 실질 총수익 기준은
         −77%, 1936/1945년 회복입니다. 가격이 일별 종가의 월평균이라 일별 시리즈보다 낙폭이 완만하게 보입니다.

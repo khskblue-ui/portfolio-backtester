@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, TrendingUp, X, FileText } from 'lucide-react'
+import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, TrendingUp, X, FileText, BarChart3, Landmark } from 'lucide-react'
 import {
   loadDataBundle,
   runComparison,
@@ -149,111 +149,121 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen masthead-rule bg-[#f2efe6] dark:bg-[#0e1015] text-zinc-900 dark:text-zinc-100">
-      <div className="max-w-7xl mx-auto px-3 py-4 sm:p-4 md:p-6 space-y-5 sm:space-y-6">
-        {/* 헤더 */}
-        <header className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 ink-chip rounded flex items-center justify-center flex-shrink-0">
-              <TrendingUp className="w-5 h-5" strokeWidth={2.5} />
+    <div className="min-h-screen bg-[#eef1f5] dark:bg-[#131722] text-zinc-900 dark:text-zinc-100">
+      {/* 상단 고정 헤더 바 — 화이트 서피스, 타이틀·액션·뷰 내비게이션 */}
+      <header className="sticky top-0 z-40 bg-white dark:bg-[#1e222d] border-b border-[#e0e3eb] dark:border-[#2a2e39]">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6">
+          <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-2 py-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 ink-chip rounded-lg flex items-center justify-center flex-shrink-0">
+                <TrendingUp className="w-4.5 h-4.5" strokeWidth={2.5} />
+              </div>
+              <div>
+                <h1 className="text-base sm:text-lg font-bold leading-tight tracking-tight">포트폴리오 백테스터</h1>
+                <p className="hidden sm:block text-[10px] text-zinc-400 dark:text-zinc-500 leading-tight">
+                  적립·리밸런싱 시뮬레이션 · 한국 세제 · 1871~ 역사 데이터
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-bold leading-tight tracking-tight">포트폴리오 백테스터</h1>
-              <p className="text-[10px] font-mono tracking-[0.18em] text-zinc-500 leading-tight mt-0.5">
-                BACKTEST · 적립/리밸런싱 DSL · 한국 세제 · 다중 전략
-              </p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+                title="테마 전환"
+                className={`p-2 rounded-md ${btnGhostCls}`}
+              >
+                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={() => {
+                  if (!runs || !bundle) {
+                    setNotice('보고서를 만들려면 먼저 백테스트를 실행하세요')
+                    return
+                  }
+                  setShowReport(true)
+                }}
+                title="백테스트 결과 보고서 (PDF 저장)"
+                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium ${btnGhostCls}`}
+              >
+                <FileText className="w-4 h-4" /> <span className="hidden lg:inline">보고서</span>
+              </button>
+              <button
+                onClick={exportConfig}
+                title="전략·설정을 JSON 파일로 백업"
+                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium ${btnGhostCls}`}
+              >
+                <Download className="w-4 h-4" /> <span className="hidden lg:inline">설정 저장</span>
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                title="백업한 설정 JSON 불러오기"
+                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium ${btnGhostCls}`}
+              >
+                <Upload className="w-4 h-4" /> <span className="hidden lg:inline">불러오기</span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) importConfig(f)
+                  e.target.value = ''
+                }}
+              />
+              <button
+                onClick={() => run(true)}
+                disabled={running}
+                title="캐시를 비우고 데이터 다시 조회"
+                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium ${btnGhostCls} disabled:opacity-50`}
+              >
+                <RefreshCw className="w-4 h-4" /> <span className="hidden lg:inline">새로고침</span>
+              </button>
+              <button
+                onClick={() => run(false)}
+                disabled={running}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-md text-sm font-semibold ${btnPrimaryCls} disabled:opacity-50`}
+              >
+                <Play className="w-4 h-4" />
+                {running ? '실행 중…' : '백테스트 실행'}
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-            <button
-              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-              title="테마 전환"
-              className={`p-2 rounded ${btnGhostCls}`}
-            >
-              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
-            <button
-              onClick={() => {
-                if (!runs || !bundle) {
-                  setNotice('보고서를 만들려면 먼저 백테스트를 실행하세요')
-                  return
-                }
-                setShowReport(true)
-              }}
-              title="백테스트 결과 보고서 (PDF 저장)"
-              className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium ${btnGhostCls}`}
-            >
-              <FileText className="w-4 h-4" /> <span className="hidden sm:inline">보고서 (PDF)</span>
-            </button>
-            <button
-              onClick={exportConfig}
-              title="전략·설정을 JSON 파일로 백업"
-              className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium ${btnGhostCls}`}
-            >
-              <Download className="w-4 h-4" /> <span className="hidden sm:inline">설정 저장</span>
-            </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              title="백업한 설정 JSON 불러오기"
-              className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium ${btnGhostCls}`}
-            >
-              <Upload className="w-4 h-4" /> <span className="hidden sm:inline">설정 불러오기</span>
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/json"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) importConfig(f)
-                e.target.value = ''
-              }}
-            />
-            <button
-              onClick={() => run(true)}
-              disabled={running}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium ${btnGhostCls} disabled:opacity-50`}
-            >
-              <RefreshCw className="w-4 h-4" /> <span className="hidden sm:inline">데이터 새로고침</span>
-            </button>
-            <button
-              onClick={() => run(false)}
-              disabled={running}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded text-sm font-semibold ${btnPrimaryCls} disabled:opacity-50`}
-            >
-              <Play className="w-4 h-4" />
-              {running ? '실행 중…' : '백테스트 실행'}
-            </button>
-          </div>
-        </header>
 
-        {/* 뷰 탭 */}
-        <nav className="flex gap-1 border-b border-[#ddd6c4] dark:border-[#262c39]">
-          {(
-            [
-              { key: 'backtest', label: '백테스트', kicker: 'BACKTEST' },
-              { key: 'history', label: '역사 연구', kicker: 'HISTORY' },
-            ] as const
-          ).map(({ key, label, kicker }) => (
-            <button
-              key={key}
-              onClick={() => setView(key)}
-              className={`px-4 py-2 -mb-px border-b-2 text-sm font-medium transition-colors ${
-                view === key
-                  ? 'border-zinc-900 dark:border-[#ece7da] text-zinc-900 dark:text-zinc-100'
-                  : 'border-transparent text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
-              }`}
-            >
-              <span className="block text-[8px] font-mono tracking-[0.22em] text-left">{kicker}</span>
-              {label}
-            </button>
-          ))}
-        </nav>
+          {/* 뷰 내비게이션 — 세그먼트 탭 (활성 = 프라이머리 블루) */}
+          <nav className="flex gap-1.5 pb-2.5 overflow-x-auto">
+            {(
+              [
+                { key: 'backtest', label: '백테스트', desc: '전략 시뮬레이션', Icon: BarChart3 },
+                { key: 'history', label: '역사 연구', desc: '1900~ 약세 구간 · 매크로', Icon: Landmark },
+              ] as const
+            ).map(({ key, label, desc, Icon }) => (
+              <button
+                key={key}
+                onClick={() => setView(key)}
+                className={`flex items-center gap-2 pl-3 pr-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors ${
+                  view === key
+                    ? 'bg-[#2962ff] text-white shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-300 hover:bg-[#edf1f7] dark:hover:bg-[#2a2e39] border border-[#e0e3eb] dark:border-[#2a2e39]'
+                }`}
+              >
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                <span className="text-left leading-tight">
+                  {label}
+                  <span className={`block text-[10px] font-normal ${view === key ? 'text-white/75' : 'text-zinc-400 dark:text-zinc-500'}`}>
+                    {desc}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </nav>
+        </div>
+      </header>
 
+      <div className="max-w-7xl mx-auto px-3 py-4 sm:px-4 md:px-6 md:py-5 space-y-5">
         {/* 알림 배너 */}
         {notice && (
-          <div className="flex items-center justify-between gap-2 bg-[#fdf1ef] dark:bg-[#231416] border-l-4 border-red-700 dark:border-red-500 rounded-sm px-4 py-3 text-sm text-red-800 dark:text-red-300">
+          <div className="flex items-center justify-between gap-2 bg-[#fdf1ef] dark:bg-[#231416] border-l-4 border-red-700 dark:border-red-500 rounded-lg px-4 py-3 text-sm text-red-800 dark:text-red-300">
             <span>{notice}</span>
             <button onClick={() => setNotice(null)} className="p-1 hover:opacity-70 flex-shrink-0">
               <X className="w-4 h-4" />
@@ -347,7 +357,7 @@ export default function App() {
           ))}
         </datalist>
 
-        <footer className="text-center text-[11px] font-mono tracking-wide text-zinc-400 dark:text-zinc-600 border-t border-[#ddd6c4] dark:border-[#262c39] pt-5 pb-8">
+        <footer className="text-center text-[11px] font-mono tracking-wide text-zinc-400 dark:text-zinc-600 border-t border-[#e0e3eb] dark:border-[#2a2e39] pt-5 pb-8">
           데이터: Yahoo Finance (일별 EOD) · 모든 금액 USD · 결과는 원화 실현손익이 아닙니다
         </footer>
       </div>

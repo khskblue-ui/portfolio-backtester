@@ -75,14 +75,15 @@ export const fmtSignedPct = (v: number) =>
   Number.isFinite(v) ? `${v < 0 ? '−' : '+'}${Math.abs(v).toFixed(1)}%` : '—'
 
 export const inputCls =
-  'w-full min-w-0 bg-white dark:bg-[#1b2029] border border-[#d5cdb9] dark:border-[#2e3646] dark:text-zinc-100 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-500 focus:border-zinc-500 dark:focus:ring-zinc-400'
+  'w-full min-w-0 bg-white dark:bg-[#171c28] border border-[#d3d8e3] dark:border-[#363a45] dark:text-zinc-100 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2962ff]/30 focus:border-[#2962ff] dark:focus:border-[#3d74ff]'
 export const selectCls =
-  'bg-white dark:bg-[#1b2029] border border-[#d5cdb9] dark:border-[#2e3646] dark:text-zinc-100 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-500 focus:border-zinc-500 dark:focus:ring-zinc-400'
+  'bg-white dark:bg-[#171c28] border border-[#d3d8e3] dark:border-[#363a45] dark:text-zinc-100 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2962ff]/30 focus:border-[#2962ff] dark:focus:border-[#3d74ff]'
 export const labelCls = 'text-xs font-medium text-zinc-600 dark:text-zinc-400'
+/** 패널 카드 — 화이트 서피스 + 헤어라인 + 미세 그림자 (금융 터미널 대시보드 질감) */
 export const cardCls =
-  'bg-[#fbfaf5] dark:bg-[#161a22] rounded-md border border-[#ddd6c4] dark:border-[#262c39]'
-/** 주 액션 버튼 — 잉크 블랙 (다크: 웜 화이트). 파란 기본값 탈피 */
+  'bg-white dark:bg-[#1e222d] rounded-xl border border-[#e0e3eb] dark:border-[#2a2e39] shadow-[0_1px_3px_rgba(19,23,34,0.04)] dark:shadow-none'
+/** 주 액션 버튼 — 프라이머리 블루 */
 export const btnPrimaryCls = 'btn-primary'
-/** 보조 버튼 — 헤어라인 */
+/** 보조 버튼 — 화이트 서피스 + 헤어라인 */
 export const btnGhostCls =
-  'border border-[#cfc7b2] dark:border-[#2e3646] text-zinc-700 dark:text-zinc-300 hover:bg-[#eee9db] dark:hover:bg-[#1e242f]'
+  'bg-white dark:bg-[#1e222d] border border-[#d3d8e3] dark:border-[#363a45] text-zinc-700 dark:text-zinc-300 hover:bg-[#edf1f7] dark:hover:bg-[#2a2e39]'

@@ -39,7 +39,7 @@ export function StrategyCard({
         <input
           value={strategy.name}
           onChange={(e) => onChange((s) => ({ ...s, name: e.target.value }))}
-          className="flex-1 min-w-0 font-semibold text-sm bg-transparent dark:text-zinc-100 border-b border-transparent hover:border-[#cfc7b2] dark:hover:border-[#2e3646] focus:border-zinc-600 dark:focus:border-zinc-400 focus:outline-none py-0.5"
+          className="flex-1 min-w-0 font-semibold text-sm bg-transparent dark:text-zinc-100 border-b border-transparent hover:border-[#cfd5e1] dark:hover:border-[#363a45] focus:border-zinc-600 dark:focus:border-zinc-400 focus:outline-none py-0.5"
         />
         <button onClick={onDuplicate} title="복제" className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
           <Copy className="w-3.5 h-3.5" />
