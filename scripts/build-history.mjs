@@ -90,16 +90,27 @@ const fredMap = new Map(
 
 // ─── 월간 레코드 통합 (Shiller 1871~2023-06 + FRED/TR 연장) ──────────────────
 
-// Shiller: 배당·CPI·GS10 모두 유효한 행만 (미공표 꼬리 제거)
+// 미러 오기입 교정 — 교차 검증(scripts/verify-history.mjs)으로 확정된 단일 월 오류.
+// 1974-07: 미러가 월평균 대신 월말 종가(79.31)를 기입 — ^GSPC 22거래일 평균 82.82
+// (Shiller 관례 = 일별 종가의 월평균, 인접 795/796개월은 야후 재계산과 <1% 일치)
+const SP500_CORRECTIONS = { '1974-07': 82.82 }
+
+// 공식 소스 우선: CPI(1913-01~)·GS10(1953-04~)은 FRED 원본을 사용 — Shiller가 쓰는
+// 것과 동일 시리즈이며, 미러의 전사 오류(예: GS10 2019-07에 8월 값 1.63 복사,
+// FRED 정답 2.06)를 원천 차단. 그 이전 구간만 Shiller(재구성 접합) 사용
 const shillerRows = sp
-  .map((r) => ({
-    ym: r.Date.slice(0, 7),
-    price: Number(r.SP500),
-    div: Number(r.Dividend),
-    cpi: Number(r['Consumer Price Index']),
-    gs10: Number(r['Long Interest Rate']),
-    cape: Number(r.PE10) > 0 ? Number(r.PE10) : null,
-  }))
+  .map((r) => {
+    const ym = r.Date.slice(0, 7)
+    const f = fredMap.get(ym)
+    return {
+      ym,
+      price: SP500_CORRECTIONS[ym] ?? Number(r.SP500),
+      div: Number(r.Dividend),
+      cpi: ym >= '1913-01' && f?.cpi ? f.cpi : Number(r['Consumer Price Index']),
+      gs10: ym >= '1953-04' && f?.gs10 ? f.gs10 : Number(r['Long Interest Rate']),
+      cape: Number(r.PE10) > 0 ? Number(r.PE10) : null,
+    }
+  })
   .filter((r) => r.price > 0 && r.div > 0 && r.cpi > 0 && r.gs10 > 0)
 
 const lastShiller = shillerRows[shillerRows.length - 1].ym
