@@ -15,7 +15,7 @@
 import { fetchWithTimeout } from '../fetchUtil'
 import type { DailySeries, AlignedDataBundle, AlignedSeries } from './types'
 import { CASH_TICKER } from './types'
-import { ASSET_CATALOG } from './catalog'
+import { ASSET_CATALOG, isBundleTicker } from './catalog'
 import { buildLeveragedSeries, RATE_TICKER } from './synthetic'
 
 /** 크립토 티커 판별 (Yahoo -USD 표기) — 365일 거래 → 공통 캘린더 강제 대상 */
@@ -234,7 +234,42 @@ export function parseYahooChart(json: unknown, ticker: string): DailySeries {
   return { ticker, dates, open, close, adjClose, dividends }
 }
 
-// ─── 캘린더 정렬 (3.3) ────────────────────────────────────────────────────────
+// ─── 리포 번들 월간 합성 자산 (-HIST, 1871~) ─────────────────────────────────
+
+interface HistAssetsFile {
+  meta: { note: string; dataEnd: string }
+  assets: Record<string, { dates: string[]; close: number[] }>
+}
+
+let histAssetsPromise: Promise<HistAssetsFile> | null = null
+
+/** 테스트 전용 — 모듈 캐시 초기화 (fetch 스텁 교체 시) */
+export function resetHistAssetsCache(): void {
+  histAssetsPromise = null
+}
+
+/** /data/history-assets.json 로드 (모듈 캐시 — 정적 번들이라 세션 내 1회) */
+function loadHistAssetsFile(): Promise<HistAssetsFile> {
+  if (!histAssetsPromise) {
+    histAssetsPromise = fetch('/data/history-assets.json').then((r) => {
+      if (!r.ok) throw new Error(`역사 자산 번들 로드 실패 (HTTP ${r.status})`)
+      return r.json() as Promise<HistAssetsFile>
+    })
+    // 실패 시 다음 호출에서 재시도 가능하도록 캐시 무효화
+    histAssetsPromise.catch(() => {
+      histAssetsPromise = null
+    })
+  }
+  return histAssetsPromise
+}
+
+/** 번들 월간 자산 → DailySeries (시가=종가: 월평균 가격 1개 관측치, 배당 내재라 이벤트 없음) */
+export async function fetchBundleSeries(ticker: string): Promise<DailySeries> {
+  const file = await loadHistAssetsFile()
+  const a = file.assets[ticker]
+  if (!a) throw new Error(`${ticker} — 역사 자산 번들에 없는 티커`)
+  return { ticker, dates: a.dates, open: [...a.close], close: a.close, adjClose: [...a.close], dividends: {} }
+}
 
 /**
  * 여러 시계열을 공통 거래 캘린더로 정렬.
@@ -246,7 +281,7 @@ export function parseYahooChart(json: unknown, ticker: string): DailySeries {
  */
 export function alignToCommonCalendar(
   seriesList: DailySeries[],
-  options?: { startDate?: string; endDate?: string }
+  options?: { startDate?: string; endDate?: string; monthlyExpected?: boolean }
 ): AlignedDataBundle {
   if (seriesList.length === 0) throw new Error('정렬할 시계열이 없습니다')
 
@@ -275,13 +310,20 @@ export function alignToCommonCalendar(
   // 히스토리가 가장 짧은 자산이 비교 시작일을 결정 — 원인 자산을 지목해 설명 (§3.3)
   const clipWarnings: string[] = []
 
-  // 방어선: 캘린더가 일별이 아니면(평균 간격 > 5일) 지표 왜곡 경고
+  // 방어선: 캘린더가 일별이 아니면(평균 간격 > 5일) 지표 왜곡 경고.
+  // 역사 월간 자산(-HIST)만으로 구성된 실행은 월간이 의도된 해상도 — 정보성 안내로 대체
   const spanDays = (Date.parse(dates[dates.length - 1]) - Date.parse(dates[0])) / 86_400_000
   const avgGap = spanDays / (dates.length - 1)
-  if (avgGap > 5) {
+  if (avgGap > 5 && !options?.monthlyExpected) {
     clipWarnings.push(
       `데이터 해상도 경고: 거래일 간격이 평균 ${avgGap.toFixed(1)}일 — 일별 데이터가 아닌 자산이 섞여 ` +
         `변동성·수면하·MDD 등 지표가 심하게 왜곡됩니다. 데이터 새로고침을 시도하거나 해당 자산을 교체하세요`
+    )
+  }
+  if (options?.monthlyExpected) {
+    clipWarnings.push(
+      '역사 월간 모드: 모든 자산이 월간 해상도(-HIST)로 실행됩니다 — 평가·리밸런싱·적립이 월 1회이고, ' +
+        '변동성·MDD는 월간 데이터 기준(일간 낙폭보다 완만하게 표기)입니다. 수치는 명목(인플레이션 미반영)'
     )
   }
   const bindingTickers = seriesList.filter((s) => s.dates[0] === latestStart).map((s) => s.ticker)
@@ -435,6 +477,19 @@ export async function loadDataBundle(
   )
   if (unique.length === 0) throw new Error('시장 자산이 없습니다 (CASH만으로는 백테스트 불가)')
 
+  // 역사 월간(-HIST) 자산은 일별 자산과 혼합 불가 — 캘린더 교집합(월초 vs 거래일)이
+  // 사실상 공집합이 되어 조용히 왜곡되므로 명시적으로 차단하고 대체 티커를 안내
+  const bundleTickers = unique.filter((t) => isBundleTicker(t))
+  const dailyTickers = unique.filter((t) => !isBundleTicker(t) && !isCryptoTicker(t))
+  if (bundleTickers.length > 0 && dailyTickers.length > 0) {
+    throw new Error(
+      `역사 월간 자산(${bundleTickers.join(', ')})은 일별 자산(${dailyTickers.join(', ')})과 함께 실행할 수 없습니다 ` +
+        '— 해상도가 달라 공통 캘린더가 성립하지 않습니다. 전 전략의 주식을 SPX-HIST, 채권을 UST10-HIST, ' +
+        '금을 GOLD-HIST로 바꾸거나, 역사 자산을 빼세요'
+    )
+  }
+  const monthlyExpected = bundleTickers.length > 0
+
   // 합성 레버리지(-SIM) 해석: 실제 조회 대상 = 비합성 티커 + 합성의 기초 + 금리(^IRX)
   const entryOf = (t: string) => ASSET_CATALOG.find((e) => e.ticker === t)
   const toFetch = new Set<string>()
@@ -453,6 +508,11 @@ export async function loadDataBundle(
   const raw = new Map<string, DailySeries>()
   let fetchedFromNetwork = false
   for (const t of toFetch) {
+    if (isBundleTicker(t)) {
+      // 리포 번들 정적 파일 — 배포 버전이 곧 캐시 버전이라 localStorage 캐시 불필요
+      raw.set(t, await fetchBundleSeries(t))
+      continue
+    }
     if (!options?.forceRefresh) {
       const cached = readCache(t)
       if (cached) {
@@ -474,5 +534,5 @@ export async function loadDataBundle(
     return buildLeveragedSeries(t, raw.get(syn.base.toUpperCase())!, raw.get(RATE_TICKER)!, syn)
   })
 
-  return alignToCommonCalendar(seriesList, options)
+  return alignToCommonCalendar(seriesList, { ...options, monthlyExpected })
 }

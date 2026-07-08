@@ -71,6 +71,47 @@ export function defaultStrategies(): StrategyConfig[] {
   return [presetSp500Dca(), preset6040Monthly(), presetBandNoSell()]
 }
 
+/**
+ * 역사 구간 탐구용 프리셋 — 역사 연구 탭의 "이 구간을 백테스트" 버튼이 사용.
+ * 전 자산이 월간 합성(-HIST)이라 1871년부터 어떤 구간이든 실행 가능.
+ */
+export function histEraStrategies(): StrategyConfig[] {
+  const contribution = { initialUsd: 10_000, monthlyUsd: 1_000, allocation: 'to_underweight' as const }
+  return [
+    {
+      id: nextId(),
+      name: '주식 100% (역사)',
+      sleeves: [{ ticker: 'SPX-HIST', targetWeight: 1 }],
+      contribution,
+      rebalance: { trigger: 'none', mode: 'sell_to_target' },
+      ...baseDefaults(),
+    },
+    {
+      id: nextId(),
+      name: '60/40 (역사)',
+      sleeves: [
+        { ticker: 'SPX-HIST', targetWeight: 0.6 },
+        { ticker: 'UST10-HIST', targetWeight: 0.4 },
+      ],
+      contribution,
+      rebalance: { trigger: 'periodic', periodMonths: 3, mode: 'sell_to_target' },
+      ...baseDefaults(),
+    },
+    {
+      id: nextId(),
+      name: '주식55/채권30/금15 (역사)',
+      sleeves: [
+        { ticker: 'SPX-HIST', targetWeight: 0.55 },
+        { ticker: 'UST10-HIST', targetWeight: 0.3 },
+        { ticker: 'GOLD-HIST', targetWeight: 0.15 },
+      ],
+      contribution,
+      rebalance: { trigger: 'periodic', periodMonths: 3, mode: 'sell_to_target' },
+      ...baseDefaults(),
+    },
+  ]
+}
+
 /** 새 커스텀 전략 뼈대 */
 export function emptyStrategy(name: string): StrategyConfig {
   return {

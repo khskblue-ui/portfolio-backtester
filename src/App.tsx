@@ -264,7 +264,14 @@ export default function App() {
         {view === 'history' && (
           <HistoryView
             theme={theme}
-            onExplore={(startDate, endDate, note) => {
+            onExplore={(startDate, endDate, note, presetStrategies) => {
+              if (presetStrategies) {
+                // 사용자가 만든 전략 목록을 덮어쓰는 동작 — 명시적 확인
+                if (!window.confirm('현재 전략 목록을 역사 자산 프리셋 3종으로 교체합니다. 계속할까요?\n(기존 전략이 필요하면 먼저 "설정 저장"으로 백업하세요)')) return
+                setStrategies(presetStrategies)
+                setRuns(null)
+                setBundle(null)
+              }
               setShared((p) => ({ ...p, startDate, endDate }))
               setView('backtest')
               setNotice(note)

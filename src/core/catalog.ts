@@ -9,7 +9,7 @@
  * 가격에 내재돼 배당 현금흐름·배당세가 계산되지 않음 — 엔진이 결과 화면에 플래그.
  */
 
-export type AssetGroup = '지수 (장기 히스토리)' | '주식 ETF' | '레버리지 (합성 소급)' | '채권/현금 ETF' | '원자재' | '크립토'
+export type AssetGroup = '역사 월간 (1871~)' | '지수 (장기 히스토리)' | '주식 ETF' | '레버리지 (합성 소급)' | '채권/현금 ETF' | '원자재' | '크립토'
 
 import type { SyntheticSpec } from './synthetic'
 
@@ -21,8 +21,8 @@ export interface CatalogEntry {
   startYear: number
   /** 에피스테믹 주의사항 — 결과 화면 경고로도 노출 */
   note?: string
-  /** 데이터 소스 — 생략 시 yahoo. stooq는 배당 이벤트 없음(현물·지수 전용) */
-  source?: 'stooq'
+  /** 데이터 소스 — 생략 시 yahoo. stooq는 배당 이벤트 없음(현물·지수 전용). bundle은 리포 번들 월간 합성(1871~) */
+  source?: 'stooq' | 'bundle'
   /** 합성 레버리지 스펙 — 기초 ETF에서 소급 시뮬레이션 (synthetic.ts) */
   synthetic?: SyntheticSpec
 }
@@ -30,7 +30,26 @@ export interface CatalogEntry {
 const PRICE_INDEX_NOTE = '가격지수 — 배당 미포함(총수익·배당세 과소). 매매 불가 지수를 보유 가능으로 가정'
 const TR_INDEX_NOTE = '총수익지수 — 배당이 지수에 내재(배당 현금흐름·배당세 미계산). 매매 불가 지수를 보유 가능으로 가정'
 
+const HIST_NOTE_COMMON =
+  '역사 월간 합성 지수(Shiller 데이터 파생, 1871~) — 월간 해상도(월평균 가격)라 일중·일간 변동이 뭉개지고, ' +
+  '배당 내재(총수익)라 배당 현금흐름·배당세가 계산되지 않으며, 매매 불가 지수를 보유 가능으로 가정합니다. ' +
+  '일별 자산(ETF 등)과 같은 실행에 섞을 수 없고, 대공황·스태그플레이션 등 1900년대 구간 탐구 전용입니다'
+
 export const ASSET_CATALOG: CatalogEntry[] = [
+  // ── 역사 월간 합성: ETF 이전 시대(1871~) — 역사 연구 탭의 구간을 실제로 백테스트 ──
+  {
+    ticker: 'SPX-HIST', label: '미국 대형주 총수익 (역사 월간)', group: '역사 월간 (1871~)', startYear: 1871, source: 'bundle',
+    note: HIST_NOTE_COMMON + '. 주식: S&P 종합(1957년 이전은 Cowles/S&P90 소급 합성) 명목 총수익',
+  },
+  {
+    ticker: 'UST10-HIST', label: '미국 10년 국채 총수익 근사 (역사 월간)', group: '역사 월간 (1871~)', startYear: 1871, source: 'bundle',
+    note: HIST_NOTE_COMMON + '. 채권: GS10 수익률 파생 만기고정 근사 — 실제 채권지수·펀드가 아님',
+  },
+  {
+    ticker: 'GOLD-HIST', label: '금 (역사 월간)', group: '역사 월간 (1871~)', startYear: 1871, source: 'bundle',
+    note: HIST_NOTE_COMMON + '. 금: 1933-1974 미국 민간 금보유 금지·공정가($20.67→$35) 시대 주의',
+  },
+
   // ── 지수: 닷컴버블·블랙먼데이 등 과거 구간용 장기 히스토리 ──
   { ticker: '^GSPC', label: 'S&P 500 지수', group: '지수 (장기 히스토리)', startYear: 1927, note: PRICE_INDEX_NOTE },
   { ticker: '^SP500TR', label: 'S&P 500 총수익지수', group: '지수 (장기 히스토리)', startYear: 1988, note: TR_INDEX_NOTE },
@@ -116,5 +135,12 @@ export function assetCautionFor(ticker: string): string | null {
   if (t.startsWith('^')) return PRICE_INDEX_NOTE
   if (t.endsWith('=F')) return '선물 근월물 — 롤오버 왜곡 가능'
   if (t.endsWith('-SIM')) return '가상 합성 자산 — 실존 상품이 아닌 시뮬레이션'
+  if (t.endsWith('-HIST')) return HIST_NOTE_COMMON
   return null
+}
+
+/** 리포 번들 월간 합성 자산 여부 (-HIST) */
+export function isBundleTicker(ticker: string): boolean {
+  const t = ticker.toUpperCase()
+  return ASSET_CATALOG.some((e) => e.ticker === t && e.source === 'bundle')
 }

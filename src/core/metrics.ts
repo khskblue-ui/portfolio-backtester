@@ -11,8 +11,6 @@
 
 import type { BacktestResult, Metrics } from './types'
 
-const TRADING_DAYS_PER_YEAR = 252
-
 export function computeMetrics(result: BacktestResult): Metrics {
   const { daily } = result
   const n = daily.length
@@ -41,29 +39,34 @@ export function computeMetrics(result: BacktestResult): Metrics {
   const twrrAnnualPct = years > 0 && g > 0 ? (Math.pow(g, 1 / years) - 1) * 100 : 0
 
   // ── MDD & 수면하 기간 (growth-of-$1 기준 — 6.2) ──
+  // 수면하는 달력일 기준: 전고점 날짜 → 그 아래에 머문 마지막 날짜의 실제 경과일.
+  // 스텝 수 카운트는 데이터 해상도(일별 252스텝/년 vs 역사 월간 12스텝/년)에 따라
+  // 의미가 달라지므로 날짜 차이로 측정해 해상도 불변으로 만든다.
   let peak = growthOf1[0].value
+  let peakDate = growthOf1[0].date
   let maxDrawdownPct = 0
   let maxUnderwaterDays = 0
-  let underwaterRun = 0
   for (const p of growthOf1) {
     if (p.value >= peak) {
       peak = p.value
-      underwaterRun = 0
+      peakDate = p.date
     } else {
-      underwaterRun++
-      if (underwaterRun > maxUnderwaterDays) maxUnderwaterDays = underwaterRun
+      const uw = Math.round((Date.parse(p.date) - Date.parse(peakDate)) / 86_400_000)
+      if (uw > maxUnderwaterDays) maxUnderwaterDays = uw
       const dd = (p.value / peak - 1) * 100
       if (dd < maxDrawdownPct) maxDrawdownPct = dd
     }
   }
 
-  // ── 변동성 (일간 → 연환산) ──
+  // ── 변동성 (스텝 수익률 → 연환산) ──
+  // 연환산 계수 = 실제 관측된 스텝/년 (일별 ≈ 252, 역사 월간 = 12) — 해상도에 자동 적응
+  const stepsPerYear = years > 0 ? Math.min(366, Math.max(1, (n - 1) / years)) : 252
   const mean = dailyReturns.length > 0 ? dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length : 0
   const variance =
     dailyReturns.length > 1
       ? dailyReturns.reduce((a, b) => a + (b - mean) ** 2, 0) / (dailyReturns.length - 1)
       : 0
-  const volAnnualPct = Math.sqrt(variance) * Math.sqrt(TRADING_DAYS_PER_YEAR) * 100
+  const volAnnualPct = Math.sqrt(variance) * Math.sqrt(stepsPerYear) * 100
 
   // ── 연도별 TWRR (서브기간 견고성 — 6.4) ──
   const annualReturns: { year: number; returnPct: number }[] = []
