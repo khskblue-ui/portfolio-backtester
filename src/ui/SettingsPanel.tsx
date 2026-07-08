@@ -32,7 +32,7 @@ export function SettingsPanel({
         <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">ASSUMPTIONS</span>
         공통 설정 <span className="text-xs font-normal text-zinc-400">— 모든 전략에 동일 적용 (공정 비교)</span>
       </h2>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {num('initialUsd', '초기 투자금 (USD)', false, '시작 시점에 한 번에 넣는 금액. 첫 거래일 종가에 유입돼 다음 거래일 시가로 매수됩니다.')}
         {num('monthlyUsd', '월 적립금 (USD)', false, '매월 첫 거래일에 들어오는 적립금. 각 전략의 "적립 배분" 규칙대로 매수됩니다.')}
         {num('feeBps', '수수료 (bps)', true, '거래대금 대비 매매 수수료. 1bp = 0.01% (예: 7bps = 0.07%, 해외주식 온라인 수수료 수준). 매수·매도 모두 부과.')}

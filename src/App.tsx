@@ -148,7 +148,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen masthead-rule bg-[#f2efe6] dark:bg-[#0e1015] text-zinc-900 dark:text-zinc-100">
-      <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
+      <div className="max-w-7xl mx-auto px-3 py-4 sm:p-4 md:p-6 space-y-5 sm:space-y-6">
         {/* 헤더 */}
         <header className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
@@ -162,7 +162,7 @@ export default function App() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
             <button
               onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
               title="테마 전환"
@@ -181,21 +181,21 @@ export default function App() {
               title="백테스트 결과 보고서 (PDF 저장)"
               className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium ${btnGhostCls}`}
             >
-              <FileText className="w-4 h-4" /> 보고서 (PDF)
+              <FileText className="w-4 h-4" /> <span className="hidden sm:inline">보고서 (PDF)</span>
             </button>
             <button
               onClick={exportConfig}
               title="전략·설정을 JSON 파일로 백업"
               className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium ${btnGhostCls}`}
             >
-              <Download className="w-4 h-4" /> 설정 저장
+              <Download className="w-4 h-4" /> <span className="hidden sm:inline">설정 저장</span>
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
               title="백업한 설정 JSON 불러오기"
               className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium ${btnGhostCls}`}
             >
-              <Upload className="w-4 h-4" /> 설정 불러오기
+              <Upload className="w-4 h-4" /> <span className="hidden sm:inline">설정 불러오기</span>
             </button>
             <input
               ref={fileInputRef}
@@ -213,7 +213,7 @@ export default function App() {
               disabled={running}
               className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium ${btnGhostCls} disabled:opacity-50`}
             >
-              <RefreshCw className="w-4 h-4" /> 데이터 새로고침
+              <RefreshCw className="w-4 h-4" /> <span className="hidden sm:inline">데이터 새로고침</span>
             </button>
             <button
               onClick={() => run(false)}
