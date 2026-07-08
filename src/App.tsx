@@ -150,113 +150,102 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#eef1f5] dark:bg-[#131722] text-zinc-900 dark:text-zinc-100">
-      {/* 상단 고정 헤더 바 — 화이트 서피스, 타이틀·액션·뷰 내비게이션 */}
+      {/* 상단 고정 헤더 — 단일 바: 로고 · 텍스트 내비 · 우측 액션 (미니멀) */}
       <header className="sticky top-0 z-40 bg-white dark:bg-[#1e222d] border-b border-[#e0e3eb] dark:border-[#2a2e39]">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6">
-          <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-2 py-2.5">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 ink-chip rounded-lg flex items-center justify-center flex-shrink-0">
-                <TrendingUp className="w-4.5 h-4.5" strokeWidth={2.5} />
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 flex items-center justify-between flex-wrap gap-x-4 gap-y-1 min-h-14 py-1.5">
+          <div className="flex items-center gap-3 sm:gap-7 min-w-0">
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="w-7 h-7 ink-chip rounded-lg flex items-center justify-center">
+                <TrendingUp className="w-4 h-4" strokeWidth={2.5} />
               </div>
-              <div>
-                <h1 className="text-base sm:text-lg font-bold leading-tight tracking-tight">포트폴리오 백테스터</h1>
-                <p className="hidden sm:block text-[10px] text-zinc-400 dark:text-zinc-500 leading-tight">
-                  적립·리밸런싱 시뮬레이션 · 한국 세제 · 1871~ 역사 데이터
-                </p>
-              </div>
+              {/* 좁은 화면에선 내비 공간 확보를 위해 로고 텍스트 생략 */}
+              <h1 className="max-[479px]:hidden text-[15px] sm:text-base font-bold tracking-tight whitespace-nowrap">포트폴리오 백테스터</h1>
             </div>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <button
-                onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-                title="테마 전환"
-                className={`p-2 rounded-md ${btnGhostCls}`}
-              >
-                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-              </button>
-              <button
-                onClick={() => {
-                  if (!runs || !bundle) {
-                    setNotice('보고서를 만들려면 먼저 백테스트를 실행하세요')
-                    return
-                  }
-                  setShowReport(true)
-                }}
-                title="백테스트 결과 보고서 (PDF 저장)"
-                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium ${btnGhostCls}`}
-              >
-                <FileText className="w-4 h-4" /> <span className="hidden lg:inline">보고서</span>
-              </button>
-              <button
-                onClick={exportConfig}
-                title="전략·설정을 JSON 파일로 백업"
-                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium ${btnGhostCls}`}
-              >
-                <Download className="w-4 h-4" /> <span className="hidden lg:inline">설정 저장</span>
-              </button>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                title="백업한 설정 JSON 불러오기"
-                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium ${btnGhostCls}`}
-              >
-                <Upload className="w-4 h-4" /> <span className="hidden lg:inline">불러오기</span>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="application/json"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  if (f) importConfig(f)
-                  e.target.value = ''
-                }}
-              />
-              <button
-                onClick={() => run(true)}
-                disabled={running}
-                title="캐시를 비우고 데이터 다시 조회"
-                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium ${btnGhostCls} disabled:opacity-50`}
-              >
-                <RefreshCw className="w-4 h-4" /> <span className="hidden lg:inline">새로고침</span>
-              </button>
-              <button
-                onClick={() => run(false)}
-                disabled={running}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-md text-sm font-semibold ${btnPrimaryCls} disabled:opacity-50`}
-              >
-                <Play className="w-4 h-4" />
-                {running ? '실행 중…' : '백테스트 실행'}
-              </button>
-            </div>
-          </div>
-
-          {/* 뷰 내비게이션 — 세그먼트 탭 (활성 = 프라이머리 블루) */}
-          <nav className="flex gap-1.5 pb-2.5 overflow-x-auto">
-            {(
-              [
-                { key: 'backtest', label: '백테스트', desc: '전략 시뮬레이션', Icon: BarChart3 },
-                { key: 'history', label: '역사 연구', desc: '1900~ 약세 구간 · 매크로', Icon: Landmark },
-              ] as const
-            ).map(({ key, label, desc, Icon }) => (
-              <button
-                key={key}
-                onClick={() => setView(key)}
-                className={`flex items-center gap-2 pl-3 pr-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors ${
-                  view === key
-                    ? 'bg-[#2962ff] text-white shadow-sm'
-                    : 'text-zinc-600 dark:text-zinc-300 hover:bg-[#edf1f7] dark:hover:bg-[#2a2e39] border border-[#e0e3eb] dark:border-[#2a2e39]'
-                }`}
-              >
-                <Icon className="w-4 h-4 flex-shrink-0" />
-                <span className="text-left leading-tight">
+            <nav className="flex items-center gap-3.5 sm:gap-6">
+              {(
+                [
+                  { key: 'backtest', label: '백테스트', Icon: BarChart3 },
+                  { key: 'history', label: '역사 연구', Icon: Landmark },
+                ] as const
+              ).map(({ key, label, Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setView(key)}
+                  className={`flex items-center gap-1.5 py-2 text-[15px] whitespace-nowrap transition-colors ${
+                    view === key
+                      ? 'font-bold text-zinc-900 dark:text-white'
+                      : 'font-medium text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 ${view === key ? 'text-[#2962ff]' : ''}`} />
                   {label}
-                  <span className={`block text-[10px] font-normal ${view === key ? 'text-white/75' : 'text-zinc-400 dark:text-zinc-500'}`}>
-                    {desc}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </nav>
+                </button>
+              ))}
+            </nav>
+          </div>
+          <div className="flex items-center gap-0.5 sm:gap-1">
+            <button
+              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+              title="테마 전환"
+              className="p-2 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-[#edf1f7] dark:hover:bg-[#2a2e39] hover:text-zinc-800 dark:hover:text-zinc-200"
+            >
+              {theme === 'dark' ? <Sun className="w-[18px] h-[18px]" /> : <Moon className="w-[18px] h-[18px]" />}
+            </button>
+            <button
+              onClick={() => {
+                if (!runs || !bundle) {
+                  setNotice('보고서를 만들려면 먼저 백테스트를 실행하세요')
+                  return
+                }
+                setShowReport(true)
+              }}
+              title="백테스트 결과 보고서 (PDF 저장)"
+              className="p-2 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-[#edf1f7] dark:hover:bg-[#2a2e39] hover:text-zinc-800 dark:hover:text-zinc-200"
+            >
+              <FileText className="w-[18px] h-[18px]" />
+            </button>
+            <button
+              onClick={exportConfig}
+              title="전략·설정을 JSON 파일로 백업"
+              className="p-2 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-[#edf1f7] dark:hover:bg-[#2a2e39] hover:text-zinc-800 dark:hover:text-zinc-200"
+            >
+              <Download className="w-[18px] h-[18px]" />
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              title="백업한 설정 JSON 불러오기"
+              className="p-2 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-[#edf1f7] dark:hover:bg-[#2a2e39] hover:text-zinc-800 dark:hover:text-zinc-200"
+            >
+              <Upload className="w-[18px] h-[18px]" />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) importConfig(f)
+                e.target.value = ''
+              }}
+            />
+            <button
+              onClick={() => run(true)}
+              disabled={running}
+              title="캐시를 비우고 데이터 다시 조회"
+              className="p-2 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-[#edf1f7] dark:hover:bg-[#2a2e39] hover:text-zinc-800 dark:hover:text-zinc-200 disabled:opacity-50"
+            >
+              <RefreshCw className="w-[18px] h-[18px]" />
+            </button>
+            <button
+              onClick={() => run(false)}
+              disabled={running}
+              className={`flex items-center gap-1.5 ml-1 sm:ml-2 px-3.5 py-2 rounded-lg text-sm font-semibold ${btnPrimaryCls} disabled:opacity-50`}
+            >
+              <Play className="w-4 h-4" />
+              {running ? '실행 중…' : '백테스트 실행'}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -292,8 +281,6 @@ export default function App() {
 
         {view === 'backtest' && (
           <>
-        <EpistemicsBanner />
-
         <SettingsPanel shared={shared} onChange={setShared} />
 
         {/* 전략 목록 */}
@@ -335,6 +322,9 @@ export default function App() {
             ))}
           </div>
         </div>
+
+        {/* 에피스테믹 경고 — 전략 설정 아래, 결과 위 */}
+        <EpistemicsBanner />
 
         {/* 결과 */}
         {runs && bundle && runs.length > 0 && (
