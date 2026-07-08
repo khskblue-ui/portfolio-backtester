@@ -110,7 +110,7 @@ export function ReportView({
               <th className={`${thCls} text-right`}>TWRR/년</th>
               <th className={`${thCls} text-right`}>MWRR/년</th>
               <th className={`${thCls} text-right`}>MDD</th>
-              <th className={`${thCls} text-right`}>수면하(일)</th>
+              <th className={`${thCls} text-right`}>최장 회복기간(일)</th>
               <th className={`${thCls} text-right`}>변동성/년</th>
               <th className={`${thCls} text-right`}>최종 가치</th>
               <th className={`${thCls} text-right`}>총 수익금</th>
@@ -199,7 +199,7 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
     { label: 'TWRR/년 (전략 자체)', post: fmtPct(post.metrics.twrrAnnualPct), pre: fmtPct(pre.metrics.twrrAnnualPct) },
     { label: 'MWRR/년 (실제 경험)', post: fmtPct(post.metrics.mwrrAnnualPct), pre: fmtPct(pre.metrics.mwrrAnnualPct) },
     { label: 'MDD (최대 낙폭)', post: fmtPct(post.metrics.maxDrawdownPct), pre: fmtPct(pre.metrics.maxDrawdownPct) },
-    { label: '수면하 (최장 달력일)', post: String(post.metrics.maxUnderwaterDays), pre: String(pre.metrics.maxUnderwaterDays) },
+    { label: '최장 회복기간 (달력일)', post: String(post.metrics.maxUnderwaterDays), pre: String(pre.metrics.maxUnderwaterDays) },
     { label: '변동성/년', post: fmtPct(post.metrics.volAnnualPct), pre: fmtPct(pre.metrics.volAnnualPct) },
     { label: '최종 가치', post: fmtUsd(post.metrics.finalValue), pre: fmtUsd(pre.metrics.finalValue) },
     { label: '총 납입', post: fmtUsd(post.metrics.totalContributions), pre: fmtUsd(pre.metrics.totalContributions) },

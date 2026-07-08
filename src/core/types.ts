@@ -237,7 +237,7 @@ export interface Metrics {
   growthOf1: { date: string; value: number }[]
   /** 최대 낙폭 (%) — TWRR 기준 */
   maxDrawdownPct: number
-  /** 최장 수면하 기간 (달력일 — 전고점 날짜부터의 실제 경과일, 해상도 불변) */
+  /** 최장 회복기간 (달력일 — 전고점 날짜부터 그 아래에 머문 실제 경과일, 해상도 불변) */
   maxUnderwaterDays: number
   /** 스텝 변동성 연환산 (%) — 연환산 계수는 관측 스텝/년(일별 ≈252, 역사 월간 12) */
   volAnnualPct: number

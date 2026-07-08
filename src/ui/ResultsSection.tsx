@@ -242,11 +242,11 @@ export function ResultsSection({
                 </HelpTip>
               </th>
               <th className="text-right px-3 py-3 font-medium">
-                수면하(일)
-                <HelpTip title="수면하(일) — 본전 이하로 지낸 최장 기간" align="right">
+                최장 회복기간(일)
+                <HelpTip title="최장 회복기간(일) — 전고점 아래에 머문 최장 기간" align="right">
                   이전 최고 기록(전고점)을 되찾지 못한 채 <b>그 아래에 머문 가장 긴
                   기간(달력일)</b>입니다. 기간 끝까지 회복 못 한 구간도 포함합니다.
-                  <br />예: 수면하 365일 = 1년 내내 "계좌가 최고점보다 낮은 상태".
+                  <br />예: 365일 = 1년 내내 "계좌가 최고점보다 낮은 상태".
                   <br />숫자가 클수록 <b>오래 물려있는 고통</b>이 긴 전략입니다.
                 </HelpTip>
               </th>

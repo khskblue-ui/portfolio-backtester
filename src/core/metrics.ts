@@ -38,8 +38,8 @@ export function computeMetrics(result: BacktestResult): Metrics {
   const years = (Date.parse(daily[n - 1].date) - Date.parse(daily[0].date)) / (365.25 * 86_400_000)
   const twrrAnnualPct = years > 0 && g > 0 ? (Math.pow(g, 1 / years) - 1) * 100 : 0
 
-  // ── MDD & 수면하 기간 (growth-of-$1 기준 — 6.2) ──
-  // 수면하는 달력일 기준: 전고점 날짜 → 그 아래에 머문 마지막 날짜의 실제 경과일.
+  // ── MDD & 최장 회복기간 (growth-of-$1 기준 — 6.2) ──
+  // 회복기간은 달력일 기준: 전고점 날짜 → 그 아래에 머문 마지막 날짜의 실제 경과일.
   // 스텝 수 카운트는 데이터 해상도(일별 252스텝/년 vs 역사 월간 12스텝/년)에 따라
   // 의미가 달라지므로 날짜 차이로 측정해 해상도 불변으로 만든다.
   let peak = growthOf1[0].value

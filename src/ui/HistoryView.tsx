@@ -96,7 +96,7 @@ const EPISODE_INFO: Record<string, { title: string; type: 'A' | 'B'; cause: stri
   '2000-08': {
     title: '잃어버린 10년 (닷컴 + 금융위기)',
     type: 'B',
-    cause: '사상 최고 밸류에이션(CAPE ~44)에서 출발 — 인플레가 아니라 밸류에이션 정상화가 주도. 닷컴 붕괴 후 회복 중 신용버블 → 2008 금융위기 이중 타격. 금리 하락으로 국채 +65%, 금 +282% — 150년래 최장(12.8년) 수면하.',
+    cause: '사상 최고 밸류에이션(CAPE ~44)에서 출발 — 인플레가 아니라 밸류에이션 정상화가 주도. 닷컴 붕괴 후 회복 중 신용버블 → 2008 금융위기 이중 타격. 금리 하락으로 국채 +65%, 금 +282% — 150년래 최장인 12.8년간 전고점을 회복하지 못했습니다.',
   },
 }
 
@@ -249,7 +249,7 @@ export function HistoryView({
           </div>
         </div>
         <p className="text-xs text-zinc-400 mb-3">
-          기준: S&P500 지수(1957년 이전은 Cowles·S&P90 소급 합성) 배당 재투자 총수익 · 음영 구간 = 실질 기준 −25% 이상 낙폭 + 3년 이상 수면하 · 클릭해 상세 보기
+          기준: S&P500 지수(1957년 이전은 Cowles·S&P90 소급 합성) 배당 재투자 총수익 · 음영 구간 = 실질 기준 −25% 이상 낙폭 + 전고점 회복까지 3년 이상 · 클릭해 상세 보기
         </p>
         <ResponsiveContainer width="100%" height={320}>
           <LineChart data={overviewData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
@@ -285,7 +285,7 @@ export function HistoryView({
       </div>
 
       {/* 구간 카드 */}
-      <p className="text-[11px] text-zinc-400 -mb-2">
+      <p className="text-[11px] text-zinc-400 leading-relaxed">
         카드 수치 기준 — 주식: S&P500 총수익 · 채권: 미 10년물 국채 총수익 근사(GS10 파생) · 금: 현물가 · 전부 실질(CPI 조정), 주식 고점→회복 시점 누적. 현금(3개월 T-bill)은 구간 상세에서
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">

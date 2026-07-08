@@ -70,7 +70,7 @@ async function fetchWithRetry(url: string, ticker: string, retryBaseMs: number):
  *
  * ⚠ Yahoo는 히스토리가 아주 긴 심볼(예: ^GSPC 1927~)에 interval=1d&range=max를
  * 요청하면 "조용히" 월/분기 해상도로 강등해 반환한다(meta.dataGranularity로만 확인
- * 가능). 이를 그대로 쓰면 캘린더가 오염돼 변동성·수면하 등 모든 지표가 왜곡되므로,
+ * 가능). 이를 그대로 쓰면 캘린더가 오염돼 변동성·회복기간 등 모든 지표가 왜곡되므로,
  * 강등 감지 시 20년 청크의 period1/period2 요청으로 일별 데이터를 강제 수집한다.
  */
 export async function fetchDailySeries(
@@ -317,7 +317,7 @@ export function alignToCommonCalendar(
   if (avgGap > 5 && !options?.monthlyExpected) {
     clipWarnings.push(
       `데이터 해상도 경고: 거래일 간격이 평균 ${avgGap.toFixed(1)}일 — 일별 데이터가 아닌 자산이 섞여 ` +
-        `변동성·수면하·MDD 등 지표가 심하게 왜곡됩니다. 데이터 새로고침을 시도하거나 해당 자산을 교체하세요`
+        `변동성·최장 회복기간·MDD 등 지표가 심하게 왜곡됩니다. 데이터 새로고침을 시도하거나 해당 자산을 교체하세요`
     )
   }
   if (options?.monthlyExpected) {
