@@ -27,6 +27,7 @@ import { SettingsPanel } from '@/ui/SettingsPanel'
 import { StrategyCard } from '@/ui/StrategyCard'
 import { ResultsSection } from '@/ui/ResultsSection'
 import { ReportView } from '@/ui/ReportView'
+import { HistoryView } from '@/ui/HistoryView'
 
 type Theme = 'light' | 'dark'
 
@@ -62,6 +63,7 @@ export default function App() {
   const [bundle, setBundle] = useState<AlignedDataBundle | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [showReport, setShowReport] = useState(false)
+  const [view, setView] = useState<'backtest' | 'history'>('backtest')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const updateStrategy = (id: string, updater: (s: StrategyConfig) => StrategyConfig) =>
@@ -226,6 +228,29 @@ export default function App() {
           </div>
         </header>
 
+        {/* 뷰 탭 */}
+        <nav className="flex gap-1 border-b border-[#ddd6c4] dark:border-[#262c39]">
+          {(
+            [
+              { key: 'backtest', label: '백테스트', kicker: 'BACKTEST' },
+              { key: 'history', label: '역사 연구', kicker: 'HISTORY' },
+            ] as const
+          ).map(({ key, label, kicker }) => (
+            <button
+              key={key}
+              onClick={() => setView(key)}
+              className={`px-4 py-2 -mb-px border-b-2 text-sm font-medium transition-colors ${
+                view === key
+                  ? 'border-zinc-900 dark:border-[#ece7da] text-zinc-900 dark:text-zinc-100'
+                  : 'border-transparent text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+              }`}
+            >
+              <span className="block text-[8px] font-mono tracking-[0.22em] text-left">{kicker}</span>
+              {label}
+            </button>
+          ))}
+        </nav>
+
         {/* 알림 배너 */}
         {notice && (
           <div className="flex items-center justify-between gap-2 bg-[#fdf1ef] dark:bg-[#231416] border-l-4 border-red-700 dark:border-red-500 rounded-sm px-4 py-3 text-sm text-red-800 dark:text-red-300">
@@ -236,6 +261,20 @@ export default function App() {
           </div>
         )}
 
+        {view === 'history' && (
+          <HistoryView
+            theme={theme}
+            onExplore={(startDate, endDate, note) => {
+              setShared((p) => ({ ...p, startDate, endDate }))
+              setView('backtest')
+              setNotice(note)
+              window.scrollTo({ top: 0 })
+            }}
+          />
+        )}
+
+        {view === 'backtest' && (
+          <>
         <EpistemicsBanner />
 
         <SettingsPanel shared={shared} onChange={setShared} />
@@ -283,6 +322,8 @@ export default function App() {
         {/* 결과 */}
         {runs && bundle && runs.length > 0 && (
           <ResultsSection runs={runs} bundle={bundle} palette={palette} theme={theme} taxEnabled={shared.taxEnabled} />
+        )}
+          </>
         )}
 
         {/* 보고서 (PDF) 오버레이 */}
