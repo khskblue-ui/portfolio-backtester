@@ -2,6 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     { "source": "/yf/:path*", "destination": "https://query1.finance.yahoo.com/:path*" },
+    { "source": "/fred/fredgraph.csv", "destination": "https://fred.stlouisfed.org/graph/fredgraph.csv" },
     { "source": "/stooq/q/d/l/", "destination": "/api/stooq" },
     { "source": "/stooq/q/d/l", "destination": "/api/stooq" },
     { "source": "/stooq/:path*", "destination": "/api/stooq" }
