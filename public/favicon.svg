@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 앱 헤더 로고와 동일: 프라이머리 블루 라운드 사각 + 상승 추세 화살표 -->
+  <rect width="64" height="64" rx="15" fill="#2962ff"/>
+  <g fill="none" stroke="#ffffff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="52 21 35 38 25 28 12 41"/>
+    <polyline points="40 21 52 21 52 33"/>
+  </g>
+</svg>

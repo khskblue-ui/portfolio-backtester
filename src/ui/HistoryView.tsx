@@ -11,8 +11,10 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from 'recharts'
-import { FlaskConical, CalendarRange } from 'lucide-react'
+import { FlaskConical, CalendarRange, BookOpen } from 'lucide-react'
 import { HelpTip } from './HelpTip'
+import { EraStoryModal } from './EraStoryModal'
+import { ERA_STORIES } from './eraStories'
 import { cardCls, btnGhostCls, fmtSignedPct } from './common'
 import { histEraStrategies, type StrategyConfig } from '@/core'
 
@@ -124,6 +126,7 @@ export function HistoryView({
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [basis, setBasis] = useState<Basis>('real')
+  const [storyOpen, setStoryOpen] = useState(false)
 
   useEffect(() => {
     fetch('/data/history.json')
@@ -318,6 +321,15 @@ export function HistoryView({
               </span>
             </h3>
             <div className="flex gap-1.5 flex-wrap">
+              {ERA_STORIES[selectedEp.peak] && (
+                <button
+                  onClick={() => setStoryOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold bg-[#2962ff] text-white hover:bg-[#1e53e5]"
+                  title="이 구간에서 각 자산이 왜 그렇게 움직였는지 — 통념 vs 실제 스토리"
+                >
+                  <BookOpen className="w-3.5 h-3.5" /> 왜 이렇게 움직였나
+                </button>
+              )}
               <button
                 onClick={() => {
                   const end = selectedEp.recovery ?? data.meta.dataEnd
@@ -430,6 +442,16 @@ export function HistoryView({
             출처: Shiller(Yale) 미러 (ODC-PDDL) · 방법론·검증: docs/research/negative-real-return-eras.md
           </p>
         </div>
+      )}
+
+      {/* 구간 스토리 팝업 */}
+      {storyOpen && selectedEp && ERA_STORIES[selectedEp.peak] && (
+        <EraStoryModal
+          title={EPISODE_INFO[selectedEp.peak]?.title ?? selectedEp.peak}
+          period={`${selectedEp.peak} ~ ${selectedEp.recovery ?? '미회복'}`}
+          story={ERA_STORIES[selectedEp.peak]}
+          onClose={() => setStoryOpen(false)}
+        />
       )}
 
       {/* 에피스테믹 각주 */}
