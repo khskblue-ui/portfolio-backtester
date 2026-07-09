@@ -26,15 +26,39 @@ const SOURCE_CHIP: Record<string, { icon: typeof Landmark; cls: string }> = {
   '현재 신호': { icon: Activity, cls: 'text-[#2962ff] dark:text-[#5b8aff] border-[#2962ff]/30 dark:border-[#5b8aff]/30' },
 }
 
+/** 연속된 '• ' 문단을 하나의 목록 블록으로 묶는다 (가독성 — 긴 나열은 줄로 쪼갬) */
+function groupParas(paras: string[]): (string | string[])[] {
+  const out: (string | string[])[] = []
+  for (const p of paras) {
+    if (p.startsWith('• ')) {
+      const last = out[out.length - 1]
+      if (Array.isArray(last)) last.push(p.slice(2))
+      else out.push([p.slice(2)])
+    } else out.push(p)
+  }
+  return out
+}
+
 function Section({ s }: { s: GuideSection }) {
   return (
     <section id={s.id} className="scroll-mt-24 space-y-2.5">
       <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{s.title}</h4>
-      {s.paras.map((p, i) => (
-        <p key={i} className="text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-300">
-          {rich(p)}
-        </p>
-      ))}
+      {groupParas(s.paras).map((p, i) =>
+        Array.isArray(p) ? (
+          <ul key={i} className="space-y-1.5 pl-1">
+            {p.map((item, j) => (
+              <li key={j} className="flex gap-2 text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-300">
+                <span className="mt-[7px] w-1.5 h-1.5 rounded-full bg-[#2962ff]/50 flex-shrink-0" />
+                <span>{rich(item)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p key={i} className="text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-300">
+            {rich(p)}
+          </p>
+        ),
+      )}
 
       {s.analogy && (
         <div className="rounded-lg border-l-4 border-[#2962ff] bg-[#f4f7ff] dark:bg-[#161d30] px-3.5 py-2.5">

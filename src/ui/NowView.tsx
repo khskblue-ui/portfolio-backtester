@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer } from 'recharts'
+import { Flame } from 'lucide-react'
 import { NowPanel } from './NowPanel'
 import { assessNow, type LiveSnapshot } from './nowSignals'
 import { fetchLiveSnapshot } from './nowData'
+import { ManiaStoryModal } from './ManiaStoryModal'
 import { cardCls } from './common'
 
 /**
@@ -45,6 +47,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
   const [live, setLive] = useState<LiveSnapshot | null>(null)
   const [liveTried, setLiveTried] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [maniaOpen, setManiaOpen] = useState(false)
 
   useEffect(() => {
     fetch('/data/history.json')
@@ -210,6 +213,22 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
       )}
 
       <NowPanel assessment={assessment} />
+
+      {/* 특집 연결 — 밸류에이션·집중도 문맥에서 역사 광기 사례와 비교 */}
+      <button
+        onClick={() => setManiaOpen(true)}
+        className="w-full flex items-center justify-between gap-3 rounded-lg border border-[#e0e3eb] dark:border-[#2a2e39] bg-white dark:bg-[#1e222d] hover:border-[#e34948]/60 px-4 py-2.5 text-left group"
+      >
+        <span className="flex items-center gap-2 text-[12.5px] text-zinc-600 dark:text-zinc-300 min-w-0">
+          <Flame className="w-4 h-4 text-[#e34948] flex-shrink-0" />
+          <span className="truncate">
+            <b className="text-zinc-800 dark:text-zinc-100">특집: 광기의 해부</b> — 지금의 밸류에이션·집중도, 닷컴·서브프라임의 트리거와 비교해 읽기
+          </span>
+        </span>
+        <span className="text-xs font-semibold text-[#e34948] group-hover:underline flex-shrink-0">읽기 →</span>
+      </button>
+
+      {maniaOpen && <ManiaStoryModal onClose={() => setManiaOpen(false)} />}
 
       {/* 신호별 흐름 그래프 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

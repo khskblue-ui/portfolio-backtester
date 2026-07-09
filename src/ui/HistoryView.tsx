@@ -11,10 +11,12 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from 'recharts'
-import { FlaskConical, CalendarRange, BookOpen } from 'lucide-react'
+import { FlaskConical, CalendarRange, BookOpen, Flame } from 'lucide-react'
 import { HelpTip } from './HelpTip'
 import { EraStoryModal } from './EraStoryModal'
 import { ERA_STORIES } from './eraStories'
+import { ManiaStoryModal } from './ManiaStoryModal'
+import { MANIA_STORY } from './maniaStory'
 import { cardCls, btnGhostCls, fmtSignedPct } from './common'
 import { histEraStrategies, type StrategyConfig } from '@/core'
 
@@ -132,6 +134,7 @@ export function HistoryView({
   const [selected, setSelected] = useState<string | null>(null)
   const [basis, setBasis] = useState<Basis>('real')
   const [storyOpen, setStoryOpen] = useState(false)
+  const [maniaOpen, setManiaOpen] = useState(false)
 
   useEffect(() => {
     fetch('/data/history.json')
@@ -321,6 +324,26 @@ export function HistoryView({
         })}
       </div>
 
+      {/* 특집 — 광기의 해부 (닷컴·서브프라임은 둘 다 2000-08 "잃어버린 10년" 구간 안의 사건) */}
+      <button
+        onClick={() => setManiaOpen(true)}
+        className={`${cardCls} w-full p-4 text-left hover:border-[#e34948]/60 transition-colors group`}
+      >
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <span className="block text-[9px] font-mono tracking-[0.22em] text-[#e34948]">FEATURE · MANIA & TRIGGERS</span>
+            <span className="flex items-center gap-1.5 font-semibold text-sm text-zinc-900 dark:text-zinc-100">
+              <Flame className="w-4 h-4 text-[#e34948]" /> 특집: 광기의 해부 — 닷컴 · 서브프라임, 그리고 2026년 AI
+            </span>
+            <span className="block mt-1 text-[12px] text-zinc-500 dark:text-zinc-400">
+              도취는 어디까지 갔고 무엇이 방아쇠였나 — 두 사례의 트리거 타임라인을 복원하고, 지금의 AI·반도체 랠리와
+              같은 문법으로 비교합니다 (데이터 기준 {MANIA_STORY.dataAsOf})
+            </span>
+          </div>
+          <span className="text-xs font-semibold text-[#e34948] group-hover:underline flex-shrink-0">읽기 →</span>
+        </div>
+      </button>
+
       {/* 선택 구간 상세 */}
       {selectedEp && (
         <div className={`${cardCls} p-4 sm:p-5 space-y-3`}>
@@ -469,6 +492,9 @@ export function HistoryView({
           onClose={() => setStoryOpen(false)}
         />
       )}
+
+      {/* 특집 팝업 */}
+      {maniaOpen && <ManiaStoryModal onClose={() => setManiaOpen(false)} />}
 
       {/* 에피스테믹 각주 */}
       <div className="bg-[#faf4e0] dark:bg-[#1d1a10] border-l-4 border-amber-700 dark:border-amber-500 rounded-lg p-3 text-[11px] text-amber-900 dark:text-amber-200/90 leading-relaxed">
