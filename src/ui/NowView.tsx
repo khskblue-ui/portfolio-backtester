@@ -29,15 +29,15 @@ interface ChartSpec {
   title: string
   sub: string
   color: string
-  /** v = 주 시리즈, v2 = 보조 시리즈 (선택) */
-  data: { ym: string; v: number | null; v2?: number | null }[]
+  data: { ym: string; v: number | null }[]
   refs: { y: number; label: string; danger?: boolean }[]
-  /** 시리즈 이름 (범례·툴팁) — v2가 있을 때 필수 */
-  names?: [string, string]
-  color2?: string
   /** y 값 포맷 */
   fmt: (v: number) => string
   domain?: [number | 'auto', number | 'auto']
+  /** 차트별 하락 구간 음영 (기본 = 전체 1900~ 밴드) */
+  bands?: { x1: string; x2: string }[]
+  /** 데이터 범위 표기 (기본 '1900 ~ 현재') */
+  range?: string
 }
 
 export function NowView({ theme }: { theme: 'light' | 'dark' }) {
@@ -81,12 +81,12 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
 
     // 다운샘플 (차트당 ~500포인트) — 마지막 포인트는 항상 유지
     const step = Math.max(1, Math.floor(n / 500))
-    const mk = (arr: (number | null)[], liveTail?: { label: string; v: number | null }, arr2?: (number | null)[], liveTail2?: number | null) => {
-      const rows: { ym: string; v: number | null; v2?: number | null }[] = []
-      const round2 = (x: number | null | undefined) => (x != null ? Number(x.toFixed(2)) : null)
-      for (let i = 0; i < n; i += step) rows.push({ ym: dates[i], v: round2(arr[i]), ...(arr2 ? { v2: round2(arr2[i]) } : {}) })
-      if ((n - 1) % step !== 0) rows.push({ ym: dates[n - 1], v: round2(arr[n - 1]), ...(arr2 ? { v2: round2(arr2[n - 1]) } : {}) })
-      if (liveTail && liveTail.v != null) rows.push({ ym: liveTail.label, v: round2(liveTail.v), ...(arr2 ? { v2: round2(liveTail2) } : {}) })
+    const round2 = (x: number | null | undefined) => (x != null ? Number(x.toFixed(2)) : null)
+    const mk = (arr: (number | null)[], liveTail?: { label: string; v: number | null }) => {
+      const rows: { ym: string; v: number | null }[] = []
+      for (let i = 0; i < n; i += step) rows.push({ ym: dates[i], v: round2(arr[i]) })
+      if ((n - 1) % step !== 0) rows.push({ ym: dates[n - 1], v: round2(arr[n - 1]) })
+      if (liveTail && liveTail.v != null) rows.push({ ym: liveTail.label, v: round2(liveTail.v) })
       return rows
     }
 
@@ -108,10 +108,21 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
     // 3) CPI YoY (+ 라이브 새 발표월)
     const cpiLive = live?.cpi && refs && live.cpi.ym > refs.ym ? live.cpi.yoy : null
 
-    // 4) 실질금리 — 사후적(1900~) + 사전적 TIPS(2003~)
-    const lastYoY = cpiLive ?? lastOf(m.cpiYoY)
-    const rrLive = live?.gs10 && lastYoY != null ? live.gs10.value - lastYoY : null
-    const tipsLive = live?.tips ? live.tips.value : null
+    // 4) 실질금리 — 사전적 TIPS 단일 (1997 도입 · FRED 2003~). 월간 그대로 (~280포인트)
+    const tipsStart = m.tips10 ? m.tips10.findIndex((v) => v != null) : -1
+    const tipsRows: { ym: string; v: number | null }[] =
+      tipsStart >= 0 ? dates.slice(tipsStart).map((ym, k) => ({ ym, v: round2(m.tips10![tipsStart + k]) })) : []
+    if (live?.tips && tipsRows.length > 0) tipsRows.push({ ym: live.tips.date, v: round2(live.tips.value) })
+    // TIPS 차트 전용 음영: 2003 이후와 겹치는 구간만, 시작점은 데이터 시작으로 클램프
+    const tipsBands =
+      tipsStart >= 0
+        ? data.episodes
+            .filter((e) => (e.recovery ?? dates[n - 1]) >= dates[tipsStart])
+            .map((e) => ({
+              x1: e.peak >= dates[tipsStart] ? e.peak : dates[tipsStart],
+              x2: e.recovery ?? tipsRows[tipsRows.length - 1].ym,
+            }))
+        : []
 
     // 5) 장단기 금리차
     const spreadArr = dates.map((_, i) => (m.gs10[i] != null && m.tbill3m?.[i] != null ? (m.gs10[i] as number) - (m.tbill3m[i] as number) : null))
@@ -159,14 +170,17 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
         fmt: (v) => `${v.toFixed(1)}%`,
       },
       {
-        title: '실질 10년 금리 — 사후적(1900~) vs 사전적 TIPS(2003~)',
-        sub: '사후적(GS10−후행CPI) = 역사 비교용 표지판 · TIPS = 시장의 실질 할인율. 2022년처럼 둘이 갈릴 때는 TIPS가 주가를 설명',
-        color: theme === 'dark' ? '#a78bfa' : '#7c3aed',
-        color2: theme === 'dark' ? '#34d399' : '#059669',
-        names: ['사후적 (GS10−CPI)', 'TIPS 사전적'],
-        data: mk(m.realRate10, { label: liveLabel, v: rrLive }, m.tips10 ?? undefined, tipsLive),
-        refs: [{ y: 0, label: '0', danger: true }],
-        fmt: (v) => `${v.toFixed(1)}%p`,
+        title: '실질 10년 금리 — 사전적 TIPS',
+        sub: '시장의 실질 할인율 (TIPS는 1997 도입 · 데이터 2003~). 0% 미만 = 초완화(2020-21년형) · 2.5%+ = 긴축적(2022년형). 그 이전 시대의 실질금리(사후적)는 역사 연구 탭 참고',
+        color: theme === 'dark' ? '#34d399' : '#059669',
+        data: tipsRows,
+        bands: tipsBands,
+        range: '2003 ~ 현재',
+        refs: [
+          { y: 0, label: '0 초완화↓' },
+          { y: 2.5, label: '2.5 긴축적', danger: true },
+        ],
+        fmt: (v) => `${v.toFixed(2)}%`,
       },
       {
         title: '장단기 금리차 (10년 − 3개월)',
@@ -178,11 +192,6 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
       },
     ]
     return { charts, bands }
-
-    function lastOf(arr: (number | null)[]): number | null {
-      for (let i = arr.length - 1; i >= 0; i--) if (arr[i] != null) return arr[i]
-      return null
-    }
   }, [data, live, theme])
 
   if (error) {
@@ -207,18 +216,18 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
         {charts.map((c) => (
           <div key={c.title} className={`${cardCls} p-4`}>
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{c.title}</h3>
-            <p className="text-[11px] text-zinc-400 mb-2">{c.sub} · 음영 = 역사 하락 구간 · 1900 ~ 현재</p>
+            <p className="text-[11px] text-zinc-400 mb-2">{c.sub} · 음영 = 역사 하락 구간 · {c.range ?? '1900 ~ 현재'}</p>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={c.data} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" vertical={false} />
                 <XAxis dataKey="ym" tick={{ fontSize: 10, fill: axisTickColor }} stroke={axisTickColor} minTickGap={55} tickFormatter={(d: string) => d.slice(0, 4)} />
                 <YAxis tick={{ fontSize: 10, fill: axisTickColor }} stroke={axisTickColor} width={42} domain={c.domain ?? ['auto', 'auto']} />
                 <Tooltip
-                  formatter={(v, name) => [c.fmt(Number(v)), c.names ? String(name) : c.title]}
+                  formatter={(v) => [c.fmt(Number(v)), c.title]}
                   labelStyle={tooltipLabelStyle}
                   contentStyle={tooltipContentStyle}
                 />
-                {bands.map((b) => (
+                {(c.bands ?? bands).map((b) => (
                   <ReferenceArea key={`${b.x1}-${b.x2}`} x1={b.x1} x2={b.x2} fill="rgba(227,73,72,0.10)" stroke="none" />
                 ))}
                 {c.refs.map((r) => (
@@ -231,8 +240,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
                     label={{ value: r.label, position: 'insideTopRight', fontSize: 10, fill: r.danger ? '#dc2626' : axisTickColor }}
                   />
                 ))}
-                <Line type="monotone" dataKey="v" name={c.names?.[0] ?? c.title} stroke={c.color} strokeWidth={1.6} dot={false} connectNulls />
-                {c.names && <Line type="monotone" dataKey="v2" name={c.names[1]} stroke={c.color2} strokeWidth={1.8} dot={false} connectNulls />}
+                <Line type="monotone" dataKey="v" name={c.title} stroke={c.color} strokeWidth={1.6} dot={false} connectNulls />
               </LineChart>
             </ResponsiveContainer>
           </div>

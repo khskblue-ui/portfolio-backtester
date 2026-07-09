@@ -18,8 +18,11 @@
  * - CAPE: 1929 고점 32.6 / 2000 고점 44 / 1968 고점 24.1 (B형 시작 밸류에이션)
  * - CPI YoY: A형 본격화 수준 5%+ (1916: 20%대, 1946: 19%, 1973: 12%);
  *   3% 돌파 + 상승 추세 = 1968년형 "이륙 초입"
- * - 실질금리: A형 구간에서 마이너스로 매몰 (1946 −15%, 1974 −5%대);
- *   완화발(저인플레) 마이너스는 2009~2021처럼 자산가격에 순풍 — 원인 구분
+ * - 실질금리: 표시는 사전적(TIPS) 단일 지표 — 시장이 실제로 쓰는 실질 할인율.
+ *   0% 미만 = 초완화(2020-21년형) · 2.5%+ = 긴축적(2022년형 멀티플 압박).
+ *   TIPS는 1997년 도입(FRED 2003~)이라 20세기 구간엔 존재하지 않음 — 시대 비교가
+ *   가능한 유일한 실질금리인 사후적(GS10 − 실현 CPI)은 역사 연구 탭에 남기고,
+ *   여기서는 1946·1973년형 인플레 쇼크(실현 인플레 > 명목금리) 감지용 내부 규칙로만 사용
  * - 장단기(10y−3m) 역전: 표준 침체 선행 신호 (1969·1973·1980·2000·2007·2019)
  */
 
@@ -165,56 +168,64 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
         : '데이터 없음',
   })
 
-  // ── 4. 실질금리 — 사전적(TIPS)을 주 지표로, 사후적은 역사 표지판으로 병기 ──
-  // 사후적(GS10 − 후행 CPI) = 1900년대까지 비교 가능한 '체제 표지판'. 그러나 시장이
-  // 할인율로 쓰는 건 사전적(TIPS) — 2022년엔 사후적이 −6%로 추락하는 동안 사전적이
-  // −1%→+1.7%로 급등하며 주가를 눌렀다. 두 지표의 괴리 자체가 정보다:
-  // 괴리 = 실현 인플레 − 기대 인플레 → 시장이 현 인플레를 일시적으로 보는지의 척도.
-  const rrV = gs10V != null && cpiV != null ? gs10V - cpiV : null // 사후적
-  const tipsV = live.tips ? live.tips.value : m.tips10 ? latest(m.tips10)?.v ?? null : null // 사전적
-  const tipsAsOf = live.tips ? live.tips.date : dates[n]
+  // ── 4. 실질금리 — 사전적(TIPS) 단일 지표 ──
+  // 사용자가 미래를 판단할 때 쓰는 척도는 시장의 사전적 실질 할인율(TIPS) 하나로 통일.
+  // 사후적(GS10 − 실현 CPI)은 TIPS가 없던 20세기와 비교 가능한 유일한 실질금리라
+  // 데이터에서 지울 수는 없다 — 역사 연구 탭에 남기고, 여기서는 실현 인플레이션이
+  // 명목금리를 앞지르는 1946·1973년형 인플레 쇼크를 감지하는 내부 규칙으로만 쓴다
+  // (2022년: 사후적 −6% 추락 중에 TIPS가 −1%→+1.7% 급등하며 주가를 누른 것이 근거).
+  const rrV = gs10V != null && cpiV != null ? gs10V - cpiV : null // 사후적 (내부 규칙용)
+  const tipsBundle = m.tips10 ? latest(m.tips10) : null
+  const tipsV = live.tips ? live.tips.value : tipsBundle?.v ?? null
+  const tipsAsOf = live.tips ? live.tips.date : tipsBundle ? dates[tipsBundle.i] : dates[n]
   let rrLevel: SignalLevel = 'ok'
-  const rrNotes: string[] = []
-  // (a) A형 표지판: 사후적 마이너스 + 고인플레 = 1946·1973년과 같은 인플레 쇼크 마커
-  if (rrV != null && cpiV != null && rrV < 0 && cpiV >= 3.5) {
-    rrLevel = 'alert'
-    rrNotes.push('사후적 마이너스 + 고인플레 = 1946·1973년형 인플레 쇼크의 표지판')
-  } else if (rrV != null && rrV < 1 && cpiV != null && cpiV >= 3) {
-    rrLevel = 'watch'
-    rrNotes.push('실현 인플레이션이 명목금리보다 빨리 오르며 사후적 실질금리가 압축되는 국면')
-  } else if (rrV != null && rrV < 0) {
-    rrLevel = 'watch'
-    rrNotes.push('사후적 마이너스(저인플레) — 완화발 성격: 자산가격엔 순풍이나 과열을 배양(2010년대형)')
-  }
-  // (b) 사전적(TIPS) 스탠스: 시장의 실제 할인율
+  let rrNote: string
   if (tipsV != null) {
     if (tipsV >= 2.5) {
-      rrLevel = rrLevel === 'alert' ? 'alert' : 'watch'
-      rrNotes.push(`TIPS ${tipsV.toFixed(2)}% = 긴축적 실질 할인율 — 고밸류에이션과 결합 시 멀티플 압박(2022년형 채널)`)
+      rrLevel = 'watch'
+      rrNote = `TIPS ${tipsV.toFixed(2)}% = 긴축적 실질 할인율 — 고밸류에이션과 결합 시 멀티플 압박(2022년형 채널)`
     } else if (tipsV < 0) {
-      rrLevel = rrLevel === 'alert' ? 'alert' : 'watch'
-      rrNotes.push(`TIPS ${tipsV.toFixed(2)}% = 초완화 — 자산가격엔 순풍이나 과열을 배양(2020-21년형)`)
+      rrLevel = 'watch'
+      rrNote = `TIPS ${tipsV.toFixed(2)}% = 초완화 — 자산가격엔 순풍이나 과열을 배양(2020-21년형)`
+    } else {
+      rrNote = `TIPS ${tipsV.toFixed(2)}% = 중립 범위 — 긴축적(2.5%+)도 초완화(0% 미만)도 아님`
     }
-    // (c) 괴리 해석
-    if (rrV != null && tipsV - rrV > 1) {
-      rrNotes.push(`사전-사후 괴리 +${(tipsV - rrV).toFixed(1)}%p — 시장은 현재 인플레이션을 일시적으로 판단 중(기대 인플레 ≈ 브레이크이븐). 이 기대가 틀리면 금리 재가격 위험`)
+    // 1946·1973년형 감지: 실현 인플레이션이 명목 10년 금리를 앞지르는 인플레 쇼크
+    if (rrV != null && cpiV != null && rrV < 0 && cpiV >= 3.5) {
+      rrLevel = 'alert'
+      rrNote = `실현 인플레이션(${cpiV.toFixed(1)}%)이 명목 10년 금리를 앞지르는 1946·1973년형 인플레 쇼크 국면 — 시장(TIPS ${tipsV.toFixed(2)}%)이 이를 일시적으로 보고 있다면, 그 기대가 틀릴 때 금리 재가격 위험`
+    } else if (rrV != null && cpiV != null && cpiV >= 3 && tipsV - rrV > 1) {
+      rrNote += `. 다만 실현 인플레이션(${cpiV.toFixed(1)}%) 대비로는 금리가 낮아, 시장은 현재 인플레이션을 일시적으로 판단 중 — 이 기대가 틀리면 금리 재가격 위험`
+    }
+  } else {
+    // TIPS 미확보(라이브·번들 모두 실패) — 사후적 폴백
+    if (rrV != null && cpiV != null && rrV < 0 && cpiV >= 3.5) {
+      rrLevel = 'alert'
+      rrNote = '사후적 마이너스 + 고인플레 = 1946·1973년형 인플레 쇼크의 표지판'
+    } else if (rrV != null && cpiV != null && rrV < 1 && cpiV >= 3) {
+      rrLevel = 'watch'
+      rrNote = '실현 인플레이션이 명목금리보다 빨리 오르며 사후적 실질금리가 압축되는 국면'
+    } else if (rrV != null && rrV < 0) {
+      rrLevel = 'watch'
+      rrNote = '사후적 마이너스(저인플레) — 완화발 성격: 자산가격엔 순풍이나 과열을 배양(2010년대형)'
+    } else {
+      rrNote = '사후적 기준 중립 범위 — 인플레이션형 체제와 거리 (TIPS 미조회, 사후적 폴백)'
     }
   }
-  if (rrNotes.length === 0) rrNotes.push('사전적·사후적 모두 중립 범위 — 인플레이션형 체제와 거리')
   signals.push({
     key: 'realRate',
-    label: '실질 10년 금리 (사전적 TIPS · 사후적)',
+    label: `실질 10년 금리 (${tipsV != null ? '사전적 TIPS' : '사후적'})`,
     value:
-      tipsV != null && rrV != null
-        ? `TIPS ${tipsV >= 0 ? '+' : ''}${tipsV.toFixed(2)}% · 사후 ${rrV >= 0 ? '+' : ''}${rrV.toFixed(2)}%`
+      tipsV != null
+        ? `TIPS ${tipsV >= 0 ? '+' : ''}${tipsV.toFixed(2)}%`
         : rrV != null
           ? `사후 ${rrV >= 0 ? '+' : ''}${rrV.toFixed(2)}%p`
           : '—',
     level: rrLevel,
-    asOf: tipsV != null && live.tips ? `TIPS ${tipsAsOf} · CPI ${cpiAsOf}` : `금리 ${gs10AsOf} · CPI ${cpiAsOf}`,
+    asOf: tipsV != null ? tipsAsOf : `금리 ${gs10AsOf} · CPI ${cpiAsOf}`,
     reason:
-      rrV != null || tipsV != null
-        ? `${rrNotes.join('. ')}. 주의: 실질금리는 하락의 "원인"이 아니라 체제의 표지판입니다 — 실제 전달 경로는 긴축(실제·기대)·마진 압박·불확실성 프리미엄·화폐 착시이며, 인플레 구간에서도 주식은 채권·현금보다 나은(명목자산 중 최선의) 자산이었습니다(1946 회복시 실질: 주식 +3% vs 채권 −19%·현금 −22%).`
+      tipsV != null || rrV != null
+        ? `${rrNote}. 실질금리는 하락의 "원인"이 아니라 표지판입니다 — 실제 전달 경로는 긴축(실제·기대)·마진 압박·불확실성 프리미엄·화폐 착시. TIPS는 1997년 도입이라 그 이전 시대 비교(사후적)는 역사 연구 탭에 있습니다.`
         : '데이터 없음',
   })
 

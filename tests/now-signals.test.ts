@@ -70,7 +70,8 @@ describe('신호 규칙 경계', () => {
     const t = tight.signals.find((s) => s.key === 'realRate')!
     expect(t.level).toBe('watch')
     expect(t.reason).toContain('2022년형')
-    expect(t.value).toContain('TIPS +2.80%')
+    expect(t.value).toBe('TIPS +2.80%') // 단일 지표 — 사후적 병기 없음
+    expect(t.label).toContain('사전적 TIPS')
     // TIPS −1% = 초완화 → 주의
     const easy = assessNow(mkHistory({}), { tips: { date: '2026-07-08', value: -1.0 } })
     expect(easy.signals.find((s) => s.key === 'realRate')!.reason).toContain('초완화')
