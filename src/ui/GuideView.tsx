@@ -118,7 +118,10 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
     return () => io.disconnect()
   }, [])
 
-  const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+  const jump = (id: string) => {
+    setActiveId(id) // 스무스 스크롤 중 중간 절들로 하이라이트가 튀는 것 방지
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+  }
   const totalMin = GUIDE_CHAPTERS.reduce((a, c) => a + c.minutes, 0)
 
   return (

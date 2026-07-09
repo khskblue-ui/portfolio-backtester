@@ -83,7 +83,7 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
   const m = h.macro
   const refs = h.meta.liveRefs
   const live = liveIn ?? {}
-  const anyLive = Boolean(live.stock || live.gs10 || live.tbill3m || live.cpi)
+  const anyLive = Boolean(live.stock || live.gs10 || live.tbill3m || live.cpi || live.tips)
   const signals: Signal[] = []
 
   // ── 라이브 병합: 최신 유효값과 그 기준일 ──
@@ -92,7 +92,10 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
   const cpiNewer = live.cpi && refs && live.cpi.ym > refs.ym ? live.cpi : null
   const cpiV = cpiNewer ? cpiNewer.yoy : cpiBundle?.v ?? null
   const cpiAsOf = cpiNewer ? cpiNewer.ym : dates[n]
-  const cpi6mAgo = cpiBundle ? m.cpiYoY[cpiBundle.i - (cpiNewer ? 5 : 6)] : null
+  // "6개월 전" 기준: 라이브 발표월이 번들보다 몇 달 앞서든 실제 달 수로 환산
+  const cpiDiff = cpiNewer ? monthDiff(cpiNewer.ym, dates[n]) : 0
+  const cpi6mIdx = cpiBundle ? cpiBundle.i + cpiDiff - 6 : -1
+  const cpi6mAgo = cpiBundle && cpi6mIdx >= 0 ? m.cpiYoY[cpi6mIdx] : null
   // 실질 주가: 번들 마지막 실질 지수 × TR 비율 ÷ CPI 변화 (CPI는 최신 발표치 유지 가정)
   const cpiAdj = cpiNewer && refs ? cpiNewer.value / refs.cpi : 1
   const stockRealNow = live.stock && refs ? refs.stockRealLast * (live.stock.trRatio / cpiAdj) : stock[n]
@@ -132,8 +135,9 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
   // 라이브: 프록시를 실질가격 변화로 미세 연장 (2개월 내 배당·이익 성장 보정은 무시 가능)
   const capeV = capeBundle ? (live.stock && refs?.capeProxy != null ? refs.capeProxy * (stockRealNow / refs.stockRealLast) : capeBundle.v) : null
   const capeAsOf = live.stock ? stockAsOf : dates[n]
+  // 임계값은 차트 기준선·본문과 동일한 실측 시작값(24 / 32.6 / 44)으로 통일
   let valLevel: SignalLevel = 'ok'
-  if (capeV != null && capeV >= 32) valLevel = 'alert'
+  if (capeV != null && capeV >= 32.6) valLevel = 'alert'
   else if (capeV != null && capeV >= 24) valLevel = 'watch'
   signals.push({
     key: 'valuation',
@@ -144,7 +148,7 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
     reason:
       capeV != null
         ? `역사적 대형 하락(B형)의 시작 밸류에이션: 1968년 24.1 · 1929년 32.6 · 2000년 44. 현재 ${capeV.toFixed(1)}은 ${
-            capeV >= 40 ? '2000년 닷컴 버블 수준' : capeV >= 32 ? '1929년 수준 초과' : capeV >= 24 ? '1968년 수준 초과' : '역사적 위험 구간 미만'
+            capeV >= 44 ? '2000년 닷컴 버블 수준' : capeV >= 32.6 ? '1929년 수준 초과' : capeV >= 24 ? '1968년 수준 초과' : '역사적 위험 구간 미만'
           }. (프록시: 2023-06 실측 CAPE를 실질가격 변화로 연장한 근사 — 딥리서치 검증치 2026년 초 ~41과 정합)`
         : 'CAPE 데이터 없음',
   })
@@ -231,6 +235,8 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
 
   // ── 5. 장단기 금리차 (10y − 3m) ──
   const spread = gs10V != null && tbV != null ? gs10V - tbV : null
+  // 한쪽만 라이브면 일별 vs 월평균이 섞임 — 기준일을 다리별로 정직하게 표기
+  const curveMixed = Boolean(live.gs10) !== Boolean(live.tbill3m)
   let curveLevel: SignalLevel = 'ok'
   if (spread != null && spread < 0) curveLevel = 'alert'
   else if (spread != null && spread < 0.3) curveLevel = 'watch'
@@ -239,10 +245,12 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
     label: '장단기 금리차 (10년 − 3개월)',
     value: spread != null ? `${spread >= 0 ? '+' : ''}${spread.toFixed(2)}%p` : '—',
     level: curveLevel,
-    asOf: live.gs10 && live.tbill3m ? `${gs10AsOf} · ${tbAsOf}` : dates[n],
+    asOf: live.gs10 || live.tbill3m ? `10y ${gs10AsOf} · 3m ${tbAsOf}` : dates[n],
     reason:
       spread != null
-        ? `역전(음수)은 침체의 고전적 선행 신호 — 1969·1973·1980·2000·2007·2019년 역전 후 침체가 뒤따랐습니다. 현재 ${spread >= 0 ? '+' : ''}${spread.toFixed(2)}%p로 ${spread < 0 ? '역전 상태' : spread < 0.3 ? '평탄 — 역전에 근접' : '정상 기울기'}.`
+        ? `역전(음수)은 침체의 고전적 선행 신호 — 1969·1973·1980·2000·2007·2019년 역전 후 침체가 뒤따랐습니다. 현재 ${spread >= 0 ? '+' : ''}${spread.toFixed(2)}%p로 ${spread < 0 ? '역전 상태' : spread < 0.3 ? '평탄 — 역전에 근접' : '정상 기울기'}.${
+            curveMixed ? ' (주의: 한쪽 금리만 라이브 조회에 성공해 일별·월평균이 섞인 근사입니다)' : ''
+          }`
         : '데이터 없음',
   })
 
@@ -266,8 +274,18 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
   else if (capeHigh) analog = '2000년형 — 인플레 없는 극단 밸류에이션'
   else if (infHigh) analog = '1946/1973년형 — 인플레이션 주도'
 
+  // 실제로 라이브 조회에 성공한 소스만 정직하게 기술 (부분 실패 시 과장 방지)
+  const liveSrcs = [
+    live.stock && `주가 일별(${stockAsOf})`,
+    (live.gs10 || live.tbill3m || live.tips) && '금리 일별',
+    cpiNewer && `CPI 최신 발표월(${cpiAsOf})`,
+  ].filter(Boolean) as string[]
   const rationale =
-    `${anyLive ? `주가·금리는 일별(${stockAsOf} 기준), CPI는 최신 발표월(${cpiAsOf}) 데이터로` : `번들 데이터(${dates[n]})로`} 계산한 체크리스트입니다. ` +
+    `${
+      anyLive
+        ? `${liveSrcs.join(' · ')}${liveSrcs.length < 3 ? ` (나머지는 번들 ${dates[n]})` : ''} 데이터로`
+        : `번들 데이터(${dates[n]})로`
+    } 계산한 체크리스트입니다. ` +
     `${signals.filter((s) => s.level === 'alert').map((s) => s.label).join(', ') || '없음'} = 경계, ` +
     `${signals.filter((s) => s.level === 'watch').map((s) => s.label).join(', ') || '없음'} = 주의. ` +
     `역사가 보여주는 것: 선행조건 충족은 "하락이 곧 온다"가 아니라 "만약 하락이 오면 깊고 길 수 있는 출발점"이라는 뜻입니다 — ` +
@@ -279,5 +297,10 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
   function latest(arr: (number | null)[]): { v: number; i: number } | null {
     for (let i = arr.length - 1; i >= 0; i--) if (arr[i] != null) return { v: arr[i] as number, i }
     return null
+  }
+
+  /** 'YYYY-MM' 두 값의 달 수 차이 (a - b) */
+  function monthDiff(a: string, b: string): number {
+    return (Number(a.slice(0, 4)) - Number(b.slice(0, 4))) * 12 + (Number(a.slice(5, 7)) - Number(b.slice(5, 7)))
   }
 }

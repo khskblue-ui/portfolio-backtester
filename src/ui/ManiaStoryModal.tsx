@@ -43,7 +43,7 @@ export function ManiaStoryModal({ onClose }: { onClose: () => void }) {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="w-full max-w-3xl max-h-full overflow-y-auto bg-white dark:bg-[#1e222d] border border-[#e0e3eb] dark:border-[#363a45] rounded-xl shadow-2xl">
+      <div role="dialog" aria-modal="true" aria-label={s.title} className="w-full max-w-3xl max-h-full overflow-y-auto bg-white dark:bg-[#1e222d] border border-[#e0e3eb] dark:border-[#363a45] rounded-xl shadow-2xl">
         {/* 헤더 */}
         <div className="sticky top-0 z-10 bg-white dark:bg-[#1e222d] border-b border-[#e0e3eb] dark:border-[#2a2e39] px-5 py-3.5 flex items-start justify-between gap-3">
           <div>
@@ -58,6 +58,7 @@ export function ManiaStoryModal({ onClose }: { onClose: () => void }) {
           <button
             onClick={onClose}
             aria-label="닫기"
+            autoFocus
             className="p-1.5 rounded-md text-zinc-400 hover:bg-[#edf1f7] dark:hover:bg-[#2a2e39] hover:text-zinc-700 dark:hover:text-zinc-200 flex-shrink-0"
           >
             <X className="w-5 h-5" />

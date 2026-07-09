@@ -208,7 +208,7 @@ export interface DailyPoint {
 
 export interface EngineWarning {
   date: string
-  code: 'no_sell_overweight' | 'negative_cash_tax' | 'band_unclosable' | 'reconciliation'
+  code: 'no_sell_overweight' | 'negative_cash_tax' | 'negative_cash_retry' | 'band_unclosable' | 'reconciliation'
   message: string
 }
 

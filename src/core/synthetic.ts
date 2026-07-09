@@ -67,8 +67,11 @@ export function buildLeveragedSeries(
     const expense = (spec.expensePct / 100) * (dtDays / 365)
     // 일간 리셋 — 하루 −(100/L)% 초과 하락은 전멸이지만 잔존가치 하한으로 클램프
     const factor = Math.max(1e-6, 1 + spec.leverage * rBase - financing - expense)
-    // 시가: 기초의 오버나이트 갭 × L 근사 (t+1 시가 체결용)
-    const openFactor = Math.max(1e-6, 1 + spec.leverage * (base.open[i] / base.close[i - 1] - 1))
+    // 시가: 기초의 오버나이트 갭 × L 근사 (t+1 시가 체결용).
+    // 종가 체인은 배당 포함(adjClose)인데 원시 시가는 배당락만큼 떨어지므로,
+    // 당일 조정계수(adjClose/close)로 시가를 보정해 배당락일의 유령 갭(×L)을 제거
+    const openAdj = base.open[i] * (base.adjClose[i] / base.close[i])
+    const openFactor = Math.max(1e-6, 1 + spec.leverage * (openAdj / base.adjClose[i - 1] - 1))
     open.push(prev * openFactor)
     prev = prev * factor
     dates.push(d)

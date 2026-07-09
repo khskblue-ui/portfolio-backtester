@@ -47,6 +47,17 @@ describe('buildLeveragedSeries 손계산 (2배)', () => {
     expect(syn.close[1]).toBeCloseTo(100, 10) // 총수익 0% × 2 = 0%
   })
 
+  it('배당락일 시가에 유령 갭(×L)이 생기지 않는다', () => {
+    // 시장 보합인데 배당락으로 원시 시가·종가만 2% 하락한 날:
+    // 총수익 기준 오버나이트 갭은 0이므로 합성 시가도 전일 종가와 같아야 한다.
+    // (버그였던 원시 시가 사용 시: 1 + 3×(98/100 − 1) = 0.94 → −6% 유령 갭)
+    const base = mk('QQQ', ['2001-01-02', '2001-01-03'], [100, 98], [100, 100], [100, 98])
+    const rate = mk('^IRX', ['2001-01-02', '2001-01-03'], [0, 0])
+    const syn = buildLeveragedSeries('X-SIM', base, rate, { base: 'QQQ', leverage: 3, expensePct: 0, borrowSpreadPct: 0 })
+    expect(syn.open[1]).toBeCloseTo(100, 8) // 유령 −6% 갭 없음
+    expect(syn.close[1]).toBeCloseTo(100, 8)
+  })
+
   it('금리 결측일은 직전 값 forward-fill', () => {
     const base = mk('QQQ', ['2001-01-02', '2001-01-03', '2001-01-04'], [100, 100, 100])
     const rate = mk('^IRX', ['2001-01-02', '2001-01-04'], [3.05, 7.3 - 0.6]) // 01-03 결측

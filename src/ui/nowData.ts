@@ -20,6 +20,8 @@ interface LiveRefs {
 
 const CACHE_KEY = 'bt_now_live_v2'
 const CACHE_TTL_MS = 3 * 60 * 60 * 1000
+/** 일부 소스가 실패한 스냅샷은 짧게만 캐시 — 일시 장애가 3시간 고정되는 것 방지 */
+const PARTIAL_TTL_MS = 10 * 60 * 1000
 
 interface CacheEntry {
   fetchedAt: number
@@ -27,12 +29,17 @@ interface CacheEntry {
   snapshot: LiveSnapshot
 }
 
+function isComplete(s: LiveSnapshot): boolean {
+  return Boolean(s.stock && s.gs10 && s.tbill3m && s.cpi && s.tips)
+}
+
 function readCache(refYm: string): LiveSnapshot | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY)
     if (!raw) return null
     const c = JSON.parse(raw) as CacheEntry
-    if (c.refYm !== refYm || Date.now() - c.fetchedAt > CACHE_TTL_MS) return null
+    const ttl = isComplete(c.snapshot) ? CACHE_TTL_MS : PARTIAL_TTL_MS
+    if (c.refYm !== refYm || Date.now() - c.fetchedAt > ttl) return null
     return c.snapshot
   } catch {
     return null

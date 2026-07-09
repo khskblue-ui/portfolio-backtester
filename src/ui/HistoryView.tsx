@@ -18,6 +18,7 @@ import { ERA_STORIES } from './eraStories'
 import { ManiaStoryModal } from './ManiaStoryModal'
 import { MANIA_STORY } from './maniaStory'
 import { cardCls, btnGhostCls, fmtSignedPct } from './common'
+import { EPISODE_INFO } from './episodeInfo'
 import { histEraStrategies, type StrategyConfig } from '@/core'
 
 /**
@@ -65,44 +66,6 @@ interface HistoryData {
   episodes: Episode[]
 }
 
-/** 구간별 구조적 원인 (리서치 문서 §2 — 검증 근거는 문서 참조) */
-const EPISODE_INFO: Record<string, { title: string; type: 'A' | 'B'; cause: string }> = {
-  '1916-11': {
-    title: '1차대전 전시 인플레이션',
-    type: 'A',
-    cause: '전시 재정 팽창으로 물가가 ~2배로 뛰며 실질 가치를 잠식했고, 전후 1920-21년 디플레 불황이 마무리 타격. 명목 지수보다 실질 기준 고통이 훨씬 길었던 전형적 인플레형.',
-  },
-  '1929-09': {
-    title: '대공황',
-    type: 'B',
-    cause: '1920년대 신용버블·마진 투기(CAPE ~32)에서 출발한 150년래 최악의 붕괴. 은행 시스템 연쇄 파산과 디플레이션, 통화·재정 정책 실패, 보호무역이 증폭. 디플레 덕에 국채는 실질 강세 — 밸류에이션 붕괴형의 원형.',
-  },
-  '1937-02': {
-    title: '1937 재긴축 불황 · 2차대전',
-    type: 'B',
-    cause: '대공황 회복 중 성급한 통화·재정 긴축으로 재폭락(−48%), 이어 2차대전 발발. 1929 고점 기준으로 보면 이 구간까지 합쳐 실질 회복에 ~15.6년이 걸린 복합 에피소드의 후반부.',
-  },
-  '1946-04': {
-    title: '전후 인플레이션 · 금융억압',
-    type: 'A',
-    cause: '전시 가격통제 해제로 CPI 연 8~18% 폭등. 정부부채 GDP 106% 처리를 위해 장기금리를 ~2.5%에 페그(금융억압) — 주식·채권·금이 모두 실질 마이너스였던, 숨을 곳이 없던 구간.',
-  },
-  '1968-12': {
-    title: '스태그플레이션 서곡',
-    type: 'A',
-    cause: '인플레이션 상승 초입 + 고밸류에이션(CAPE ~24). 1966-82 장기 실질 횡보의 앞부분으로, 1973년 본편의 예고편.',
-  },
-  '1973-01': {
-    title: '스태그플레이션 본편',
-    type: 'A',
-    cause: '니프티피프티 밸류에이션 과열과 인플레·긴축이 선행하고, 오일쇼크(1973-10, 고점 이후의 가속 요인)·베트남 후유증·워터게이트가 겹침. 채권도 실질 마이너스, 금만 +132% — 인플레형의 교과서.',
-  },
-  '2000-08': {
-    title: '잃어버린 10년 (닷컴 + 금융위기)',
-    type: 'B',
-    cause: '사상 최고 밸류에이션(CAPE ~44)에서 출발 — 인플레가 아니라 밸류에이션 정상화가 주도. 닷컴 붕괴 후 회복 중 신용버블 → 2008 금융위기 이중 타격. 금리 하락으로 국채 +65%, 금 +282% — 150년래 최장인 12.8년간 전고점을 회복하지 못했습니다.',
-  },
-}
 
 const TYPE_LABEL = {
   A: { text: '인플레이션형', cls: 'text-amber-700 dark:text-amber-400' },
@@ -136,12 +99,22 @@ export function HistoryView({
   const [storyOpen, setStoryOpen] = useState(false)
   const [maniaOpen, setManiaOpen] = useState(false)
 
+  const [retryTick, setRetryTick] = useState(0)
   useEffect(() => {
     fetch('/data/history.json')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then(setData)
       .catch((e) => setError(e instanceof Error ? e.message : '로드 실패'))
-  }, [])
+  }, [retryTick])
+
+  // 구간 선택 시 상세 카드로 스크롤 — 상세가 카드 그리드 아래에 있어 선택해도
+  // 화면 변화가 안 보이던 문제 (차트 밴드 클릭 안내 "클릭해 상세 보기"의 실효성)
+  useEffect(() => {
+    if (selected) {
+      const t = window.setTimeout(() => document.getElementById('era-detail-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+      return () => window.clearTimeout(t)
+    }
+  }, [selected])
 
   const axisTickColor = theme === 'dark' ? '#9ca3af' : '#6b7280'
   const c = (k: keyof typeof SERIES_COLORS) => SERIES_COLORS[k][theme]
@@ -169,14 +142,19 @@ export function HistoryView({
       : { stock: s.stockNom, bond: s.bondNom, gold: s.goldNom, bill: s.billNom }
   }, [data, basis])
 
-  // 전체 차트 데이터 (주식 총수익, 로그 스케일)
-  const overviewData = useMemo(() => {
-    if (!data || !pick) return []
+  // 전체 차트 데이터 (주식 총수익, 로그 스케일) — 마지막 포인트는 항상 유지하고,
+  // 밴드 경계(ym)는 다운샘플된 라벨로 스냅 (카테고리 축에서 라벨이 사라지면 밴드도 사라짐)
+  const { overviewData, snapYm } = useMemo(() => {
+    if (!data || !pick) return { overviewData: [], snapYm: (ym: string) => ym }
     const { dates } = data.series
-    const step = Math.max(1, Math.floor(dates.length / 800))
+    const n = dates.length
+    const step = Math.max(1, Math.floor(n / 800))
     const rows = []
-    for (let i = 0; i < dates.length; i += step) rows.push({ ym: dates[i], stock: pick.stock[i] })
-    return rows
+    for (let i = 0; i < n; i += step) rows.push({ ym: dates[i], stock: pick.stock[i] })
+    if ((n - 1) % step !== 0) rows.push({ ym: dates[n - 1], stock: pick.stock[n - 1] })
+    const sampled = rows.map((r) => r.ym)
+    const snapYm = (ym: string) => sampled.find((d) => d >= ym) ?? sampled[sampled.length - 1]
+    return { overviewData: rows, snapYm }
   }, [data, pick])
 
   const selectedEp = data?.episodes.find((e) => e.peak === selected) ?? null
@@ -209,7 +187,14 @@ export function HistoryView({
   }, [data, pick, selectedEp])
 
   if (error) {
-    return <div className={`${cardCls} p-6 text-sm text-red-700 dark:text-red-300`}>역사 데이터 로드 실패: {error}</div>
+    return (
+      <div className={`${cardCls} p-6 text-sm text-red-700 dark:text-red-300 flex items-center justify-between gap-3 flex-wrap`}>
+        <span>역사 데이터 로드 실패: {error}</span>
+        <button onClick={() => { setError(null); setRetryTick((t) => t + 1) }} className={`px-3 py-1.5 rounded text-xs font-medium ${btnGhostCls}`}>
+          다시 시도
+        </button>
+      </div>
+    )
   }
   if (!data) {
     return <div className={`${cardCls} p-6 text-sm text-zinc-500`}>역사 데이터 로딩 중…</div>
@@ -276,11 +261,11 @@ export function HistoryView({
             {data.episodes.map((e) => (
               <ReferenceArea
                 key={e.peak}
-                x1={e.peak}
-                x2={e.recovery ?? data.meta.dataEnd}
+                x1={snapYm(e.peak)}
+                x2={snapYm(e.recovery ?? data.meta.dataEnd)}
                 fill={selected === e.peak ? 'rgba(227,73,72,0.28)' : 'rgba(227,73,72,0.12)'}
                 stroke="none"
-                onClick={() => setSelected(e.peak)}
+                onClick={() => setSelected(selected === e.peak ? null : e.peak)}
                 style={{ cursor: 'pointer' }}
               />
             ))}
@@ -291,7 +276,8 @@ export function HistoryView({
 
       {/* 구간 카드 */}
       <p className="text-[11px] text-zinc-400 leading-relaxed">
-        카드 수치 기준 — 주식: S&P500 총수익 · 채권: 미 10년물 국채 총수익 근사(GS10 파생) · 금: 현물가 · 전부 실질(CPI 조정), 주식 고점→회복 시점 누적. 현금(3개월 T-bill)은 구간 상세에서
+        카드 수치 기준(전부 실질·CPI 조정) — <b>주식: 고점→저점 최대 낙폭</b> · <b>채권·금: 주식 고점→회복 시점 누적 수익</b> (측정 창이 다름에 주의 — 주식도
+        회복 시점엔 정의상 0% 부근). 주식 = S&P500 총수익 · 채권 = 미 10년물 총수익 근사(GS10 파생) · 금 = 현물가 · 현금(3개월 T-bill)은 구간 상세에서
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {data.episodes.map((e) => {
@@ -346,7 +332,7 @@ export function HistoryView({
 
       {/* 선택 구간 상세 */}
       {selectedEp && (
-        <div className={`${cardCls} p-4 sm:p-5 space-y-3`}>
+        <div id="era-detail-card" className={`${cardCls} p-4 sm:p-5 space-y-3 scroll-mt-20`}>
           <div className="flex items-start justify-between flex-wrap gap-2">
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
               {EPISODE_INFO[selectedEp.peak]?.title ?? selectedEp.peak}

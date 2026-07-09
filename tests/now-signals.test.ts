@@ -85,6 +85,14 @@ describe('신호 규칙 경계', () => {
     expect(a.signals.find((s) => s.key === 'curve')!.level).toBe('alert')
   })
 
+  it('CAPE 판정 임계값 = 차트 기준선(32.6/44)과 정확히 일치', () => {
+    const val = (c: number) => assessNow(mkHistory({ cape: Array(24).fill(c) })).signals.find((s) => s.key === 'valuation')!
+    expect(val(32.3).level).toBe('watch') // 32.6 미만은 경계 아님 (기준선 아래인데 경계로 뜨던 버그)
+    expect(val(32.7).level).toBe('alert')
+    expect(val(43.5).reason).toContain('1929년 수준 초과') // 44 미만은 "2000년 수준" 아님
+    expect(val(44.2).reason).toContain('2000년 닷컴 버블 수준')
+  })
+
   it('고밸류 + 인플레 이륙 = 1968년형 아날로그', () => {
     const rising = [...Array(18).fill(2.2), 2.5, 2.8, 3.0, 3.4, 3.8, 4.3]
     const a = assessNow(mkHistory({ cape: Array(24).fill(42), cpiYoY: rising }))
@@ -117,6 +125,31 @@ describe('라이브 스냅샷 오버라이드', () => {
     const a = assessNow(mkHistory({}))
     expect(a.live).toBe(false)
     expect(a.signals.every((s) => s.asOf.length > 0)).toBe(true)
+  })
+
+  it('TIPS만 라이브 성공해도 live 플래그가 참 (폴백 배너 오표시 방지)', () => {
+    const a = assessNow(mkHistory({}), { tips: { date: '2026-07-08', value: 1.0 } })
+    expect(a.live).toBe(true)
+  })
+
+  it('라이브 CPI가 번들보다 2달 새 달이어도 "6개월 전" 비교가 실제 달 수 기준', () => {
+    // 번들 끝 2025-12 (인덱스 23). 라이브 발표월 2026-02 → 6개월 전 = 2025-08 (인덱스 19)
+    const cpiYoY = Array(24).fill(2.0)
+    cpiYoY[19] = 1.0 // 2025-08만 낮게 — 여기와 비교해야 상승 추세(+0.6)가 잡힘
+    const h = mkHistory({ cpiYoY })
+    ;(h.meta as { liveRefs?: object }).liveRefs = { ym: '2025-12', cpi: 300, capeProxy: 20, stockRealLast: 123 }
+    const a = assessNow(h as Parameters<typeof assessNow>[0], { cpi: { ym: '2026-02', value: 305, yoy: 1.6 } })
+    const inf = a.signals.find((s) => s.key === 'inflation')!
+    expect(inf.asOf).toBe('2026-02')
+    expect(inf.value).toContain('↑') // 구버전(고정 -5 인덱스)이면 2025-07(2.0)과 비교돼 추세가 안 잡힘
+  })
+
+  it('한쪽 금리만 라이브면 다리별 기준일 표기 + 혼합 주의 문구', () => {
+    const a = assessNow(mkHistory({}), { gs10: { date: '2026-07-08', value: 4.5 } })
+    const c = a.signals.find((s) => s.key === 'curve')!
+    expect(c.asOf).toContain('10y 2026-07-08')
+    expect(c.asOf).toContain('3m')
+    expect(c.reason).toContain('섞인')
   })
 })
 

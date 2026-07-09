@@ -118,12 +118,17 @@ const shillerRows = sp
 const lastShiller = shillerRows[shillerRows.length - 1].ym
 console.log(`Shiller 유효 구간: ${shillerRows[0].ym} ~ ${lastShiller}`)
 
-// 연장 접합 검증 ① 동일 시리즈 일치: Shiller CPI·GS10 vs FRED (같은 원천이어야 함)
+// 연장 접합 검증 ① 동일 시리즈 일치: "원시 미러 값" vs FRED (같은 원천이어야 함).
+// 주의: shillerRows는 이미 FRED-우선 치환을 거쳤으므로 그 값과 비교하면 자기 자신과의
+// 비교(항진)가 된다 — 반드시 원본 CSV 행에서 다시 읽어 비교한다.
 {
-  const s = shillerRows[shillerRows.length - 1]
-  const f = fredMap.get(s.ym)
-  assert(f && Math.abs(f.cpi - s.cpi) < 0.5, `CPI 접합 불일치 ${s.ym}: shiller ${s.cpi} vs FRED ${f?.cpi}`)
-  assert(f && Math.abs(f.gs10 - s.gs10) < 0.11, `GS10 접합 불일치 ${s.ym}: shiller ${s.gs10} vs FRED ${f?.gs10}`)
+  const last = shillerRows[shillerRows.length - 1]
+  const rawRow = sp.find((r) => r.Date.slice(0, 7) === last.ym)
+  const rawCpi = Number(rawRow?.['Consumer Price Index'])
+  const rawGs10 = Number(rawRow?.['Long Interest Rate'])
+  const f = fredMap.get(last.ym)
+  assert(f && rawCpi > 0 && Math.abs(f.cpi - rawCpi) < 0.5, `CPI 접합 불일치 ${last.ym}: 미러 ${rawCpi} vs FRED ${f?.cpi}`)
+  assert(f && rawGs10 > 0 && Math.abs(f.gs10 - rawGs10) < 0.11, `GS10 접합 불일치 ${last.ym}: 미러 ${rawGs10} vs FRED ${f?.gs10}`)
 }
 
 // 연장 레코드: lastShiller 다음 달부터, TR·GS10·CPI 모두 있는 달까지
@@ -203,7 +208,7 @@ const pushMonth = (rec) => {
   }
   stockNom.push(stockIdx)
   bondNom.push(bondIdx)
-  billNom.push(shortRate(ym) != null || billNom.length > 0 ? billIdx : null)
+  billNom.push(shortRate(ym) != null || billNom.some((v) => v != null) ? billIdx : null)
   const g = goldMap.get(ym)
   goldNom.push(g ?? null)
   cpiSeries.push(cpi)

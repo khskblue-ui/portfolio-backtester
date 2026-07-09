@@ -53,8 +53,12 @@ export function HelpTip({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close()
     }
-    // fixed 좌표는 스크롤 시 어긋나므로 닫음 (표준 팝오버 동작)
-    const onScroll = () => close()
+    // fixed 좌표는 스크롤 시 어긋나므로 닫음 (표준 팝오버 동작).
+    // 단, 팝업 자체 내부 스크롤(overflow-y-auto)은 예외 — 긴 설명을 읽을 수 있어야 함
+    const onScroll = (e: Event) => {
+      if (popRef.current && e.target instanceof Node && popRef.current.contains(e.target)) return
+      close()
+    }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('touchstart', onDown)
     document.addEventListener('keydown', onKey)

@@ -86,6 +86,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
 
   // no_sell 과대 슬리브 에피소드 추적 (경고 스팸 방지 — 진입 시 1회 + 장기화 시 1회)
   const overweightEpisode: Record<string, number> = {}
+  const bandWarned: Record<string, boolean> = {}
 
   const feeRate = config.costs.feeBps / 10_000
   const spreadRate = config.costs.spreadBps / 10_000
@@ -241,6 +242,27 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
       yearGrossDividends = 0
     }
 
+    // ── 7.5) 강제 매도 후에도 현금이 음수면(시가 갭·수수료가 버퍼 초과) 추가 매도 재시도 ──
+    // 연말 세금 강제매도는 1% 버퍼로 1회만 큐잉되므로, 갭다운이 크면 음수 현금이
+    // 무이자 레버리지로 남는다 — 커버될 때까지 반복 큐잉해 invariant(cash >= 0) 복원
+    if (cash < -0.005 && i < N - 1 && !pendingOrders.some((o) => o.reason === 'forced_tax_sale')) {
+      const mvR = marketValue(i)
+      if (mvR > 0) {
+        warnings.push({
+          date,
+          code: 'negative_cash_retry',
+          message: `강제 매도 후 현금 ${cash.toFixed(2)} 음수 지속 → 추가 비례 매도 재시도`,
+        })
+        const neededR = -cash * 1.02
+        for (const s of marketSleeves) {
+          const sleeveVal = state[s.ticker].shares * closeAt(s.ticker, i)
+          if (sleeveVal <= 0) continue
+          const sellShares = ((neededR * sleeveVal) / mvR) / closeAt(s.ticker, i)
+          pendingOrders.push({ ticker: s.ticker, side: 'SELL', amount: Math.min(sellShares, state[s.ticker].shares), reason: 'forced_tax_sale' })
+        }
+      }
+    }
+
     // ── 8) 기록 + 리컨실 (4.7) ──
     const sleeveValues: Record<string, number> = { [CASH_TICKER]: cash }
     for (const s of marketSleeves) sleeveValues[s.ticker] = state[s.ticker].shares * closeAt(s.ticker, i)
@@ -327,7 +349,8 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
               code: 'no_sell_overweight',
               message: `${s.ticker} 과대(${(weights[s.ticker] * 100).toFixed(1)}% > 목표 ${(s.targetWeight * 100).toFixed(0)}%) — 무매도 모드라 매도 불가, 적립 희석만 가능`,
             })
-          } else if (i - overweightEpisode[s.ticker] === 126) {
+          } else if (!bandWarned[s.ticker] && daysBetween(dates[overweightEpisode[s.ticker]], date) >= 183) {
+            bandWarned[s.ticker] = true
             warnings.push({
               date,
               code: 'band_unclosable',
@@ -336,6 +359,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
           }
         } else if (overweightEpisode[s.ticker] != null) {
           delete overweightEpisode[s.ticker]
+          delete bandWarned[s.ticker]
         }
       }
     }

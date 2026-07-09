@@ -6,6 +6,7 @@ import {
   validateStrategy,
   defaultStrategies,
   emptyStrategy,
+  nextId,
   ASSET_CATALOG,
   type StrategyConfig,
   type StrategyRun,
@@ -63,7 +64,12 @@ export default function App() {
   const [running, setRunning] = useState(false)
   const [runs, setRuns] = useState<StrategyRun[] | null>(null)
   const [bundle, setBundle] = useState<AlignedDataBundle | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  // 실행 시점의 설정 시그니처 — 이후 설정이 바뀌면 결과에 "스테일" 배지 표시
+  const [ranSignature, setRanSignature] = useState<string | null>(null)
+  // 알림: 오류(빨강)와 안내(파랑)를 구분 — 성공 안내가 실패처럼 보이지 않게
+  const [notice, setNoticeState] = useState<{ text: string; kind: 'error' | 'info' } | null>(null)
+  const setNotice = (text: string | null, kind: 'error' | 'info' = 'error') =>
+    setNoticeState(text == null ? null : { text, kind })
   const [showReport, setShowReport] = useState(false)
   const [view, setView] = useState<'backtest' | 'history' | 'now' | 'guide'>('backtest')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -71,8 +77,14 @@ export default function App() {
   const updateStrategy = (id: string, updater: (s: StrategyConfig) => StrategyConfig) =>
     setStrategies((prev) => prev.map((s) => (s.id === id ? updater(s) : s)))
 
+  // 실행에 영향을 주는 전체 설정의 시그니처 (스테일 판정용)
+  const configSignature = useMemo(() => JSON.stringify({ shared, strategies }), [shared, strategies])
+  const resultsStale = runs != null && ranSignature != null && ranSignature !== configSignature
+
   const run = async (forceRefresh = false) => {
     setNotice(null)
+    // 다른 탭에서 실행해도 결과가 보이도록 백테스트 탭으로 전환
+    setView('backtest')
     if (strategies.length === 0) {
       setNotice('전략이 없습니다 — 전략을 추가하세요')
       return
@@ -99,6 +111,7 @@ export default function App() {
       })
       setBundle(b)
       setRuns(runComparison(applied, b))
+      setRanSignature(JSON.stringify({ shared, strategies }))
     } catch (err) {
       setNotice(err instanceof Error ? err.message : '백테스트 실패')
     } finally {
@@ -140,8 +153,19 @@ export default function App() {
         setNotice('설정 파일 형식이 올바르지 않습니다 (version 1 스키마 필요)')
         return
       }
+      if (parsed.strategies.length > MAX_STRATEGIES) {
+        setNotice(`전략은 최대 ${MAX_STRATEGIES}개까지 가져올 수 있습니다 (파일에 ${parsed.strategies.length}개)`)
+        return
+      }
+      // id 중복(수동 편집 파일 등)은 조용한 상태 오염을 일으키므로 재발급
+      const ids = new Set<string>()
+      const cleaned = parsed.strategies.map((s) => {
+        const id = !s.id || ids.has(s.id) ? nextId() : s.id
+        ids.add(id)
+        return { ...s, id }
+      })
       setShared({ ...defaultSharedSettings(), ...parsed.shared })
-      setStrategies(parsed.strategies)
+      setStrategies(cleaned)
       setRuns(null)
       setBundle(null)
       setNotice(null)
@@ -254,10 +278,16 @@ export default function App() {
       </header>
 
       <div className="max-w-7xl mx-auto px-3 py-4 sm:px-4 md:px-6 md:py-5 space-y-5">
-        {/* 알림 배너 */}
+        {/* 알림 배너 — 오류는 빨강, 안내는 파랑 */}
         {notice && (
-          <div className="flex items-center justify-between gap-2 bg-[#fdf1ef] dark:bg-[#231416] border-l-4 border-red-700 dark:border-red-500 rounded-lg px-4 py-3 text-sm text-red-800 dark:text-red-300">
-            <span>{notice}</span>
+          <div
+            className={`flex items-center justify-between gap-2 rounded-lg px-4 py-3 text-sm border-l-4 ${
+              notice.kind === 'error'
+                ? 'bg-[#fdf1ef] dark:bg-[#231416] border-red-700 dark:border-red-500 text-red-800 dark:text-red-300'
+                : 'bg-[#eef4ff] dark:bg-[#16223c] border-[#2962ff] text-zinc-800 dark:text-zinc-100'
+            }`}
+          >
+            <span>{notice.text}</span>
             <button onClick={() => setNotice(null)} className="p-1 hover:opacity-70 flex-shrink-0">
               <X className="w-4 h-4" />
             </button>
@@ -286,14 +316,14 @@ export default function App() {
             onExplore={(startDate, endDate, note, presetStrategies) => {
               if (presetStrategies) {
                 // 사용자가 만든 전략 목록을 덮어쓰는 동작 — 명시적 확인
-                if (!window.confirm('현재 전략 목록을 역사 자산 프리셋 3종으로 교체합니다. 계속할까요?\n(기존 전략이 필요하면 먼저 "설정 저장"으로 백업하세요)')) return
+                if (!window.confirm('현재 전략 목록을 역사 자산 프리셋 3종으로 교체합니다. 계속할까요?\n(기존 전략이 필요하면 먼저 상단의 내려받기(↓) 아이콘으로 JSON 백업하세요)')) return
                 setStrategies(presetStrategies)
                 setRuns(null)
                 setBundle(null)
               }
               setShared((p) => ({ ...p, startDate, endDate }))
               setView('backtest')
-              setNotice(note)
+              setNotice(note, 'info')
               window.scrollTo({ top: 0 })
             }}
           />
@@ -332,7 +362,7 @@ export default function App() {
                   setStrategies((prev) => {
                     const i = prev.findIndex((x) => x.id === s.id)
                     const copy: StrategyConfig = JSON.parse(JSON.stringify(s))
-                    copy.id = `${s.id}-copy-${prev.length}`
+                    copy.id = nextId() // 배열 길이 기반 id는 삭제 후 재복제 시 충돌 — UUID 사용
                     copy.name = `${s.name} (복사)`
                     return [...prev.slice(0, i + 1), copy, ...prev.slice(i + 1)]
                   })
@@ -348,7 +378,14 @@ export default function App() {
 
         {/* 결과 */}
         {runs && bundle && runs.length > 0 && (
-          <ResultsSection runs={runs} bundle={bundle} palette={palette} theme={theme} taxEnabled={shared.taxEnabled} />
+          <>
+            {resultsStale && (
+              <div className="bg-[#faf4e0] dark:bg-[#1d1a10] border-l-4 border-amber-700 dark:border-amber-500 rounded-lg px-4 py-3 text-sm text-amber-900 dark:text-amber-200/90">
+                설정이 변경되었습니다 — 아래 결과(와 보고서)는 <b>이전 설정 기준</b>입니다. "백테스트 실행"을 눌러 갱신하세요.
+              </div>
+            )}
+            <ResultsSection runs={runs} bundle={bundle} palette={palette} theme={theme} taxEnabled={shared.taxEnabled} />
+          </>
         )}
           </>
         )}

@@ -9,7 +9,7 @@ import { defaultTaxConfig } from './tax'
  * 전략 ID — UI 식별자(엔진 출력과 무관). 순번 카운터는 localStorage 복원 후
  * 리셋되어 기존 전략과 충돌하므로 UUID 사용.
  */
-function nextId(): string {
+export function nextId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
   return `strategy-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }

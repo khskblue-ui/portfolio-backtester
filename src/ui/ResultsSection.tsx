@@ -11,7 +11,7 @@ import {
 } from 'recharts'
 import { assetCautionFor, type StrategyRun, type AlignedDataBundle } from '@/core'
 import { HelpTip } from './HelpTip'
-import { cardCls, fmtUsd, fmtSignedUsd, fmtPct, fmtSignedPct } from './common'
+import { cardCls, fmtUsd, fmtSignedUsd, fmtPct, fmtSignedPct , uniqueRunLabels } from './common'
 
 /**
  * 결과 섹션 (§7) — TWRR 기준 정렬 비교표 + growth-of-$1 오버레이 +
@@ -39,11 +39,13 @@ export function ResultsSection({
     return m
   }, [runs, palette])
 
+  // 중복 이름 구분 라벨 — dataKey 충돌 방지 (id → 라벨)
+  const labelOf = useMemo(() => uniqueRunLabels(runs), [runs])
   const colorByName = useMemo(() => {
     const m = new Map<string, string>()
-    runs.forEach((r, i) => m.set(r.config.name, palette[i % palette.length]))
+    runs.forEach((r, i) => m.set(labelOf.get(r.config.id)!, palette[i % palette.length]))
     return m
-  }, [runs, palette])
+  }, [runs, palette, labelOf])
 
   // §7: TWRR 기준 정렬
   const sorted = useMemo(
@@ -63,15 +65,15 @@ export function ResultsSection({
         __contrib: runs[0][taxView].result.daily[i].cumContributions,
       }
       for (const r of runs) {
-        row[r.config.name] = Number(r[taxView].metrics.growthOf1[i].value.toFixed(4))
-        row[`${r.config.name}__value`] = r[taxView].result.daily[i].value
+        row[labelOf.get(r.config.id)!] = Number(r[taxView].metrics.growthOf1[i].value.toFixed(4))
+        row[`${labelOf.get(r.config.id)!}__value`] = r[taxView].result.daily[i].value
       }
       rows.push(row)
     }
     for (let i = 0; i < n; i += step) pushRow(i)
     if ((n - 1) % step !== 0) pushRow(n - 1)
     return rows
-  }, [runs, taxView])
+  }, [runs, taxView, labelOf])
 
   const engineWarnings = useMemo(() => {
     const agg: { name: string; code: string; count: number; first: string }[] = []
@@ -82,10 +84,10 @@ export function ResultsSection({
         if (e) e.count++
         else byCode.set(w.code, { count: 1, first: w.message })
       }
-      for (const [code, v] of byCode) agg.push({ name: r.config.name, code, count: v.count, first: v.first })
+      for (const [code, v] of byCode) agg.push({ name: labelOf.get(r.config.id)!, code, count: v.count, first: v.first })
     }
     return agg
-  }, [runs])
+  }, [runs, labelOf])
 
   // 지수/선물 등 "실매매 불가 자산" 가정 경고 (카탈로그 note + ^/=F 패턴)
   const assetCautions = useMemo(() => {
@@ -191,7 +193,7 @@ export function ResultsSection({
               <Line
                 key={r.config.id}
                 type="monotone"
-                dataKey={r.config.name}
+                dataKey={labelOf.get(r.config.id)!}
                 stroke={colorOf.get(r.config.id)}
                 strokeWidth={2}
                 dot={false}
@@ -279,7 +281,7 @@ export function ResultsSection({
                 <tr key={r.config.id} className="border-b border-[#e9edf4] dark:border-[#262b38] text-zinc-800 dark:text-zinc-200">
                   <td className="px-4 py-2.5 font-medium">
                     <span className="inline-block w-2.5 h-2.5 rounded-full mr-2" style={{ backgroundColor: colorOf.get(r.config.id) }} />
-                    {r.config.name}
+                    {labelOf.get(r.config.id)!}
                   </td>
                   <td className="text-right px-3 py-2.5 font-semibold">{fmtPct(m.twrrAnnualPct)}</td>
                   <td className="text-right px-3 py-2.5">{fmtPct(m.mwrrAnnualPct)}</td>
@@ -323,7 +325,7 @@ export function ResultsSection({
                 <div key={r.config.id} className="border border-[#dfe3ec] dark:border-[#2a2e39] rounded p-3">
                   <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
                     <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: colorOf.get(r.config.id) }} />
-                    {r.config.name}
+                    {labelOf.get(r.config.id)!}
                   </div>
                   <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100">−{drag.toFixed(2)}%p/년</div>
                   <div className="text-xs text-gray-400 mt-0.5">
@@ -350,7 +352,7 @@ export function ResultsSection({
               {sorted.map((r) => (
                 <th key={r.config.id} className="text-right px-3 py-3 font-medium">
                   <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: colorOf.get(r.config.id) }} />
-                  {r.config.name}
+                  {labelOf.get(r.config.id)!}
                 </th>
               ))}
             </tr>

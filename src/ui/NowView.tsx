@@ -163,7 +163,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
       },
       {
         title: 'CPI 인플레이션 (전년동월비)',
-        sub: '기준선 = 주의 3% · A형 본격화 5%',
+        sub: '기준선 = 3% (상승 추세 동반 시 주의; 3.5%+는 단독 주의) · A형 본격화 5%',
         color: theme === 'dark' ? '#f97316' : '#c2410c',
         data: mk(m.cpiYoY, live?.cpi && refs && live.cpi.ym > refs.ym ? { label: live.cpi.ym, v: cpiLive } : undefined),
         refs: [

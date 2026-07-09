@@ -1,9 +1,9 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts'
 import { Printer, X } from 'lucide-react'
 import type { StrategyRun, AlignedDataBundle, StrategyConfig } from '@/core'
 import { assetCautionFor } from '@/core'
-import { SERIES_COLORS_LIGHT, fmtUsd, fmtSignedUsd, fmtPct, type SharedSettings } from './common'
+import { SERIES_COLORS_LIGHT, fmtUsd, fmtSignedUsd, fmtPct, type SharedSettings , uniqueRunLabels } from './common'
 
 /**
  * 백테스트 결과 보고서 — 브라우저 인쇄(⌘/Ctrl+P → PDF 저장)로 생성.
@@ -21,10 +21,24 @@ export function ReportView({
   shared: SharedSettings
   onClose: () => void
 }) {
+  // 다른 모달과 동일한 닫기 규칙: ESC + 배경 스크롤 잠금
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = ''
+    }
+  }, [onClose])
+
   const sorted = useMemo(
     () => [...runs].sort((a, b) => b.postTax.metrics.twrrAnnualPct - a.postTax.metrics.twrrAnnualPct),
     [runs]
   )
+  const labelOf = useMemo(() => uniqueRunLabels(runs), [runs])
   const colorOf = useMemo(() => {
     const m = new Map<string, string>()
     runs.forEach((r, i) => m.set(r.config.id, SERIES_COLORS_LIGHT[i % SERIES_COLORS_LIGHT.length]))
@@ -37,11 +51,11 @@ export function ReportView({
     const rows: Record<string, string | number>[] = []
     for (let i = 0; i < n; i += step) {
       const row: Record<string, string | number> = { date: runs[0].postTax.metrics.growthOf1[i].date }
-      for (const r of runs) row[r.config.name] = Number(r.postTax.metrics.growthOf1[i].value.toFixed(4))
+      for (const r of runs) row[labelOf.get(r.config.id)!] = Number(r.postTax.metrics.growthOf1[i].value.toFixed(4))
       rows.push(row)
     }
     return rows
-  }, [runs])
+  }, [runs, labelOf])
 
   const period = `${bundle.dates[0]} ~ ${bundle.dates[bundle.dates.length - 1]}`
   const generatedAt = new Date().toISOString().slice(0, 10)
@@ -123,7 +137,7 @@ export function ReportView({
                 <tr key={r.config.id}>
                   <td className={`${tdCls} font-medium`}>
                     <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: colorOf.get(r.config.id) }} />
-                    {r.config.name}
+                    {labelOf.get(r.config.id)!}
                   </td>
                   <td className={`${tdCls} text-right font-semibold`}>{fmtPct(m.twrrAnnualPct)}</td>
                   <td className={`${tdCls} text-right`}>{fmtPct(m.mwrrAnnualPct)}</td>
@@ -140,14 +154,14 @@ export function ReportView({
 
         {/* 누적 수익률 차트 (라이트 고정) */}
         <h2 className="text-lg font-bold mb-2">누적 수익률 (TWRR{shared.taxEnabled ? ' · 세후' : ''})</h2>
-        <div className="mb-6 overflow-hidden">
+        <div className="mb-6 overflow-x-auto">
           <LineChart data={chartData} width={860} height={300} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
             <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#6b7280' }} stroke="#6b7280" minTickGap={60} tickFormatter={(d: string) => d.slice(0, 7)} />
             <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} stroke="#6b7280" width={48} domain={['auto', 'auto']} tickFormatter={(g: number) => `${g >= 1 ? '+' : ''}${((g - 1) * 100).toFixed(0)}%`} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             {runs.map((r) => (
-              <Line key={r.config.id} type="monotone" dataKey={r.config.name} stroke={colorOf.get(r.config.id)} strokeWidth={2} dot={false} isAnimationActive={false} />
+              <Line key={r.config.id} type="monotone" dataKey={labelOf.get(r.config.id)!} stroke={colorOf.get(r.config.id)} strokeWidth={2} dot={false} isAnimationActive={false} />
             ))}
           </LineChart>
         </div>

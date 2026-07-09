@@ -84,6 +84,27 @@ export const cardCls =
   'bg-white dark:bg-[#1e222d] rounded-xl border border-[#e0e3eb] dark:border-[#2a2e39] shadow-[0_1px_3px_rgba(19,23,34,0.04)] dark:shadow-none'
 /** 주 액션 버튼 — 프라이머리 블루 */
 export const btnPrimaryCls = 'btn-primary'
+
+/**
+ * 중복 전략 이름을 "이름 (2)"식으로 구분한 표시 라벨 (id → 라벨).
+ * recharts가 dataKey(이름)로 시리즈를 식별하므로 이름이 겹치면 뒤 전략이
+ * 앞 전략의 선을 덮어쓴다 — 차트·툴팁·표 전부 이 라벨을 쓰면 충돌이 없다.
+ */
+export function uniqueRunLabels(runs: { config: { id: string; name: string } }[]): Map<string, string> {
+  const counts = new Map<string, number>()
+  for (const r of runs) counts.set(r.config.name, (counts.get(r.config.name) ?? 0) + 1)
+  const seen = new Map<string, number>()
+  const out = new Map<string, string>()
+  for (const r of runs) {
+    const n = r.config.name
+    if ((counts.get(n) ?? 0) > 1) {
+      const k = (seen.get(n) ?? 0) + 1
+      seen.set(n, k)
+      out.set(r.config.id, `${n} (${k})`)
+    } else out.set(r.config.id, n)
+  }
+  return out
+}
 /** 보조 버튼 — 화이트 서피스 + 헤어라인 */
 export const btnGhostCls =
   'bg-white dark:bg-[#1e222d] border border-[#d3d8e3] dark:border-[#363a45] text-zinc-700 dark:text-zinc-300 hover:bg-[#edf1f7] dark:hover:bg-[#2a2e39]'

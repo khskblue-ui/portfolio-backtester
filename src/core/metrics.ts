@@ -36,7 +36,8 @@ export function computeMetrics(result: BacktestResult): Metrics {
 
   // TWRR 연환산 — 실제 경과 연수 기준
   const years = (Date.parse(daily[n - 1].date) - Date.parse(daily[0].date)) / (365.25 * 86_400_000)
-  const twrrAnnualPct = years > 0 && g > 0 ? (Math.pow(g, 1 / years) - 1) * 100 : 0
+  // g <= 0(전액 손실)이면 0%가 아니라 -100%/년 — MDD -100%와 모순되게 '무손실'로 읽히는 것 방지
+  const twrrAnnualPct = years > 0 ? (g > 0 ? (Math.pow(g, 1 / years) - 1) * 100 : -100) : 0
 
   // ── MDD & 최장 회복기간 (growth-of-$1 기준 — 6.2) ──
   // 회복기간은 달력일 기준: 전고점 날짜 → 그 아래에 머문 마지막 날짜의 실제 경과일.
