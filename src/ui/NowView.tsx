@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer } from 'recharts'
 import { NowPanel } from './NowPanel'
 import { assessNow, type LiveSnapshot } from './nowSignals'
 import { fetchLiveSnapshot } from './nowData'
@@ -13,6 +13,7 @@ import { cardCls } from './common'
 interface HistoryData {
   meta: { dataEnd: string; liveRefs?: { ym: string; sp500trMonthlyAvg: number | null; cpi: number; capeProxy: number | null; stockRealLast: number } }
   series: { dates: string[]; stock: number[] }
+  episodes: { peak: string; recovery: string | null }[]
   macro: {
     cpiYoY: (number | null)[]
     gs10: (number | null)[]
@@ -66,16 +67,16 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
   const tooltipLabelStyle = { fontSize: 12, fontWeight: 600, color: theme === 'dark' ? '#e4e4e7' : '#18181b' }
 
   // ── 신호별 흐름 시리즈 (번들 월간 + 라이브 최신점 1개 부착) ──
-  const charts = useMemo<ChartSpec[]>(() => {
-    if (!data) return []
+  const { charts, bands } = useMemo<{ charts: ChartSpec[]; bands: { x1: string; x2: string }[] }>(() => {
+    if (!data) return { charts: [], bands: [] }
     const { dates, stock } = data.series
     const m = data.macro
     const refs = data.meta.liveRefs
     const n = dates.length
 
     // 다운샘플 (차트당 ~500포인트) — 마지막 포인트는 항상 유지
+    const step = Math.max(1, Math.floor(n / 500))
     const mk = (arr: (number | null)[], liveTail?: { label: string; v: number | null }) => {
-      const step = Math.max(1, Math.floor(n / 500))
       const rows: { ym: string; v: number | null }[] = []
       for (let i = 0; i < n; i += step) rows.push({ ym: dates[i], v: arr[i] != null ? Number((arr[i] as number).toFixed(2)) : null })
       if ((n - 1) % step !== 0) rows.push({ ym: dates[n - 1], v: arr[n - 1] != null ? Number((arr[n - 1] as number).toFixed(2)) : null })
@@ -109,8 +110,15 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
     const spreadArr = dates.map((_, i) => (m.gs10[i] != null && m.tbill3m?.[i] != null ? (m.gs10[i] as number) - (m.tbill3m[i] as number) : null))
     const spreadLive = live?.gs10 && live?.tbill3m ? live.gs10.value - live.tbill3m.value : null
 
+    // 역사 하락 구간 음영 — 카테고리 축이라 다운샘플된 라벨로 스냅
+    const sampled: string[] = []
+    for (let i = 0; i < n; i += step) sampled.push(dates[i])
+    if ((n - 1) % step !== 0) sampled.push(dates[n - 1])
+    const snap = (ym: string) => sampled.find((d) => d >= ym) ?? sampled[sampled.length - 1]
+    const bands = data.episodes.map((e) => ({ x1: snap(e.peak), x2: snap(e.recovery ?? dates[n - 1]) }))
+
     const liveLabel = live?.stock?.date ?? live?.gs10?.date ?? '라이브'
-    return [
+    const charts: ChartSpec[] = [
       {
         title: '실질 전고점 대비 낙폭',
         sub: '음수 구간 진입선 = −25% (역사 7개 구간의 검출 기준)',
@@ -160,6 +168,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
         fmt: (v) => `${v.toFixed(2)}%p`,
       },
     ]
+    return { charts, bands }
 
     function lastOf(arr: (number | null)[]): number | null {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i] != null) return arr[i]
@@ -189,7 +198,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
         {charts.map((c) => (
           <div key={c.title} className={`${cardCls} p-4`}>
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{c.title}</h3>
-            <p className="text-[11px] text-zinc-400 mb-2">{c.sub} · 1900 ~ 현재</p>
+            <p className="text-[11px] text-zinc-400 mb-2">{c.sub} · 음영 = 역사 하락 구간 · 1900 ~ 현재</p>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={c.data} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" vertical={false} />
@@ -200,6 +209,9 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
                   labelStyle={tooltipLabelStyle}
                   contentStyle={tooltipContentStyle}
                 />
+                {bands.map((b) => (
+                  <ReferenceArea key={`${b.x1}-${b.x2}`} x1={b.x1} x2={b.x2} fill="rgba(227,73,72,0.10)" stroke="none" />
+                ))}
                 {c.refs.map((r) => (
                   <ReferenceLine
                     key={r.label}
