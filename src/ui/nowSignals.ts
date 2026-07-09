@@ -56,6 +56,8 @@ export interface LiveSnapshot {
   tbill3m?: { date: string; value: number }
   /** FRED CPIAUCNS 최신 발표월 (번들보다 새 달이면 갱신) */
   cpi?: { ym: string; value: number; yoy: number }
+  /** FRED DFII10 최신 일별 — 10년 TIPS 수익률 (사전적 실질금리) */
+  tips?: { date: string; value: number }
 }
 
 interface HistoryLike {
@@ -67,6 +69,7 @@ interface HistoryLike {
     cape: (number | null)[]
     capeProxy?: (number | null)[]
     tbill3m?: (number | null)[]
+    tips10?: (number | null)[]
   }
   meta: { dataEnd: string; liveRefs?: { ym: string; cpi: number; capeProxy: number | null; stockRealLast: number } }
 }
@@ -162,25 +165,57 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
         : '데이터 없음',
   })
 
-  // ── 4. 실질금리 (원인 구분 포함) ──
-  const rrV = gs10V != null && cpiV != null ? gs10V - cpiV : null
+  // ── 4. 실질금리 — 사전적(TIPS)을 주 지표로, 사후적은 역사 표지판으로 병기 ──
+  // 사후적(GS10 − 후행 CPI) = 1900년대까지 비교 가능한 '체제 표지판'. 그러나 시장이
+  // 할인율로 쓰는 건 사전적(TIPS) — 2022년엔 사후적이 −6%로 추락하는 동안 사전적이
+  // −1%→+1.7%로 급등하며 주가를 눌렀다. 두 지표의 괴리 자체가 정보다:
+  // 괴리 = 실현 인플레 − 기대 인플레 → 시장이 현 인플레를 일시적으로 보는지의 척도.
+  const rrV = gs10V != null && cpiV != null ? gs10V - cpiV : null // 사후적
+  const tipsV = live.tips ? live.tips.value : m.tips10 ? latest(m.tips10)?.v ?? null : null // 사전적
+  const tipsAsOf = live.tips ? live.tips.date : dates[n]
   let rrLevel: SignalLevel = 'ok'
-  let rrCause = ''
-  if (rrV != null && cpiV != null) {
-    if (rrV < 0 && cpiV >= 3.5) { rrLevel = 'alert'; rrCause = '인플레발 마이너스 — 1946·1973년형 (주식·채권에 역사적 악재)' }
-    else if (rrV < 0) { rrLevel = 'watch'; rrCause = '완화발 마이너스 — 2009~2021년형 (자산가격엔 순풍이나 과열 배양)' }
-    else if (rrV < 1) { rrLevel = 'watch'; rrCause = '양수지만 압축 중 — 인플레이션이 금리보다 빨리 오르는 국면' }
-    else rrCause = '충분한 양수 — 인플레이션형 체제와 거리'
+  const rrNotes: string[] = []
+  // (a) A형 표지판: 사후적 마이너스 + 고인플레 = 1946·1973년과 같은 인플레 쇼크 마커
+  if (rrV != null && cpiV != null && rrV < 0 && cpiV >= 3.5) {
+    rrLevel = 'alert'
+    rrNotes.push('사후적 마이너스 + 고인플레 = 1946·1973년형 인플레 쇼크의 표지판')
+  } else if (rrV != null && rrV < 1 && cpiV != null && cpiV >= 3) {
+    rrLevel = 'watch'
+    rrNotes.push('실현 인플레이션이 명목금리보다 빨리 오르며 사후적 실질금리가 압축되는 국면')
+  } else if (rrV != null && rrV < 0) {
+    rrLevel = 'watch'
+    rrNotes.push('사후적 마이너스(저인플레) — 완화발 성격: 자산가격엔 순풍이나 과열을 배양(2010년대형)')
   }
+  // (b) 사전적(TIPS) 스탠스: 시장의 실제 할인율
+  if (tipsV != null) {
+    if (tipsV >= 2.5) {
+      rrLevel = rrLevel === 'alert' ? 'alert' : 'watch'
+      rrNotes.push(`TIPS ${tipsV.toFixed(2)}% = 긴축적 실질 할인율 — 고밸류에이션과 결합 시 멀티플 압박(2022년형 채널)`)
+    } else if (tipsV < 0) {
+      rrLevel = rrLevel === 'alert' ? 'alert' : 'watch'
+      rrNotes.push(`TIPS ${tipsV.toFixed(2)}% = 초완화 — 자산가격엔 순풍이나 과열을 배양(2020-21년형)`)
+    }
+    // (c) 괴리 해석
+    if (rrV != null && tipsV - rrV > 1) {
+      rrNotes.push(`사전-사후 괴리 +${(tipsV - rrV).toFixed(1)}%p — 시장은 현재 인플레이션을 일시적으로 판단 중(기대 인플레 ≈ 브레이크이븐). 이 기대가 틀리면 금리 재가격 위험`)
+    }
+  }
+  if (rrNotes.length === 0) rrNotes.push('사전적·사후적 모두 중립 범위 — 인플레이션형 체제와 거리')
   signals.push({
     key: 'realRate',
-    label: '실질 10년 금리 (명목 − 인플레)',
-    value: rrV != null ? `${rrV >= 0 ? '+' : ''}${rrV.toFixed(2)}%p` : '—',
+    label: '실질 10년 금리 (사전적 TIPS · 사후적)',
+    value:
+      tipsV != null && rrV != null
+        ? `TIPS ${tipsV >= 0 ? '+' : ''}${tipsV.toFixed(2)}% · 사후 ${rrV >= 0 ? '+' : ''}${rrV.toFixed(2)}%`
+        : rrV != null
+          ? `사후 ${rrV >= 0 ? '+' : ''}${rrV.toFixed(2)}%p`
+          : '—',
     level: rrLevel,
-    asOf: `금리 ${gs10AsOf} · CPI ${cpiAsOf}`,
-    reason: rrV != null
-      ? `${rrCause}. 역사 기준: A형 구간에선 실질금리가 마이너스로 매몰(1946년 −15%, 1974년 −5%대), 볼커 긴축 후 +4% 이상으로 회복되며 인플레형 종료.`
-      : '데이터 없음',
+    asOf: tipsV != null && live.tips ? `TIPS ${tipsAsOf} · CPI ${cpiAsOf}` : `금리 ${gs10AsOf} · CPI ${cpiAsOf}`,
+    reason:
+      rrV != null || tipsV != null
+        ? `${rrNotes.join('. ')}. 주의: 실질금리는 하락의 "원인"이 아니라 체제의 표지판입니다 — 실제 전달 경로는 긴축(실제·기대)·마진 압박·불확실성 프리미엄·화폐 착시이며, 인플레 구간에서도 주식은 채권·현금보다 나은(명목자산 중 최선의) 자산이었습니다(1946 회복시 실질: 주식 +3% vs 채권 −19%·현금 −22%).`
+        : '데이터 없음',
   })
 
   // ── 5. 장단기 금리차 (10y − 3m) ──

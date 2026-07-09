@@ -21,6 +21,7 @@ interface HistoryData {
     cape: (number | null)[]
     capeProxy?: (number | null)[]
     tbill3m?: (number | null)[]
+    tips10?: (number | null)[]
   }
 }
 
@@ -28,8 +29,12 @@ interface ChartSpec {
   title: string
   sub: string
   color: string
-  data: { ym: string; v: number | null }[]
+  /** v = 주 시리즈, v2 = 보조 시리즈 (선택) */
+  data: { ym: string; v: number | null; v2?: number | null }[]
   refs: { y: number; label: string; danger?: boolean }[]
+  /** 시리즈 이름 (범례·툴팁) — v2가 있을 때 필수 */
+  names?: [string, string]
+  color2?: string
   /** y 값 포맷 */
   fmt: (v: number) => string
   domain?: [number | 'auto', number | 'auto']
@@ -76,11 +81,12 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
 
     // 다운샘플 (차트당 ~500포인트) — 마지막 포인트는 항상 유지
     const step = Math.max(1, Math.floor(n / 500))
-    const mk = (arr: (number | null)[], liveTail?: { label: string; v: number | null }) => {
-      const rows: { ym: string; v: number | null }[] = []
-      for (let i = 0; i < n; i += step) rows.push({ ym: dates[i], v: arr[i] != null ? Number((arr[i] as number).toFixed(2)) : null })
-      if ((n - 1) % step !== 0) rows.push({ ym: dates[n - 1], v: arr[n - 1] != null ? Number((arr[n - 1] as number).toFixed(2)) : null })
-      if (liveTail && liveTail.v != null) rows.push({ ym: liveTail.label, v: Number(liveTail.v.toFixed(2)) })
+    const mk = (arr: (number | null)[], liveTail?: { label: string; v: number | null }, arr2?: (number | null)[], liveTail2?: number | null) => {
+      const rows: { ym: string; v: number | null; v2?: number | null }[] = []
+      const round2 = (x: number | null | undefined) => (x != null ? Number(x.toFixed(2)) : null)
+      for (let i = 0; i < n; i += step) rows.push({ ym: dates[i], v: round2(arr[i]), ...(arr2 ? { v2: round2(arr2[i]) } : {}) })
+      if ((n - 1) % step !== 0) rows.push({ ym: dates[n - 1], v: round2(arr[n - 1]), ...(arr2 ? { v2: round2(arr2[n - 1]) } : {}) })
+      if (liveTail && liveTail.v != null) rows.push({ ym: liveTail.label, v: round2(liveTail.v), ...(arr2 ? { v2: round2(liveTail2) } : {}) })
       return rows
     }
 
@@ -102,9 +108,10 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
     // 3) CPI YoY (+ 라이브 새 발표월)
     const cpiLive = live?.cpi && refs && live.cpi.ym > refs.ym ? live.cpi.yoy : null
 
-    // 4) 실질금리
+    // 4) 실질금리 — 사후적(1900~) + 사전적 TIPS(2003~)
     const lastYoY = cpiLive ?? lastOf(m.cpiYoY)
     const rrLive = live?.gs10 && lastYoY != null ? live.gs10.value - lastYoY : null
+    const tipsLive = live?.tips ? live.tips.value : null
 
     // 5) 장단기 금리차
     const spreadArr = dates.map((_, i) => (m.gs10[i] != null && m.tbill3m?.[i] != null ? (m.gs10[i] as number) - (m.tbill3m[i] as number) : null))
@@ -152,10 +159,12 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
         fmt: (v) => `${v.toFixed(1)}%`,
       },
       {
-        title: '실질 10년 금리 (명목 − 인플레)',
-        sub: '0 아래 = 실질 마이너스 (원인이 인플레발이면 A형 신호)',
+        title: '실질 10년 금리 — 사후적(1900~) vs 사전적 TIPS(2003~)',
+        sub: '사후적(GS10−후행CPI) = 역사 비교용 표지판 · TIPS = 시장의 실질 할인율. 2022년처럼 둘이 갈릴 때는 TIPS가 주가를 설명',
         color: theme === 'dark' ? '#a78bfa' : '#7c3aed',
-        data: mk(m.realRate10, { label: liveLabel, v: rrLive }),
+        color2: theme === 'dark' ? '#34d399' : '#059669',
+        names: ['사후적 (GS10−CPI)', 'TIPS 사전적'],
+        data: mk(m.realRate10, { label: liveLabel, v: rrLive }, m.tips10 ?? undefined, tipsLive),
         refs: [{ y: 0, label: '0', danger: true }],
         fmt: (v) => `${v.toFixed(1)}%p`,
       },
@@ -205,7 +214,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
                 <XAxis dataKey="ym" tick={{ fontSize: 10, fill: axisTickColor }} stroke={axisTickColor} minTickGap={55} tickFormatter={(d: string) => d.slice(0, 4)} />
                 <YAxis tick={{ fontSize: 10, fill: axisTickColor }} stroke={axisTickColor} width={42} domain={c.domain ?? ['auto', 'auto']} />
                 <Tooltip
-                  formatter={(v) => [c.fmt(Number(v)), c.title]}
+                  formatter={(v, name) => [c.fmt(Number(v)), c.names ? String(name) : c.title]}
                   labelStyle={tooltipLabelStyle}
                   contentStyle={tooltipContentStyle}
                 />
@@ -222,7 +231,8 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
                     label={{ value: r.label, position: 'insideTopRight', fontSize: 10, fill: r.danger ? '#dc2626' : axisTickColor }}
                   />
                 ))}
-                <Line type="monotone" dataKey="v" stroke={c.color} strokeWidth={1.6} dot={false} connectNulls />
+                <Line type="monotone" dataKey="v" name={c.names?.[0] ?? c.title} stroke={c.color} strokeWidth={1.6} dot={false} connectNulls />
+                {c.names && <Line type="monotone" dataKey="v2" name={c.names[1]} stroke={c.color2} strokeWidth={1.8} dot={false} connectNulls />}
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -230,7 +240,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
       </div>
 
       <p className="text-[11px] text-zinc-400 leading-relaxed">
-        소스·실시간성 — 주가: ^SP500TR 일별 종가(야후, 전일까지) · 금리: FRED DGS10·DTB3 일별(전일까지) · CPI: FRED CPIAUCNS
+        소스·실시간성 — 주가: ^SP500TR 일별 종가(야후, 전일까지) · 금리: FRED DGS10·DTB3·DFII10(TIPS) 일별(전일까지) · CPI: FRED CPIAUCNS
         최신 발표월(통상 1~2개월 지연) · 과거 흐름: 검증된 번들 데이터(1900~{data.meta.dataEnd}, 월평균). 라이브 값은 번들
         기준값 대비 비율로 체인되며 3시간 캐시됩니다. CAPE는 2023-06 이후 프록시(근사) — 카드의 판정 이유 참조.
       </p>

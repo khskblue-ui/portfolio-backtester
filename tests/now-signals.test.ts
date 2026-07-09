@@ -55,13 +55,28 @@ describe('신호 규칙 경계', () => {
     expect(a.signals.find((s) => s.key === 'inflation')!.value).toContain('↑')
   })
 
-  it('실질금리: 인플레발 마이너스 = 경계, 완화발 마이너스 = 주의', () => {
+  it('실질금리(사후적 폴백): 인플레 쇼크 표지판 = 경계, 완화발 마이너스 = 주의', () => {
     const infDriven = assessNow(mkHistory({ cpiYoY: Array(24).fill(6), gs10: Array(24).fill(4) }))
     expect(infDriven.signals.find((s) => s.key === 'realRate')!.level).toBe('alert')
-    expect(infDriven.signals.find((s) => s.key === 'realRate')!.reason).toContain('인플레발')
+    expect(infDriven.signals.find((s) => s.key === 'realRate')!.reason).toContain('표지판')
     const easing = assessNow(mkHistory({ cpiYoY: Array(24).fill(1.5), gs10: Array(24).fill(1.0) }))
     expect(easing.signals.find((s) => s.key === 'realRate')!.level).toBe('watch')
     expect(easing.signals.find((s) => s.key === 'realRate')!.reason).toContain('완화발')
+  })
+
+  it('실질금리(TIPS 사전적): 긴축적 수준·초완화·괴리 해석', () => {
+    // TIPS 2.8% = 긴축적 할인율 → 주의 + 2022년형 채널 언급
+    const tight = assessNow(mkHistory({}), { tips: { date: '2026-07-08', value: 2.8 } })
+    const t = tight.signals.find((s) => s.key === 'realRate')!
+    expect(t.level).toBe('watch')
+    expect(t.reason).toContain('2022년형')
+    expect(t.value).toContain('TIPS +2.80%')
+    // TIPS −1% = 초완화 → 주의
+    const easy = assessNow(mkHistory({}), { tips: { date: '2026-07-08', value: -1.0 } })
+    expect(easy.signals.find((s) => s.key === 'realRate')!.reason).toContain('초완화')
+    // 사후 +0.3 vs TIPS +2.2 괴리 → '일시적으로 판단' 해석 노출 (2026년 현재 케이스)
+    const div = assessNow(mkHistory({ cpiYoY: Array(24).fill(4.3), gs10: Array(24).fill(4.55) }), { tips: { date: '2026-07-08', value: 2.2 } })
+    expect(div.signals.find((s) => s.key === 'realRate')!.reason).toContain('일시적으로 판단')
   })
 
   it('장단기 역전 = 경계', () => {

@@ -18,7 +18,7 @@ interface LiveRefs {
   cpi: number
 }
 
-const CACHE_KEY = 'bt_now_live_v1'
+const CACHE_KEY = 'bt_now_live_v2'
 const CACHE_TTL_MS = 3 * 60 * 60 * 1000
 
 interface CacheEntry {
@@ -117,6 +117,14 @@ export async function fetchLiveSnapshot(refs: LiveRefs): Promise<LiveSnapshot | 
         if (last) snap.tbill3m = { date: last[0], value: last[1] }
       } catch { /* 폴백 */ }
     })(),
+    // DFII10 일별 — 10년 TIPS (사전적 실질금리)
+    (async () => {
+      try {
+        const rows = await fetchFred('DFII10', monthStart)
+        const last = rows[rows.length - 1]
+        if (last) snap.tips = { date: last[0], value: last[1] }
+      } catch { /* 폴백 */ }
+    })(),
     // CPIAUCNS 월간 — YoY 계산 위해 14개월 조회
     (async () => {
       try {
@@ -133,7 +141,7 @@ export async function fetchLiveSnapshot(refs: LiveRefs): Promise<LiveSnapshot | 
     })(),
   ])
 
-  if (!snap.stock && !snap.gs10 && !snap.tbill3m && !snap.cpi) return null
+  if (!snap.stock && !snap.gs10 && !snap.tbill3m && !snap.cpi && !snap.tips) return null
   writeCache(refs.ym, snap)
   return snap
 }
