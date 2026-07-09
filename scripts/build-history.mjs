@@ -220,6 +220,7 @@ for (const r of extRows) pushMonth({ ym: r.ym, tr: r.tr, gs10: r.gs10, cpi: r.cp
 
 // 실질 시리즈: 명목 × (기말 CPI 스케일이 아니라 비율만 중요 — 1900=100 정규화라 CPI_t 역수로 충분)
 const lastCpi = cpiSeries[cpiSeries.length - 1]
+const tbill3m = [] // 3개월 단기금리 (%) — 장단기 금리차 신호용 (1934~ TB3MS, 이전 상업어음)
 for (let i = 0; i < dates.length; i++) {
   const defl = lastCpi / cpiSeries[i] // 실질(기말 물가 기준)
   stock.push(stockNom[i] * defl)
@@ -230,6 +231,27 @@ for (let i = 0; i < dates.length; i++) {
   const yoy = i >= 12 ? (cpiSeries[i] / cpiSeries[i - 12] - 1) * 100 : null
   cpiYoY.push(yoy != null ? yoy : null)
   realRate10.push(yoy != null ? gs10Arr[i] - yoy : null)
+  tbill3m.push(shortRate(dates[i]))
+}
+
+// CAPE 프록시 — 미러의 이익 데이터가 끝난 2023-06 이후를 근사로 연장:
+// 프록시 = 마지막 실측 CAPE × 실질가격 변화율. 실질가격 ≈ 실질 TR ÷ (1+배당수익률)^t
+// (배당 재투자분 제거, 최근 S&P 배당수익률 ~1.3%/년 상수 가정), 분모의 10년 평균
+// 실질이익은 장기 추세(연 ~2%) 성장 가정. 검증: 딥리서치 확정치(2026 초 CAPE ~41)와
+// 대조 어서션 — 근사이므로 UI에 '프록시' 라벨 필수
+const capeProxy = []
+{
+  let lastCapeI = -1
+  for (let i = 0; i < dates.length; i++) if (capeArr[i] != null) lastCapeI = i
+  const DIV_YIELD = 0.013
+  const E10_GROWTH = 0.02
+  for (let i = 0; i < dates.length; i++) {
+    if (capeArr[i] != null) { capeProxy.push(capeArr[i]); continue }
+    if (i < lastCapeI || lastCapeI < 0) { capeProxy.push(null); continue }
+    const years = (i - lastCapeI) / 12
+    const priceRatio = (stock[i] / stock[lastCapeI]) / Math.pow(1 + DIV_YIELD, years)
+    capeProxy.push(capeArr[lastCapeI] * priceRatio / Math.pow(1 + E10_GROWTH, years))
+  }
 }
 
 // 1900-01 = 100 정규화
@@ -324,6 +346,7 @@ assert(at(realRate10, '1984-06') > 4, `실질금리 1984-06 = ${at(realRate10, '
 // 연장 구간 앵커: 2022 인플레 급등이 반영됐는지 + 최근 금리가 실측 범위인지
 assert(at(cpiYoY, '2022-06') > 8, `CPI YoY 2022-06 = ${at(cpiYoY, '2022-06')} (>8% 기대)`)
 assert(at(gs10Arr, '2026-05') > 3.5 && at(gs10Arr, '2026-05') < 5.5, `GS10 2026-05 = ${at(gs10Arr, '2026-05')}`)
+assert(at(capeProxy, '2026-01') > 37 && at(capeProxy, '2026-01') < 47, `CAPE 프록시 2026-01 = ${at(capeProxy, '2026-01')} (딥리서치 확정치 ~41 ±)`)
 // 현금(단기채) 앵커: 명목 지수는 단조 증가(금리 ≥ 0), 1981년 전후 실질 강세 전환
 for (let i = baseI + 1; i < dates.length; i++) assert(billNomN[i] >= billNomN[i - 1] - 1e-9, `현금 명목 지수 역행 ${dates[i]}`)
 console.log('\n앵커 검증 통과: 구간·CAPE·GS10·CPI·실질금리·연장(2022 인플레, 2026 금리)·현금 단조성 ✓')
@@ -344,7 +367,7 @@ const out = {
       bond: '미 10년물(GS10) 수익률 파생 만기고정 근사 총수익 — 실제 채권지수 아님',
       gold: '금 현물가 (배당 없음). 1933-1974 미국 민간 금보유 금지·공정가 시대 주의',
       bill: '단기국채(현금): 3개월 T-bill(1934~) + NBER 상업어음 NY(1871~1933 접합 — 신용 프리미엄만큼 소폭 높음) 월할 복리',
-      macro: 'cpiYoY = 직전 12개월 CPI 상승률(2025-10 결측 1개월 선형보간), realRate10 = GS10 − cpiYoY (사후적 근사), cape = Shiller PE10(1881~2023-06, 이후 이익 데이터 부재로 결측)',
+      macro: 'cpiYoY = 직전 12개월 CPI 상승률(2025-10 결측 1개월 선형보간), realRate10 = GS10 − cpiYoY (사후적 근사), cape = Shiller PE10(1881~2023-06, 이후 이익 데이터 부재로 결측), capeProxy = 이후 실질가격 변화 연장 근사(배당수익률 1.3%·E10 성장 2%/년 가정 — 라벨 필수), tbill3m = 3개월 단기금리',
       base: '1900-01 = 100 · 실질 = CPI-U(NSA) 디플레이트',
     },
     dataEnd: dates[dates.length - 1],
@@ -366,6 +389,8 @@ const out = {
     gs10: round(gs10Arr.slice(baseI), 2),
     realRate10: round(realRate10.slice(baseI), 2),
     cape: round(capeArr.slice(baseI), 2),
+    capeProxy: round(capeProxy.slice(baseI), 2),
+    tbill3m: round(tbill3m.slice(baseI), 2),
   },
   episodes: episodes.map((e) => ({
     peak: e.peak,

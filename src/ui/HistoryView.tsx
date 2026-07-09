@@ -14,6 +14,8 @@ import {
 import { FlaskConical, CalendarRange, BookOpen } from 'lucide-react'
 import { HelpTip } from './HelpTip'
 import { EraStoryModal } from './EraStoryModal'
+import { NowPanel } from './NowPanel'
+import { assessNow } from './nowSignals'
 import { ERA_STORIES } from './eraStories'
 import { cardCls, btnGhostCls, fmtSignedPct } from './common'
 import { histEraStrategies, type StrategyConfig } from '@/core'
@@ -57,6 +59,8 @@ interface HistoryData {
     gs10: (number | null)[]
     realRate10: (number | null)[]
     cape: (number | null)[]
+    capeProxy?: (number | null)[]
+    tbill3m?: (number | null)[]
   }
   episodes: Episode[]
 }
@@ -214,6 +218,9 @@ export function HistoryView({
 
   return (
     <div className="space-y-5">
+      {/* 지금은? — 최신 데이터 vs 역사 선행조건 체크리스트 */}
+      <NowPanel assessment={assessNow(data)} />
+
       {/* 전체 총수익 + 음수 구간 밴드 */}
       <div className={`${cardCls} p-4 sm:p-5`}>
         <div className="flex items-start justify-between flex-wrap gap-2">

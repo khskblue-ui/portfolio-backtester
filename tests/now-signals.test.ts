@@ -1,0 +1,98 @@
+/**
+ * "지금은?" 신호 판정 검증 — 규칙 경계 + 실제 번들 데이터에 대한 정합성
+ */
+
+import { describe, it, expect } from 'vitest'
+import { assessNow } from '../src/ui/nowSignals'
+
+function mkHistory(over: {
+  stock?: number[]
+  cpiYoY?: (number | null)[]
+  gs10?: (number | null)[]
+  cape?: (number | null)[]
+  tbill3m?: (number | null)[]
+}) {
+  const n = over.stock?.length ?? 24
+  const dates = Array.from({ length: n }, (_, i) => `${2024 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`)
+  const stock = over.stock ?? Array.from({ length: n }, (_, i) => 100 + i)
+  const cpiYoY = over.cpiYoY ?? Array(n).fill(2.0)
+  const gs10 = over.gs10 ?? Array(n).fill(4.0)
+  const cape = over.cape ?? Array(n).fill(20)
+  const realRate10 = gs10.map((g, i) => (g != null && cpiYoY[i] != null ? (g as number) - (cpiYoY[i] as number) : null))
+  return {
+    series: { dates, stock },
+    macro: { cpiYoY, gs10, realRate10, cape, capeProxy: cape, tbill3m: over.tbill3m ?? Array(n).fill(3.5) },
+    meta: { dataEnd: dates[n - 1] },
+  }
+}
+
+describe('신호 규칙 경계', () => {
+  it('신고점 + 저밸류 + 저인플레 = 전부 양호', () => {
+    const a = assessNow(mkHistory({}))
+    expect(a.signals.find((s) => s.key === 'market')!.level).toBe('ok')
+    expect(a.signals.find((s) => s.key === 'valuation')!.level).toBe('ok')
+    expect(a.signals.find((s) => s.key === 'inflation')!.level).toBe('ok')
+    expect(a.headline).toContain('뚜렷하지 않음')
+  })
+
+  it('실질 낙폭 −25% 초과 = 시장 경계 (구간 검출과 동일 잣대)', () => {
+    const stock = [...Array(12).fill(100), ...Array(12).fill(70)] // −30%
+    const a = assessNow(mkHistory({ stock }))
+    expect(a.signals.find((s) => s.key === 'market')!.level).toBe('alert')
+    expect(a.headline).toContain('한복판')
+  })
+
+  it('CAPE 32 이상 = 경계 (1929 시작 수준), 24 이상 = 주의 (1968 수준)', () => {
+    expect(assessNow(mkHistory({ cape: Array(24).fill(33) })).signals.find((s) => s.key === 'valuation')!.level).toBe('alert')
+    expect(assessNow(mkHistory({ cape: Array(24).fill(25) })).signals.find((s) => s.key === 'valuation')!.level).toBe('watch')
+  })
+
+  it('인플레 5% 이상 = 경계, 3%+상승 추세 = 주의 (1968년형 이륙)', () => {
+    expect(assessNow(mkHistory({ cpiYoY: Array(24).fill(5.5) })).signals.find((s) => s.key === 'inflation')!.level).toBe('alert')
+    const rising = [...Array(18).fill(2.2), 2.5, 2.8, 3.0, 3.2, 3.3, 3.4]
+    const a = assessNow(mkHistory({ cpiYoY: rising }))
+    expect(a.signals.find((s) => s.key === 'inflation')!.level).toBe('watch')
+    expect(a.signals.find((s) => s.key === 'inflation')!.value).toContain('↑')
+  })
+
+  it('실질금리: 인플레발 마이너스 = 경계, 완화발 마이너스 = 주의', () => {
+    const infDriven = assessNow(mkHistory({ cpiYoY: Array(24).fill(6), gs10: Array(24).fill(4) }))
+    expect(infDriven.signals.find((s) => s.key === 'realRate')!.level).toBe('alert')
+    expect(infDriven.signals.find((s) => s.key === 'realRate')!.reason).toContain('인플레발')
+    const easing = assessNow(mkHistory({ cpiYoY: Array(24).fill(1.5), gs10: Array(24).fill(1.0) }))
+    expect(easing.signals.find((s) => s.key === 'realRate')!.level).toBe('watch')
+    expect(easing.signals.find((s) => s.key === 'realRate')!.reason).toContain('완화발')
+  })
+
+  it('장단기 역전 = 경계', () => {
+    const a = assessNow(mkHistory({ gs10: Array(24).fill(3.0), tbill3m: Array(24).fill(4.0) }))
+    expect(a.signals.find((s) => s.key === 'curve')!.level).toBe('alert')
+  })
+
+  it('고밸류 + 인플레 이륙 = 1968년형 아날로그', () => {
+    const rising = [...Array(18).fill(2.2), 2.5, 2.8, 3.0, 3.4, 3.8, 4.3]
+    const a = assessNow(mkHistory({ cape: Array(24).fill(42), cpiYoY: rising }))
+    expect(a.analog).toContain('1968')
+  })
+})
+
+describe('실제 번들 데이터 정합성', async () => {
+  const { readFileSync } = await import('node:fs')
+  const h = JSON.parse(readFileSync(new URL('../public/data/history.json', import.meta.url), 'utf8'))
+
+  it('기준월 = dataEnd, 신호 5종 모두 판정 존재', () => {
+    const a = assessNow(h)
+    expect(a.asOf).toBe(h.meta.dataEnd)
+    expect(a.signals).toHaveLength(5)
+    for (const s of a.signals) {
+      expect(['ok', 'watch', 'alert']).toContain(s.level)
+      expect(s.reason.length).toBeGreaterThan(20)
+    }
+  })
+
+  it('CAPE 프록시가 딥리서치 검증 범위(2026 초 ~41)와 정합', () => {
+    const i = h.series.dates.indexOf('2026-01')
+    expect(h.macro.capeProxy[i]).toBeGreaterThan(37)
+    expect(h.macro.capeProxy[i]).toBeLessThan(47)
+  })
+})
