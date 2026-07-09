@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, TrendingUp, X, FileText, BarChart3, Landmark, Activity } from 'lucide-react'
+import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, TrendingUp, X, FileText, BarChart3, Landmark, Activity, GraduationCap } from 'lucide-react'
 import {
   loadDataBundle,
   runComparison,
@@ -29,6 +29,7 @@ import { ResultsSection } from '@/ui/ResultsSection'
 import { ReportView } from '@/ui/ReportView'
 import { HistoryView } from '@/ui/HistoryView'
 import { NowView } from '@/ui/NowView'
+import { GuideView } from '@/ui/GuideView'
 
 type Theme = 'light' | 'dark'
 
@@ -64,7 +65,7 @@ export default function App() {
   const [bundle, setBundle] = useState<AlignedDataBundle | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [showReport, setShowReport] = useState(false)
-  const [view, setView] = useState<'backtest' | 'history' | 'now'>('backtest')
+  const [view, setView] = useState<'backtest' | 'history' | 'now' | 'guide'>('backtest')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const updateStrategy = (id: string, updater: (s: StrategyConfig) => StrategyConfig) =>
@@ -162,24 +163,25 @@ export default function App() {
               {/* 좁은 화면에선 내비 공간 확보를 위해 로고 텍스트 생략 */}
               <h1 className="max-[479px]:hidden text-[15px] sm:text-base font-bold tracking-tight whitespace-nowrap">포트폴리오 백테스터</h1>
             </div>
-            <nav className="flex items-center gap-3.5 sm:gap-6">
+            <nav className="flex items-center gap-3 sm:gap-6 overflow-x-auto">
               {(
                 [
                   { key: 'backtest', label: '백테스트', Icon: BarChart3 },
                   { key: 'history', label: '역사 연구', Icon: Landmark },
                   { key: 'now', label: '현재 신호', Icon: Activity },
+                  { key: 'guide', label: '기초 가이드', Icon: GraduationCap },
                 ] as const
               ).map(({ key, label, Icon }) => (
                 <button
                   key={key}
                   onClick={() => setView(key)}
-                  className={`flex items-center gap-1.5 py-2 text-[15px] whitespace-nowrap transition-colors ${
+                  className={`flex items-center gap-1.5 py-2 text-[13.5px] min-[480px]:text-[15px] whitespace-nowrap transition-colors ${
                     view === key
                       ? 'font-bold text-zinc-900 dark:text-white'
                       : 'font-medium text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${view === key ? 'text-[#2962ff]' : ''}`} />
+                  <Icon className={`hidden min-[480px]:block w-4 h-4 ${view === key ? 'text-[#2962ff]' : ''}`} />
                   {label}
                 </button>
               ))}
@@ -261,6 +263,20 @@ export default function App() {
             </button>
           </div>
         )}
+
+        {/* 역사·신호 탭 상단: 용어 가이드 진입점 */}
+        {(view === 'history' || view === 'now') && (
+          <div className="flex justify-end">
+            <button
+              onClick={() => setView('guide')}
+              className="flex items-center gap-1 text-[11px] text-zinc-400 dark:text-zinc-500 hover:text-[#2962ff] dark:hover:text-[#5b8aff]"
+            >
+              <GraduationCap className="w-3.5 h-3.5" /> 용어가 어렵다면 — 기초 가이드 (실질·TIPS·CAPE 등 4단계 학습)
+            </button>
+          </div>
+        )}
+
+        {view === 'guide' && <GuideView onNavigate={setView} />}
 
         {view === 'now' && <NowView theme={theme} />}
 
