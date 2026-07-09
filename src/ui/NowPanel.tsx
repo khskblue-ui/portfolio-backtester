@@ -24,7 +24,7 @@ export function NowPanel({ assessment }: { assessment: NowAssessment }) {
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
           <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
-            NOW · SIGNAL CHECK · 기준 {a.asOf}
+            NOW · SIGNAL CHECK · {a.live ? `라이브 · 주가 기준 ${a.asOf}` : `번들 기준 ${a.asOf}`}
           </span>
           <span className="flex items-center gap-1.5">
             <Activity className="w-4 h-4 text-[#2962ff]" />
@@ -67,6 +67,7 @@ export function NowPanel({ assessment }: { assessment: NowAssessment }) {
                     </span>
                   </div>
                   <div className="mt-1 text-lg font-bold font-mono text-zinc-900 dark:text-zinc-100">{s.value}</div>
+                  <div className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500">기준 {s.asOf}</div>
                   <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">{s.reason}</p>
                 </div>
               )

@@ -76,6 +76,34 @@ describe('신호 규칙 경계', () => {
   })
 })
 
+describe('라이브 스냅샷 오버라이드', () => {
+  it('라이브 값이 번들을 대체하고 기준일이 신호별로 표기됨', () => {
+    const h = mkHistory({})
+    ;(h.meta as { liveRefs?: object }).liveRefs = { ym: h.meta.dataEnd, cpi: 300, capeProxy: 20, stockRealLast: h.series.stock[h.series.stock.length - 1] }
+    const a = assessNow(h as Parameters<typeof assessNow>[0], {
+      stock: { date: '2026-07-08', trRatio: 0.7 }, // 급락 시나리오
+      gs10: { date: '2026-07-07', value: 3.0 },
+      tbill3m: { date: '2026-07-07', value: 3.5 }, // 역전
+      cpi: { ym: '2026-06', value: 318, yoy: 6.0 }, // 새 발표월 + 고인플레
+    })
+    expect(a.live).toBe(true)
+    const market = a.signals.find((s) => s.key === 'market')!
+    expect(market.asOf).toBe('2026-07-08')
+    expect(market.level).toBe('alert') // -30% 낙폭
+    expect(a.signals.find((s) => s.key === 'inflation')!.asOf).toBe('2026-06')
+    expect(a.signals.find((s) => s.key === 'inflation')!.level).toBe('alert') // 6%
+    expect(a.signals.find((s) => s.key === 'realRate')!.level).toBe('alert') // 3.0-6.0 = 인플레발 마이너스
+    expect(a.signals.find((s) => s.key === 'curve')!.level).toBe('alert') // 역전
+    expect(a.headline).toContain('한복판')
+  })
+
+  it('라이브 없이 호출하면 번들 기준으로 동작 (폴백)', () => {
+    const a = assessNow(mkHistory({}))
+    expect(a.live).toBe(false)
+    expect(a.signals.every((s) => s.asOf.length > 0)).toBe(true)
+  })
+})
+
 describe('실제 번들 데이터 정합성', async () => {
   const { readFileSync } = await import('node:fs')
   const h = JSON.parse(readFileSync(new URL('../public/data/history.json', import.meta.url), 'utf8'))

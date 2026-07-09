@@ -372,6 +372,15 @@ const out = {
     },
     dataEnd: dates[dates.length - 1],
     generatedBy: 'scripts/build-history.mjs',
+    // '현재 신호' 탭의 라이브 연장용 기준값 — 클라이언트가 ^SP500TR(일별)·FRED(일별/월간)를
+    // 직접 조회해 이 기준 대비 비율로 최신 값을 체인한다
+    liveRefs: {
+      ym: dates[dates.length - 1],
+      sp500trMonthlyAvg: trMap.get(dates[dates.length - 1]) ?? null,
+      cpi: cpiSeries[cpiSeries.length - 1],
+      capeProxy: capeProxy[capeProxy.length - 1],
+      stockRealLast: stockN[stockN.length - 1],
+    },
   },
   series: {
     dates: dates.slice(baseI),

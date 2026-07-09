@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, TrendingUp, X, FileText, BarChart3, Landmark } from 'lucide-react'
+import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, TrendingUp, X, FileText, BarChart3, Landmark, Activity } from 'lucide-react'
 import {
   loadDataBundle,
   runComparison,
@@ -28,6 +28,7 @@ import { StrategyCard } from '@/ui/StrategyCard'
 import { ResultsSection } from '@/ui/ResultsSection'
 import { ReportView } from '@/ui/ReportView'
 import { HistoryView } from '@/ui/HistoryView'
+import { NowView } from '@/ui/NowView'
 
 type Theme = 'light' | 'dark'
 
@@ -63,7 +64,7 @@ export default function App() {
   const [bundle, setBundle] = useState<AlignedDataBundle | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [showReport, setShowReport] = useState(false)
-  const [view, setView] = useState<'backtest' | 'history'>('backtest')
+  const [view, setView] = useState<'backtest' | 'history' | 'now'>('backtest')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const updateStrategy = (id: string, updater: (s: StrategyConfig) => StrategyConfig) =>
@@ -166,6 +167,7 @@ export default function App() {
                 [
                   { key: 'backtest', label: '백테스트', Icon: BarChart3 },
                   { key: 'history', label: '역사 연구', Icon: Landmark },
+                  { key: 'now', label: '현재 신호', Icon: Activity },
                 ] as const
               ).map(({ key, label, Icon }) => (
                 <button
@@ -259,6 +261,8 @@ export default function App() {
             </button>
           </div>
         )}
+
+        {view === 'now' && <NowView theme={theme} />}
 
         {view === 'history' && (
           <HistoryView
