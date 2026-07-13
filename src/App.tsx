@@ -185,15 +185,15 @@ export default function App() {
                 <TrendingUp className="w-4 h-4" strokeWidth={2.5} />
               </div>
               {/* 좁은 화면에선 내비 공간 확보를 위해 로고 텍스트 생략 */}
-              <h1 className="max-[479px]:hidden text-[15px] sm:text-base font-bold tracking-tight whitespace-nowrap">포트폴리오 백테스터</h1>
+              <h1 className="max-[479px]:hidden text-[15px] sm:text-base font-bold tracking-tight whitespace-nowrap">진짜 투자 공부</h1>
             </div>
             <nav className="flex items-center gap-3 sm:gap-6 overflow-x-auto">
               {(
                 [
-                  { key: 'backtest', label: '백테스트', Icon: BarChart3 },
+                  { key: 'guide', label: '가이드북', Icon: GraduationCap },
                   { key: 'history', label: '역사 연구', Icon: Landmark },
                   { key: 'now', label: '현재 신호', Icon: Activity },
-                  { key: 'guide', label: '기초 가이드', Icon: GraduationCap },
+                  { key: 'backtest', label: '백테스트', Icon: BarChart3 },
                 ] as const
               ).map(({ key, label, Icon }) => (
                 <button
@@ -301,7 +301,7 @@ export default function App() {
               onClick={() => setView('guide')}
               className="flex items-center gap-1 text-[11px] text-zinc-400 dark:text-zinc-500 hover:text-[#2962ff] dark:hover:text-[#5b8aff]"
             >
-              <GraduationCap className="w-3.5 h-3.5" /> 용어가 어렵다면 — 기초 가이드 (실질·TIPS·CAPE 등 4단계 학습)
+              <GraduationCap className="w-3.5 h-3.5" /> 용어가 어렵다면 — 가이드북 (실질·TIPS·CAPE 등 개념 4단계)
             </button>
           </div>
         )}
