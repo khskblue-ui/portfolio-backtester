@@ -124,3 +124,62 @@ console.log(`[0] 시장 자체: 1900-01 → ${dates[N - 1]} 실질 ${(stock[N - 
     console.log(`  ${ep.peak} 고점: 거치식 원금회복 ${(ep.underwaterMonths / 12).toFixed(1)}년 vs 같은 날부터 월 적립 손익분기 ${be != null ? (be / 12).toFixed(1) + '년' : '기간 내 미도달'}`)
   }
 }
+
+// ── (f) 보유 기간별 실질 손실 확률 (롤링 전 구간) ──
+{
+  console.log(`\n[f] 보유 기간별 "실질 손실로 끝날 확률" (모든 시작월 롤링):`)
+  for (const yrs of [1, 5, 10, 20, 30]) {
+    const hMo = yrs * 12
+    let neg = 0, tot = 0, worst = Infinity
+    for (let i = 0; i + hMo < N; i++) {
+      const r = stock[i + hMo] / stock[i]
+      if (r < 1) neg++
+      worst = Math.min(worst, r)
+      tot++
+    }
+    console.log(`  ${String(yrs).padStart(2)}년 보유: 손실 확률 ${((neg / tot) * 100).toFixed(1)}% (표본 ${tot}개, 최악 ${((worst - 1) * 100).toFixed(0)}%)`)
+  }
+  console.log(`  주의: 손실 "확률"은 기간과 함께 줄지만, 결과의 "폭"(최악~최선 격차)은 커진다 — 시간은 확률을 다듬지 보장을 만들지 않는다`)
+}
+
+// ── (g) 비용의 복리 효과: 연 드래그가 30년 최종가치를 얼마나 깎나 ──
+{
+  const base = 0.0684 // 위 [0]의 실질 연수익
+  console.log(`\n[g] 연 비용(수수료·스프레드·세금 드래그)이 30년 복리에 미치는 효과 (기준 연 ${(base * 100).toFixed(2)}%):`)
+  for (const drag of [0.005, 0.01, 0.02]) {
+    const clean = Math.pow(1 + base, 30)
+    const net = Math.pow(1 + base - drag, 30)
+    console.log(`  연 ${(drag * 100).toFixed(1)}% 비용 → 30년 최종가치 ${((1 - net / clean) * 100).toFixed(0)}% 감소`)
+  }
+}
+
+// ── (h) 60/40 월간 리밸런싱 vs 방치(드리프트), 실질 1900~ ──
+{
+  const bond = h.series.bond
+  let start = 0
+  while (start < N && (bond[start] == null || stock[start] == null)) start++
+  let vReb = 1, wS = 0.6, wB = 0.4 // 리밸런싱: 매월 60/40 복원
+  let sDrift = 0.6, bDrift = 0.4 // 방치: 최초 60/40 이후 그대로
+  let vStock = 1
+  let pR = 1, ddR = 0, pD = 1, ddD = 0, pS = 1, ddS = 0
+  for (let i = start + 1; i < N; i++) {
+    if (bond[i] == null || bond[i - 1] == null) continue
+    const rs = stock[i] / stock[i - 1]
+    const rb = bond[i] / bond[i - 1]
+    vReb *= wS * rs + wB * rb
+    sDrift *= rs
+    bDrift *= rb
+    vStock *= rs
+    const vD = sDrift + bDrift
+    pR = Math.max(pR, vReb); ddR = Math.min(ddR, vReb / pR - 1)
+    pD = Math.max(pD, vD); ddD = Math.min(ddD, vD / pD - 1)
+    pS = Math.max(pS, vStock); ddS = Math.min(ddS, vStock / pS - 1)
+  }
+  const yrsTot = (N - 1 - start) / 12
+  const cagr = (v) => (Math.pow(v, 1 / yrsTot) - 1) * 100
+  const vDriftFinal = sDrift + bDrift
+  console.log(`\n[h] 60/40 포트폴리오, ${dates[start]}~${dates[N - 1]} 실질:`)
+  console.log(`  주식 100%:        연 ${cagr(vStock).toFixed(2)}% · 최대낙폭 ${(ddS * 100).toFixed(0)}%`)
+  console.log(`  60/40 월 리밸런싱: 연 ${cagr(vReb).toFixed(2)}% · 최대낙폭 ${(ddR * 100).toFixed(0)}%`)
+  console.log(`  60/40 방치(드리프트): 연 ${cagr(vDriftFinal).toFixed(2)}% · 최대낙폭 ${(ddD * 100).toFixed(0)}% (주식 비중이 저절로 커져 낙폭이 리밸런싱보다 깊어짐)`)
+}
