@@ -15,6 +15,7 @@ import { FlaskConical, CalendarRange, BookOpen, Flame } from 'lucide-react'
 import { HelpTip } from './HelpTip'
 import { EraStoryModal } from './EraStoryModal'
 import { ERA_STORIES } from './eraStories'
+import { ERA_TIMELINES } from './eraTimelines'
 import { ManiaStoryModal } from './ManiaStoryModal'
 import { MANIA_STORY } from './maniaStory'
 import { cardCls, btnGhostCls, fmtSignedPct } from './common'
@@ -98,6 +99,9 @@ export function HistoryView({
   const [basis, setBasis] = useState<Basis>('real')
   const [storyOpen, setStoryOpen] = useState(false)
   const [maniaOpen, setManiaOpen] = useState(false)
+  // 연대기("흐름 따라가기")에서 선택된 국면 — 위 상세 차트 2개에 음영으로 반영.
+  // 구간 변경 시 선택 지점(setSelected 호출부)에서 함께 리셋한다
+  const [phaseIdx, setPhaseIdx] = useState<number | null>(null)
 
   const [retryTick, setRetryTick] = useState(0)
   useEffect(() => {
@@ -158,6 +162,7 @@ export function HistoryView({
   }, [data, pick])
 
   const selectedEp = data?.episodes.find((e) => e.peak === selected) ?? null
+  const timeline = useMemo(() => (selectedEp ? ERA_TIMELINES[selectedEp.peak] ?? [] : []), [selectedEp])
 
   // 상세 차트: 고점 12개월 전 ~ 회복 12개월 후, 고점 = 100 정규화 + 매크로
   const detailData = useMemo(() => {
@@ -185,6 +190,17 @@ export function HistoryView({
     }
     return rows
   }, [data, pick, selectedEp])
+
+  // 선택 국면을 상세 차트 범위로 클램프한 음영 구간
+  const phaseBand = useMemo(() => {
+    const ph = phaseIdx != null ? timeline[phaseIdx] : null
+    if (!ph || detailData.length === 0) return null
+    const first = detailData[0].ym as string
+    const last = detailData[detailData.length - 1].ym as string
+    const x1 = ph.from < first ? first : ph.from
+    const x2 = ph.to > last ? last : ph.to
+    return x1 <= x2 ? { x1, x2 } : null
+  }, [phaseIdx, timeline, detailData])
 
   if (error) {
     return (
@@ -265,7 +281,7 @@ export function HistoryView({
                 x2={snapYm(e.recovery ?? data.meta.dataEnd)}
                 fill={selected === e.peak ? 'rgba(227,73,72,0.28)' : 'rgba(227,73,72,0.12)'}
                 stroke="none"
-                onClick={() => setSelected(selected === e.peak ? null : e.peak)}
+                onClick={() => { setSelected(selected === e.peak ? null : e.peak); setPhaseIdx(null) }}
                 style={{ cursor: 'pointer' }}
               />
             ))}
@@ -400,6 +416,7 @@ export function HistoryView({
                 contentStyle={tooltipContentStyle}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
+              {phaseBand && <ReferenceArea x1={phaseBand.x1} x2={phaseBand.x2} fill="rgba(41,98,255,0.12)" stroke="rgba(41,98,255,0.35)" strokeDasharray="4 3" />}
               <Line type="monotone" dataKey="S&P500 총수익" stroke={c('stock')} strokeWidth={2} dot={false} />
               <Line type="monotone" dataKey="미 10년 국채" stroke={c('bond')} strokeWidth={2} dot={false} />
               <Line type="monotone" dataKey="금 현물" stroke={c('gold')} strokeWidth={2} dot={false} />
@@ -410,6 +427,7 @@ export function HistoryView({
             자산 추이는 {basisLabel} 기준(토글 연동)·고점=100 · 주식 = S&P500 총수익(1957 이전 소급 합성) ·
             국채 = 미 10년물 총수익 근사(GS10 수익률 파생 만기고정 — 실제 지수 아님) ·
             현금 = 3개월 T-bill(1934 이전은 NY 상업어음 금리 접합) 복리 · 금 = 현물가, 1933-1974 미국 민간보유 금지·공정가 시대 주의
+            (1950년 이전 금은 연 단위 런던 시장가 계열이라 계단형으로 표시됨 — 월 단위 해석 금지, 1949년의 하락 표시는 소스 아티팩트)
           </p>
 
           {/* 매크로 배경 */}
@@ -455,6 +473,7 @@ export function HistoryView({
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <ReferenceLine yAxisId="pct" y={0} stroke={axisTickColor} strokeDasharray="4 3" strokeOpacity={0.5} />
+              {phaseBand && <ReferenceArea yAxisId="pct" x1={phaseBand.x1} x2={phaseBand.x2} fill="rgba(41,98,255,0.12)" stroke="rgba(41,98,255,0.35)" strokeDasharray="4 3" />}
               <Line yAxisId="pct" type="monotone" dataKey="CPI 인플레" stroke={c('cpi')} strokeWidth={1.8} dot={false} />
               <Line yAxisId="pct" type="monotone" dataKey="10년물 금리" stroke={c('rate')} strokeWidth={1.8} dot={false} />
               <Line yAxisId="pct" type="monotone" dataKey="실질금리" stroke={c('real')} strokeWidth={1.8} dot={false} />
@@ -466,6 +485,84 @@ export function HistoryView({
             인플레형(A) 구간은 실질금리가 마이너스로 파묻히고, 밸류에이션 붕괴형(B)은 CAPE 극단에서 출발하는 패턴을 확인할 수 있습니다 ·
             출처: Shiller(Yale) 미러 (ODC-PDDL) · 방법론·검증: docs/research/negative-real-return-eras.md
           </p>
+
+          {/* 연대기 — 흐름 따라가기 */}
+          {timeline.length > 0 && (
+            <div className="pt-2">
+              <div className="flex items-end justify-between flex-wrap gap-2">
+                <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+                  <span className="block text-[8px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">TIMELINE · FOLLOW THE FLOW</span>
+                  흐름 따라가기 — 시간 순서로 읽는 이 구간
+                  <HelpTip title="연대기 읽는 법">
+                    이 구간을 시간 순서의 국면으로 쪼갠 연대기입니다. 국면을 클릭하면 <b>위의 자산·매크로
+                    차트에 해당 기간이 파란 음영</b>으로 표시되어, 데이터의 꺾임과 그 이유를 짝지어 읽을 수
+                    있습니다. 각 국면의 수치는 이 앱의 검증된 번들에서 추출한 실측값이고, 서사는 컨센서스
+                    수준의 해석만 담았습니다(해석이 갈리는 지점은 본문에 명시).
+                  </HelpTip>
+                </h4>
+                <div className="flex items-center gap-1.5 text-[11px]">
+                  <button
+                    onClick={() => setPhaseIdx((i) => (i == null ? 0 : Math.max(0, i - 1)))}
+                    disabled={phaseIdx === 0}
+                    className={`px-2.5 py-1 rounded ${btnGhostCls} disabled:opacity-40`}
+                  >
+                    ← 이전 국면
+                  </button>
+                  <span className="font-mono text-zinc-400 min-w-[52px] text-center">
+                    {phaseIdx != null ? `${phaseIdx + 1} / ${timeline.length}` : `${timeline.length}개 국면`}
+                  </span>
+                  <button
+                    onClick={() => setPhaseIdx((i) => (i == null ? 0 : Math.min(timeline.length - 1, i + 1)))}
+                    disabled={phaseIdx === timeline.length - 1}
+                    className={`px-2.5 py-1 rounded ${btnGhostCls} disabled:opacity-40`}
+                  >
+                    다음 국면 →
+                  </button>
+                </div>
+              </div>
+
+              <ol className="mt-3 relative border-l-2 border-[#e0e3eb] dark:border-[#2a2e39] ml-1.5 space-y-1">
+                {timeline.map((ph, i) => {
+                  const active = phaseIdx === i
+                  return (
+                    <li key={ph.from + ph.title} className="relative pl-4">
+                      <span
+                        className={`absolute -left-[7px] top-2.5 w-3 h-3 rounded-full border-2 ${
+                          active ? 'bg-[#2962ff] border-[#2962ff]' : 'bg-white dark:bg-[#1e222d] border-zinc-300 dark:border-zinc-600'
+                        }`}
+                      />
+                      <button
+                        onClick={() => setPhaseIdx(active ? null : i)}
+                        className={`w-full text-left rounded-lg px-3 py-2 transition-colors ${
+                          active ? 'bg-[#eef4ff] dark:bg-[#16223c]' : 'hover:bg-[#f3f5f9] dark:hover:bg-[#171c28]'
+                        }`}
+                      >
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <span className={`text-[11px] font-mono ${active ? 'text-[#2962ff] dark:text-[#5b8aff]' : 'text-zinc-400'}`}>
+                            {ph.from === ph.to ? ph.from : `${ph.from} ~ ${ph.to}`}
+                          </span>
+                          <span className={`text-[13px] font-semibold ${active ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-700 dark:text-zinc-300'}`}>
+                            {ph.title}
+                          </span>
+                        </div>
+                        {active && (
+                          <div className="mt-2 space-y-1.5">
+                            <p className="text-[12px] font-mono leading-relaxed text-zinc-500 dark:text-zinc-400 bg-white/60 dark:bg-black/20 rounded px-2 py-1.5">
+                              데이터: {ph.data}
+                            </p>
+                            <p className="text-[12.5px] leading-relaxed text-zinc-700 dark:text-zinc-200">{ph.story}</p>
+                          </div>
+                        )}
+                      </button>
+                    </li>
+                  )
+                })}
+              </ol>
+              <p className="mt-2 text-[11px] text-zinc-400">
+                국면을 선택하면 위 차트 2개에 해당 기간이 파란 음영으로 표시됩니다 · "왜 이렇게 움직였나" 버튼의 자산별 스토리와 함께 읽으면 좋습니다
+              </p>
+            </div>
+          )}
         </div>
       )}
 
