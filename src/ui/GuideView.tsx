@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react'
 import { GraduationCap, Landmark, Activity, Lightbulb, AlertTriangle, Quote, ArrowUpRight } from 'lucide-react'
 import { cardCls, btnGhostCls } from './common'
-import { GUIDE_INTRO, GUIDE_CHAPTERS, GUIDE_GLOSSARY, type GuideSection } from './guideContent'
+import { GUIDE_INTRO, GUIDE_CHAPTERS, GUIDE_GLOSSARY, type GuideChapter, type GuideSection } from './guideContent'
+import { TRADING_GUIDE_CHAPTERS } from './tradingGuide'
+
+/** 탭의 2부 구성 — 1부 지침서(최상단), 2부 개념 4단계 */
+const PARTS: { label: string; chapters: GuideChapter[] }[] = [
+  { label: '1부 · 매매 습관 교정 지침서', chapters: TRADING_GUIDE_CHAPTERS },
+  { label: '2부 · 개념 4단계', chapters: GUIDE_CHAPTERS },
+]
+const ALL_CHAPTERS = PARTS.flatMap((p) => p.chapters)
 
 /**
  * 기초 가이드 탭 — 콘텐츠는 guideContent.ts (설계 원칙도 그쪽 헤더 참조).
@@ -88,6 +96,35 @@ function Section({ s }: { s: GuideSection }) {
         )
       })}
 
+      {s.table && (
+        <div className="overflow-x-auto rounded-lg border border-[#e0e3eb] dark:border-[#2a2e39]">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="bg-[#f3f5f9] dark:bg-[#171c28]">
+                {s.table.header.map((h) => (
+                  <th key={h} className="text-left px-3 py-2 font-semibold text-zinc-600 dark:text-zinc-300 whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {s.table.rows.map((row, i) => (
+                <tr key={i} className="border-t border-[#e0e3eb] dark:border-[#2a2e39]">
+                  {row.map((cell, j) => (
+                    <td key={j} className={`px-3 py-1.5 text-zinc-600 dark:text-zinc-300 ${j > 0 ? 'font-mono' : ''}`}>{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {s.form && (
+        <pre className="rounded-lg border border-dashed border-zinc-300 dark:border-zinc-600 bg-[#fafbfd] dark:bg-[#171c28] px-3.5 py-3 text-[11.5px] leading-relaxed font-mono whitespace-pre-wrap text-zinc-600 dark:text-zinc-300">
+          {s.form}
+        </pre>
+      )}
+
       {s.pitfall && (
         <div className="rounded-lg border-l-4 border-amber-600 dark:border-amber-500 bg-[#fdf8ec] dark:bg-[#1f1a0e] px-3.5 py-2.5">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
@@ -105,7 +142,7 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
 
   // 스크롤 위치에 따라 목차 현재 위치 하이라이트
   useEffect(() => {
-    const ids = GUIDE_CHAPTERS.flatMap((c) => [c.id, ...c.sections.map((s) => s.id)]).concat('glossary')
+    const ids = ALL_CHAPTERS.flatMap((c) => [c.id, ...c.sections.map((s) => s.id)]).concat('glossary')
     const els = ids.map((id) => document.getElementById(id)).filter(Boolean) as HTMLElement[]
     const io = new IntersectionObserver(
       (entries) => {
@@ -122,7 +159,7 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
     setActiveId(id) // 스무스 스크롤 중 중간 절들로 하이라이트가 튀는 것 방지
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
   }
-  const totalMin = GUIDE_CHAPTERS.reduce((a, c) => a + c.minutes, 0)
+  const totalMin = ALL_CHAPTERS.reduce((a, c) => a + c.minutes, 0)
 
   return (
     <div className="lg:grid lg:grid-cols-[225px_minmax(0,1fr)] lg:gap-5 lg:items-start">
@@ -130,7 +167,11 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
       <nav className={`${cardCls} hidden lg:block sticky top-[72px] p-4 text-[12px]`}>
         <div className="text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500 mb-2">CONTENTS</div>
         <ul className="space-y-1">
-          {GUIDE_CHAPTERS.map((c) => (
+          {PARTS.map((part) => (
+            <li key={part.label}>
+              <div className="text-[9px] font-mono tracking-[0.18em] text-zinc-400 dark:text-zinc-500 mt-2 mb-1">{part.label}</div>
+              <ul className="space-y-1">
+          {part.chapters.map((c) => (
             <li key={c.id}>
               <button
                 onClick={() => jump(c.id)}
@@ -140,7 +181,7 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
                     : 'text-zinc-700 dark:text-zinc-300 hover:text-[#2962ff]'
                 }`}
               >
-                {c.step}. {c.title}
+                {c.toc ?? `${c.step}. ${c.title}`}
               </button>
               <ul className="mt-0.5 mb-1.5 space-y-0.5 border-l border-[#e0e3eb] dark:border-[#2a2e39] ml-1 pl-2.5">
                 {c.sections.map((s) => (
@@ -155,6 +196,9 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
                     </button>
                   </li>
                 ))}
+              </ul>
+            </li>
+          ))}
               </ul>
             </li>
           ))}
@@ -190,13 +234,13 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
           </div>
           {/* 단계 점프 칩 (모바일 목차 겸용) */}
           <div className="mt-3 flex flex-wrap gap-2">
-            {GUIDE_CHAPTERS.map((c) => (
+            {ALL_CHAPTERS.map((c) => (
               <button
                 key={c.id}
                 onClick={() => jump(c.id)}
                 className="text-[11.5px] px-2.5 py-1.5 rounded-full border border-[#e0e3eb] dark:border-[#2a2e39] bg-[#fafbfd] dark:bg-[#171c28] text-zinc-600 dark:text-zinc-300 hover:border-[#2962ff] hover:text-[#2962ff]"
               >
-                {c.step}. {c.title.split(' — ')[0]} · {c.minutes}분
+                {(c.toc ?? `${c.step}. ${c.title.split(' — ')[0]}`)} · {c.minutes}분
               </button>
             ))}
             <button
@@ -208,12 +252,12 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
           </div>
         </div>
 
-        {/* 단계별 본문 */}
-        {GUIDE_CHAPTERS.map((c) => (
+        {/* 파트·단계별 본문 */}
+        {ALL_CHAPTERS.map((c) => (
           <div key={c.id} id={c.id} className={`${cardCls} p-4 sm:p-5 scroll-mt-24`}>
             <h3 className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100">
               <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
-                STEP {c.step} · 약 {c.minutes}분
+                {c.kicker ?? `STEP ${c.step}`} · 약 {c.minutes}분
               </span>
               {c.title}
             </h3>
