@@ -185,7 +185,7 @@ export default function App() {
                 <TrendingUp className="w-4 h-4" strokeWidth={2.5} />
               </div>
               {/* 좁은 화면에선 내비 공간 확보를 위해 로고 텍스트 생략 */}
-              <h1 className="max-[479px]:hidden text-[15px] sm:text-base font-bold tracking-tight whitespace-nowrap">진짜 투자 공부</h1>
+              <h1 className="max-[479px]:hidden text-[15px] sm:text-base font-bold tracking-tight whitespace-nowrap">투자의 정석</h1>
             </div>
             <nav className="flex items-center gap-3 sm:gap-6 overflow-x-auto">
               {(
