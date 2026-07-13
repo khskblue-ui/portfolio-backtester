@@ -9,7 +9,6 @@ const PARTS: { label: string; chapters: GuideChapter[] }[] = [
   { label: '1부 · 매매 습관 교정 지침서', chapters: TRADING_GUIDE_CHAPTERS },
   { label: '2부 · 개념 4단계', chapters: GUIDE_CHAPTERS },
 ]
-const ALL_CHAPTERS = PARTS.flatMap((p) => p.chapters)
 
 /**
  * 기초 가이드 탭 — 콘텐츠는 guideContent.ts (설계 원칙도 그쪽 헤더 참조).
@@ -138,11 +137,14 @@ function Section({ s }: { s: GuideSection }) {
 }
 
 export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now') => void }) {
+  // 파트 세그먼트 — 성격이 다른 두 콘텐츠(코스형 지침서 / 레퍼런스형 개념)를 화면 단위로 분리
+  const [part, setPart] = useState(0)
   const [activeId, setActiveId] = useState<string>('')
+  const chapters = PARTS[part].chapters
 
-  // 스크롤 위치에 따라 목차 현재 위치 하이라이트
+  // 스크롤 위치에 따라 목차 현재 위치 하이라이트 (파트 전환 시 재구독)
   useEffect(() => {
-    const ids = ALL_CHAPTERS.flatMap((c) => [c.id, ...c.sections.map((s) => s.id)]).concat('glossary')
+    const ids = chapters.flatMap((c) => [c.id, ...c.sections.map((s) => s.id)]).concat(part === 1 ? ['glossary'] : [])
     const els = ids.map((id) => document.getElementById(id)).filter(Boolean) as HTMLElement[]
     const io = new IntersectionObserver(
       (entries) => {
@@ -153,158 +155,215 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
     )
     els.forEach((el) => io.observe(el))
     return () => io.disconnect()
-  }, [])
+  }, [part, chapters])
 
   const jump = (id: string) => {
     setActiveId(id) // 스무스 스크롤 중 중간 절들로 하이라이트가 튀는 것 방지
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
   }
-  const totalMin = ALL_CHAPTERS.reduce((a, c) => a + c.minutes, 0)
+  const switchPart = (i: number) => {
+    if (i === part) return
+    setPart(i)
+    setActiveId('')
+    window.scrollTo({ top: 0 })
+  }
+
+  // 아코디언: 현재 읽는 챕터(스크롤 위치 기준)만 하위 절을 펼침
+  const activeChapterId = chapters.find((c) => c.id === activeId || c.sections.some((s) => s.id === activeId))?.id ?? chapters[0]?.id
 
   return (
-    <div className="lg:grid lg:grid-cols-[225px_minmax(0,1fr)] lg:gap-5 lg:items-start">
-      {/* 목차 — 데스크톱 좌측 고정 */}
-      <nav className={`${cardCls} hidden lg:block sticky top-[72px] p-4 text-[12px]`}>
-        <div className="text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500 mb-2">CONTENTS</div>
-        <ul className="space-y-1">
-          {PARTS.map((part) => (
-            <li key={part.label}>
-              <div className="text-[9px] font-mono tracking-[0.18em] text-zinc-400 dark:text-zinc-500 mt-2 mb-1">{part.label}</div>
-              <ul className="space-y-1">
-          {part.chapters.map((c) => (
-            <li key={c.id}>
-              <button
-                onClick={() => jump(c.id)}
-                className={`text-left w-full font-semibold py-0.5 ${
-                  activeId === c.id || c.sections.some((s) => s.id === activeId)
-                    ? 'text-[#2962ff] dark:text-[#5b8aff]'
-                    : 'text-zinc-700 dark:text-zinc-300 hover:text-[#2962ff]'
-                }`}
-              >
-                {c.toc ?? `${c.step}. ${c.title}`}
-              </button>
-              <ul className="mt-0.5 mb-1.5 space-y-0.5 border-l border-[#e0e3eb] dark:border-[#2a2e39] ml-1 pl-2.5">
-                {c.sections.map((s) => (
-                  <li key={s.id}>
-                    <button
-                      onClick={() => jump(s.id)}
-                      className={`text-left w-full text-[11.5px] py-0.5 leading-snug ${
-                        activeId === s.id ? 'text-[#2962ff] dark:text-[#5b8aff] font-medium' : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
-                      }`}
-                    >
-                      {s.title}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
-              </ul>
-            </li>
-          ))}
-          <li>
-            <button
-              onClick={() => jump('glossary')}
-              className={`text-left w-full font-semibold py-0.5 ${activeId === 'glossary' ? 'text-[#2962ff] dark:text-[#5b8aff]' : 'text-zinc-700 dark:text-zinc-300 hover:text-[#2962ff]'}`}
-            >
-              부록. 용어 사전
-            </button>
-          </li>
-        </ul>
-      </nav>
+    <div className="space-y-4">
+      {/* 파트 세그먼트 */}
+      <div className={`${cardCls} p-1.5 flex gap-1.5 sticky top-[60px] z-30`}>
+        {PARTS.map((pt, i) => (
+          <button
+            key={pt.label}
+            onClick={() => switchPart(i)}
+            className={`flex-1 px-3 py-2 rounded-lg text-[13px] font-semibold transition-colors ${
+              part === i
+                ? 'bg-[#2962ff] text-white'
+                : 'text-zinc-500 dark:text-zinc-400 hover:bg-[#edf1f7] dark:hover:bg-[#2a2e39] hover:text-zinc-800 dark:hover:text-zinc-200'
+            }`}
+          >
+            {pt.label}
+            <span className={`ml-1.5 text-[11px] font-normal ${part === i ? 'text-white/70' : 'text-zinc-400'}`}>
+              {pt.chapters.reduce((a, c) => a + c.minutes, 0)}분
+            </span>
+          </button>
+        ))}
+      </div>
 
-      <div className="space-y-5 min-w-0">
-        {/* 인트로 */}
-        <div className={`${cardCls} p-4 sm:p-5`}>
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-            <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
-              GUIDE · MACRO BASICS · 총 {totalMin}분
-            </span>
-            <span className="flex items-center gap-1.5">
-              <GraduationCap className="w-4 h-4 text-[#2962ff]" />
-              {GUIDE_INTRO.title}
-            </span>
-          </h2>
-          <div className="mt-2.5 space-y-2">
-            {GUIDE_INTRO.paras.map((p, i) => (
-              <p key={i} className="text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-300">
-                {rich(p)}
-              </p>
-            ))}
+      <div className="lg:grid lg:grid-cols-[225px_minmax(0,1fr)] lg:gap-5 lg:items-start">
+        {/* 목차 — 데스크톱 좌측 고정, 자체 스크롤, 현재 챕터만 하위 절 펼침(아코디언) */}
+        <nav className={`${cardCls} hidden lg:block sticky top-[128px] p-4 text-[12px] max-h-[calc(100vh-148px)] overflow-y-auto`}>
+          <div className="text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500 mb-2">
+            CONTENTS · {PARTS[part].label}
           </div>
-          {/* 단계 점프 칩 (모바일 목차 겸용) */}
-          <div className="mt-3 flex flex-wrap gap-2">
-            {ALL_CHAPTERS.map((c) => (
+          <ul className="space-y-0.5">
+            {chapters.map((c) => {
+              const open = c.id === activeChapterId
+              const chActive = activeId === c.id || c.sections.some((sec) => sec.id === activeId)
+              return (
+                <li key={c.id}>
+                  <button
+                    onClick={() => jump(c.id)}
+                    className={`text-left w-full font-semibold py-1 leading-snug ${
+                      chActive ? 'text-[#2962ff] dark:text-[#5b8aff]' : 'text-zinc-700 dark:text-zinc-300 hover:text-[#2962ff]'
+                    }`}
+                  >
+                    {c.toc ?? `${c.step}. ${c.title}`}
+                  </button>
+                  {open && c.sections.length > 1 && (
+                    <ul className="mt-0.5 mb-1.5 space-y-0.5 border-l border-[#e0e3eb] dark:border-[#2a2e39] ml-1 pl-2.5">
+                      {c.sections.map((sec) => (
+                        <li key={sec.id}>
+                          <button
+                            onClick={() => jump(sec.id)}
+                            className={`text-left w-full text-[11.5px] py-0.5 leading-snug ${
+                              activeId === sec.id
+                                ? 'text-[#2962ff] dark:text-[#5b8aff] font-medium'
+                                : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+                            }`}
+                          >
+                            {sec.title}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              )
+            })}
+            {part === 1 && (
+              <li>
+                <button
+                  onClick={() => jump('glossary')}
+                  className={`text-left w-full font-semibold py-1 ${
+                    activeId === 'glossary' ? 'text-[#2962ff] dark:text-[#5b8aff]' : 'text-zinc-700 dark:text-zinc-300 hover:text-[#2962ff]'
+                  }`}
+                >
+                  부록. 용어 사전
+                </button>
+              </li>
+            )}
+          </ul>
+          {/* 다른 파트로 가는 상시 진입점 — "2부가 안 보인다" 방지 */}
+          <button
+            onClick={() => switchPart(part === 0 ? 1 : 0)}
+            className="mt-3 w-full text-left text-[11px] text-zinc-400 hover:text-[#2962ff] border-t border-[#e0e3eb] dark:border-[#2a2e39] pt-2"
+          >
+            → {PARTS[part === 0 ? 1 : 0].label} 보기
+          </button>
+        </nav>
+
+        <div className="space-y-5 min-w-0">
+          {/* 인트로 — 첫 파트에서만 (두 파트 공통 안내) */}
+          {part === 0 && (
+            <div className={`${cardCls} p-4 sm:p-5`}>
+              <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
+                  GUIDE · 1부 80분 + 2부 45분
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <GraduationCap className="w-4 h-4 text-[#2962ff]" />
+                  {GUIDE_INTRO.title}
+                </span>
+              </h2>
+              <div className="mt-2.5 space-y-2">
+                {GUIDE_INTRO.paras.map((p, i) => (
+                  <p key={i} className="text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-300">
+                    {rich(p)}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 현재 파트 챕터 점프 칩 (모바일 목차 겸용) */}
+          <div className="flex flex-wrap gap-2">
+            {chapters.map((c) => (
               <button
                 key={c.id}
                 onClick={() => jump(c.id)}
-                className="text-[11.5px] px-2.5 py-1.5 rounded-full border border-[#e0e3eb] dark:border-[#2a2e39] bg-[#fafbfd] dark:bg-[#171c28] text-zinc-600 dark:text-zinc-300 hover:border-[#2962ff] hover:text-[#2962ff]"
+                className="text-[11.5px] px-2.5 py-1.5 rounded-full border border-[#e0e3eb] dark:border-[#2a2e39] bg-white dark:bg-[#171c28] text-zinc-600 dark:text-zinc-300 hover:border-[#2962ff] hover:text-[#2962ff]"
               >
-                {(c.toc ?? `${c.step}. ${c.title.split(' — ')[0]}`)} · {c.minutes}분
+                {(c.toc ?? `${c.step}. ${c.title.split(' — ')[0]}`).split(' — ')[0]} · {c.minutes}분
               </button>
             ))}
-            <button
-              onClick={() => jump('glossary')}
-              className="text-[11.5px] px-2.5 py-1.5 rounded-full border border-[#e0e3eb] dark:border-[#2a2e39] bg-[#fafbfd] dark:bg-[#171c28] text-zinc-600 dark:text-zinc-300 hover:border-[#2962ff] hover:text-[#2962ff]"
-            >
-              용어 사전
-            </button>
-          </div>
-        </div>
-
-        {/* 파트·단계별 본문 */}
-        {ALL_CHAPTERS.map((c) => (
-          <div key={c.id} id={c.id} className={`${cardCls} p-4 sm:p-5 scroll-mt-24`}>
-            <h3 className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100">
-              <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
-                {c.kicker ?? `STEP ${c.step}`} · 약 {c.minutes}분
-              </span>
-              {c.title}
-            </h3>
-            <p className="mt-1 text-[12px] text-[#2962ff] dark:text-[#5b8aff]">{c.goal}</p>
-            <div className="mt-4 space-y-6">
-              {c.sections.map((s) => (
-                <Section key={s.id} s={s} />
-              ))}
-            </div>
-          </div>
-        ))}
-
-        {/* 용어 사전 */}
-        <div id="glossary" className={`${cardCls} p-4 sm:p-5 scroll-mt-24`}>
-          <h3 className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100">
-            <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">APPENDIX · GLOSSARY</span>
-            용어 사전 — 막힐 때 찾아보기
-          </h3>
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
-            {GUIDE_GLOSSARY.map((g) => (
+            {part === 1 && (
               <button
-                key={g.term}
-                onClick={() => jump(g.sectionId)}
-                className="text-left rounded-lg border border-[#e0e3eb] dark:border-[#2a2e39] bg-[#fafbfd] dark:bg-[#171c28] p-3 hover:border-[#2962ff] group"
+                onClick={() => jump('glossary')}
+                className="text-[11.5px] px-2.5 py-1.5 rounded-full border border-[#e0e3eb] dark:border-[#2a2e39] bg-white dark:bg-[#171c28] text-zinc-600 dark:text-zinc-300 hover:border-[#2962ff] hover:text-[#2962ff]"
               >
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-[12.5px] font-semibold text-zinc-800 dark:text-zinc-100">{g.term}</span>
-                  <ArrowUpRight className="w-3.5 h-3.5 text-zinc-300 dark:text-zinc-600 group-hover:text-[#2962ff] flex-shrink-0" />
-                </div>
-                <p className="mt-1 text-[11.5px] leading-relaxed text-zinc-500 dark:text-zinc-400">{g.def}</p>
+                용어 사전
               </button>
-            ))}
+            )}
           </div>
-        </div>
 
-        {/* 다음 단계 CTA */}
-        <div className={`${cardCls} p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3`}>
-          <p className="text-[13px] text-zinc-600 dark:text-zinc-300">
-            준비됐다면 — 배운 눈으로 두 탭의 문장을 직접 읽어 보세요.
-          </p>
-          <div className="flex gap-2">
-            <button onClick={() => onNavigate('history')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium ${btnGhostCls}`}>
-              <Landmark className="w-4 h-4" /> 역사 연구 탭
-            </button>
-            <button onClick={() => onNavigate('now')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium ${btnGhostCls}`}>
-              <Activity className="w-4 h-4" /> 현재 신호 탭
-            </button>
+          {/* 챕터 본문 */}
+          {chapters.map((c) => (
+            <div key={c.id} id={c.id} className={`${cardCls} p-4 sm:p-5 scroll-mt-32`}>
+              <h3 className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100">
+                <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
+                  {c.kicker ?? `STEP ${c.step}`} · 약 {c.minutes}분
+                </span>
+                {c.title}
+              </h3>
+              <p className="mt-1 text-[12px] text-[#2962ff] dark:text-[#5b8aff]">{c.goal}</p>
+              <div className="mt-4 space-y-6">
+                {c.sections.map((s) => (
+                  <Section key={s.id} s={s} />
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {/* 용어 사전 — 개념 파트에서만 */}
+          {part === 1 && (
+            <div id="glossary" className={`${cardCls} p-4 sm:p-5 scroll-mt-32`}>
+              <h3 className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100">
+                <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">APPENDIX · GLOSSARY</span>
+                용어 사전 — 막힐 때 찾아보기
+              </h3>
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                {GUIDE_GLOSSARY.map((g) => (
+                  <button
+                    key={g.term}
+                    onClick={() => jump(g.sectionId)}
+                    className="text-left rounded-lg border border-[#e0e3eb] dark:border-[#2a2e39] bg-[#fafbfd] dark:bg-[#171c28] p-3 hover:border-[#2962ff] group"
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[12.5px] font-semibold text-zinc-800 dark:text-zinc-100">{g.term}</span>
+                      <ArrowUpRight className="w-3.5 h-3.5 text-zinc-300 dark:text-zinc-600 group-hover:text-[#2962ff] flex-shrink-0" />
+                    </div>
+                    <p className="mt-1 text-[11.5px] leading-relaxed text-zinc-500 dark:text-zinc-400">{g.def}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 파트 말미 — 다음 동선 */}
+          <div className={`${cardCls} p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3`}>
+            <p className="text-[13px] text-zinc-600 dark:text-zinc-300">
+              {part === 0 ? '지침서를 마쳤다면 — 앱의 용어와 지표를 읽는 법(2부)으로.' : '준비됐다면 — 배운 눈으로 두 탭의 문장을 직접 읽어 보세요.'}
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              {part === 0 ? (
+                <button onClick={() => switchPart(1)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium ${btnGhostCls}`}>
+                  <GraduationCap className="w-4 h-4" /> 2부 개념 4단계로
+                </button>
+              ) : (
+                <>
+                  <button onClick={() => onNavigate('history')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium ${btnGhostCls}`}>
+                    <Landmark className="w-4 h-4" /> 역사 연구 탭
+                  </button>
+                  <button onClick={() => onNavigate('now')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium ${btnGhostCls}`}>
+                    <Activity className="w-4 h-4" /> 현재 신호 탭
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
