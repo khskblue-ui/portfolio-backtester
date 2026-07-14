@@ -111,6 +111,7 @@ const shillerRows = sp
       cpi: ym >= '1913-01' && f?.cpi ? f.cpi : Number(r['Consumer Price Index']),
       gs10: ym >= '1953-04' && f?.gs10 ? f.gs10 : Number(r['Long Interest Rate']),
       cape: Number(r.PE10) > 0 ? Number(r.PE10) : null,
+      earn: Number(r.Earnings) > 0 ? Number(r.Earnings) : null,
     }
   })
   .filter((r) => r.price > 0 && r.div > 0 && r.cpi > 0 && r.gs10 > 0)
@@ -243,6 +244,24 @@ for (let i = 0; i < dates.length; i++) {
   tips10.push(tipsMap.get(dates[i]) ?? null)
 }
 
+// 트레일링 P/E와 "실현 선행 P/E" — 둘 다 Shiller 월간 이익(트레일링 12개월
+// as-reported GAAP, 분기 발표치의 월간 보간)에서 직접 계산:
+//   peTrail   = P(t) ÷ E(t)     — 그 시점에 확정돼 있던 직전 12개월 이익
+//   peFwdReal = P(t) ÷ E(t+12)  — 그 뒤 12개월 동안 "실제로 실현된" 이익
+// peFwdReal은 애널리스트 추정이 아니라 사후 확정 이익이므로 추정 편향이 없는
+// 대신, 당시엔 알 수 없던 미래 정보다 — 역사 해석 전용(현재 신호에는 사용 불가).
+// 이익 데이터가 2023-06에 끝나므로 peTrail은 2023-06, peFwdReal은 2022-06까지.
+const peByYm = new Map(shillerRows.map((r) => [r.ym, r]))
+const plus12 = (ym) => `${Number(ym.slice(0, 4)) + 1}${ym.slice(4)}`
+const peTrail = []
+const peFwdReal = []
+for (let i = 0; i < dates.length; i++) {
+  const cur = peByYm.get(dates[i])
+  const fwd = peByYm.get(plus12(dates[i]))
+  peTrail.push(cur?.earn ? cur.price / cur.earn : null)
+  peFwdReal.push(cur && fwd?.earn ? cur.price / fwd.earn : null)
+}
+
 // CAPE 프록시 — 미러의 이익 데이터가 끝난 2023-06 이후를 근사로 연장:
 // 프록시 = 마지막 실측 CAPE × 실질가격 변화율. 실질가격 ≈ 실질 TR ÷ (1+배당수익률)^t
 // (배당 재투자분 제거, 최근 S&P 배당수익률 ~1.3%/년 상수 가정), 분모의 10년 평균
@@ -359,6 +378,15 @@ assert(at(capeProxy, '2026-01') > 37 && at(capeProxy, '2026-01') < 47, `CAPE 프
 // TIPS 앵커: 2021-12 초완화(−0.99) → 2022-10 긴축 급등(+1.59) — 사후적 지표와의 괴리 검증 사례
 assert(at(tips10, '2021-12') < -0.7, `TIPS 2021-12 = ${at(tips10, '2021-12')} (딥마이너스 기대)`)
 assert(at(tips10, '2022-10') > 1.2, `TIPS 2022-10 = ${at(tips10, '2022-10')} (긴축 급등 기대)`)
+// P/E 앵커: 2008-09 위기에서 GAAP 이익 붕괴(E ~60→7)로 두 지표가 정반대로 갈라지는 구간 —
+// 2008-03 트레일링 ~22 vs 실현 선행 ~192 (시장이 그 뒤 12개월 실제 이익의 192배를 지불),
+// 2009-03엔 트레일링 ~110(착시) vs 실현 선행 ~12(실제로는 헐값). 닷컴 고점 2000-08도 28 vs ~48
+assert(at(peTrail, '2008-03') > 18 && at(peTrail, '2008-03') < 26, `트레일링 P/E 2008-03 = ${at(peTrail, '2008-03')}`)
+assert(at(peFwdReal, '2008-03') > 150, `실현 선행 P/E 2008-03 = ${at(peFwdReal, '2008-03')} (>150 기대)`)
+assert(at(peTrail, '2009-03') > 60, `트레일링 P/E 2009-03 = ${at(peTrail, '2009-03')} (>60 기대)`)
+assert(at(peFwdReal, '2009-03') < 15, `실현 선행 P/E 2009-03 = ${at(peFwdReal, '2009-03')} (<15 기대)`)
+assert(at(peFwdReal, '2000-08') > 40 && at(peFwdReal, '2000-08') < 55, `실현 선행 P/E 2000-08 = ${at(peFwdReal, '2000-08')}`)
+assert(at(peTrail, '1929-09') > 17 && at(peTrail, '1929-09') < 23, `트레일링 P/E 1929-09 = ${at(peTrail, '1929-09')}`)
 // 현금(단기채) 앵커: 명목 지수는 단조 증가(금리 ≥ 0), 1981년 전후 실질 강세 전환
 for (let i = baseI + 1; i < dates.length; i++) assert(billNomN[i] >= billNomN[i - 1] - 1e-9, `현금 명목 지수 역행 ${dates[i]}`)
 console.log('\n앵커 검증 통과: 구간·CAPE·GS10·CPI·실질금리·연장(2022 인플레, 2026 금리)·현금 단조성 ✓')
@@ -379,7 +407,7 @@ const out = {
       bond: '미 10년물(GS10) 수익률 파생 만기고정 근사 총수익 — 실제 채권지수 아님',
       gold: '금 현물가 (배당 없음). 1933-1974 미국 민간 금보유 금지·공정가 시대 주의',
       bill: '단기국채(현금): 3개월 T-bill(1934~) + NBER 상업어음 NY(1871~1933 접합 — 신용 프리미엄만큼 소폭 높음) 월할 복리',
-      macro: 'cpiYoY = 직전 12개월 CPI 상승률(2025-10 결측 1개월 선형보간), realRate10 = GS10 − cpiYoY (사후적 근사), cape = Shiller PE10(1881~2023-06, 이후 이익 데이터 부재로 결측), capeProxy = 이후 실질가격 변화 연장 근사(배당수익률 1.3%·E10 성장 2%/년 가정 — 라벨 필수), tbill3m = 3개월 단기금리, tips10 = 10년 TIPS 수익률(사전적 실질금리, 2003~ — realRate10은 사후적 근사로 역사 비교용)',
+      macro: 'cpiYoY = 직전 12개월 CPI 상승률(2025-10 결측 1개월 선형보간), realRate10 = GS10 − cpiYoY (사후적 근사), cape = Shiller PE10(1881~2023-06, 이후 이익 데이터 부재로 결측), capeProxy = 이후 실질가격 변화 연장 근사(배당수익률 1.3%·E10 성장 2%/년 가정 — 라벨 필수), tbill3m = 3개월 단기금리, tips10 = 10년 TIPS 수익률(사전적 실질금리, 2003~ — realRate10은 사후적 근사로 역사 비교용), peTrail = P(t)/E(t) 트레일링 12개월 as-reported GAAP P/E(1871~2023-06), peFwdReal = P(t)/E(t+12) 실현 선행 P/E — 그 뒤 12개월 실제 확정 이익 기준(사후 정보, 역사 해석 전용, ~2022-06)',
       base: '1900-01 = 100 · 실질 = CPI-U(NSA) 디플레이트',
     },
     dataEnd: dates[dates.length - 1],
@@ -413,6 +441,8 @@ const out = {
     capeProxy: round(capeProxy.slice(baseI), 2),
     tbill3m: round(tbill3m.slice(baseI), 2),
     tips10: round(tips10.slice(baseI), 2),
+    peTrail: round(peTrail.slice(baseI), 2),
+    peFwdReal: round(peFwdReal.slice(baseI), 2),
   },
   episodes: episodes.map((e) => ({
     peak: e.peak,

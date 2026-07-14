@@ -20,6 +20,29 @@ describe('역사 차트 번들 (public/data/history.json) 무결성', async () =
     expect(h.meta.dataEnd > '2024-01').toBe(true)
   })
 
+  it('P/E 시리즈 — 트레일링 vs 실현 선행이 2008-09 위기에서 정반대로 갈라짐', () => {
+    const { dates } = h.series
+    const { peTrail, peFwdReal } = h.macro
+    expect(peTrail.length).toBe(dates.length)
+    expect(peFwdReal.length).toBe(dates.length)
+    const at = (arr: (number | null)[], ym: string) => arr[dates.indexOf(ym)]
+    // 2008-03: 트레일링은 평범(~22), 실현 선행은 이익 절벽으로 극단(~192)
+    expect(at(peTrail, '2008-03')).toBeGreaterThan(18)
+    expect(at(peTrail, '2008-03')).toBeLessThan(26)
+    expect(at(peFwdReal, '2008-03')).toBeGreaterThan(150)
+    // 2009-03: 트레일링은 착시로 극단(~110), 실현 선행은 헐값(~12)
+    expect(at(peTrail, '2009-03')).toBeGreaterThan(60)
+    expect(at(peFwdReal, '2009-03')).toBeLessThan(15)
+    // 닷컴 고점 2000-08: 실현 선행 ~48 (트레일링 28보다 훨씬 비싸게 지불)
+    expect(at(peFwdReal, '2000-08')).toBeGreaterThan(40)
+    expect(at(peFwdReal, '2000-08')).toBeLessThan(55)
+    // 사후 지표 경계: 이익 데이터 끝(2023-06)에서 12개월 전 이후는 정의상 null
+    expect(at(peFwdReal, '2022-06')).not.toBeNull()
+    expect(at(peFwdReal, '2022-07')).toBeNull()
+    expect(at(peTrail, '2023-06')).not.toBeNull()
+    expect(at(peTrail, '2023-07')).toBeNull()
+  })
+
   it('현금(단기국채) 시리즈 — 1929 디플레 실질 플러스 / 1946 금융억압 실질 마이너스', () => {
     interface Ep { peak: string; assets: Record<string, { toTroughPct: number | null; toRecoveryPct: number | null } | null> }
     const ep = (p: string): Ep => h.episodes.find((e: Ep) => e.peak.startsWith(p))
