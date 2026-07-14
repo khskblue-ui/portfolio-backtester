@@ -269,7 +269,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
       <p className="text-[11px] text-zinc-400 leading-relaxed">
         소스·실시간성 — 주가: ^SP500TR 일별 종가(야후, 전일까지) · 금리: FRED DGS10·DTB3·DFII10(TIPS) 일별(전일까지) · CPI: FRED CPIAUCNS
         최신 발표월(통상 1~2개월 지연) · 과거 흐름: 검증된 번들 데이터(1900~{data.meta.dataEnd}, 월평균). 라이브 값은 번들
-        기준값 대비 비율로 체인되며 3시간 캐시됩니다. CAPE는 2023-06 이후 프록시(근사) — 카드의 판정 이유 참조.
+        기준값 대비 비율로 체인되며 3시간 캐시됩니다. CAPE는 2023-06 이후 프록시(근사) — 카드의 판정 이유 참조. 선행(Forward) P/E를 쓰지 않는 이유: 분모(애널리스트 추정 이익)가 침체 직전에 체계적으로 과대해(2008년 +43%) 고점에서 오히려 싸 보이기 때문 — 가이드북 2부 CAPE 절 참조.
       </p>
     </div>
   )
