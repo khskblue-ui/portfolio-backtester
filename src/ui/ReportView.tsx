@@ -187,8 +187,9 @@ export function ReportView({
         ))}
 
         <p className="text-xs text-gray-400 mt-8">
-          데이터: Yahoo Finance / Stooq (일별 EOD) · 엔진 규약: t 종가 결정 → t+1 시가 체결, 이동평균 원가,
-          양도세 연 손익통산(250만 공제·22%), 배당 원천 15% · 이 문서는 투자 권유가 아닙니다.
+          데이터는 야후 파이낸스·Stooq의 일별 종가입니다. 매매는 결정 다음 거래일의 시가에 체결되고, 매도 원가는 평균
+          매입단가로 계산한다고 가정했습니다. 세금은 한국 기준 근사치입니다(양도세: 연간 손익 합산 후 250만원 공제, 22% ·
+          배당: 15% 원천징수). 이 문서는 투자 권유가 아닙니다.
         </p>
       </div>
     </div>
@@ -207,7 +208,7 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
     no_sell: '무매도',
     no_sell_except_periodic: '무매도 + 주기 매도만',
   }[cfg.rebalance.mode]
-  const allocLabel = { to_underweight: '미달 슬리브 우선', pro_rata: '목표비중 비례', fixed_split: '고정 분할' }[cfg.contribution.allocation]
+  const allocLabel = { to_underweight: '부족한 자산 우선', pro_rata: '목표비중 비례', fixed_split: '고정 분할' }[cfg.contribution.allocation]
 
   const rows: { label: string; post: string; pre: string }[] = [
     { label: 'TWRR/년 (전략 자체)', post: fmtPct(post.metrics.twrrAnnualPct), pre: fmtPct(pre.metrics.twrrAnnualPct) },

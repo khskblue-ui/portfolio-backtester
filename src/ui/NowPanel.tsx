@@ -24,7 +24,7 @@ export function NowPanel({ assessment }: { assessment: NowAssessment }) {
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
           <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
-            NOW · SIGNAL CHECK · {a.live ? '라이브 결합 · 기준일은 카드별 표기' : `번들 기준 ${a.asOf}`}
+            NOW · SIGNAL CHECK · {a.live ? '라이브 결합 · 기준일은 카드별 표기' : `내장 데이터 기준 ${a.asOf}`}
           </span>
           <span className="flex items-center gap-1.5">
             <Activity className="w-4 h-4 text-[#2962ff]" />
@@ -33,8 +33,8 @@ export function NowPanel({ assessment }: { assessment: NowAssessment }) {
               아래 5개 신호는 <b>역사 7개 하락 구간이 시작될 때 실측된 조건</b>(임계값의 출처)과
               지금을 같은 잣대로 비교한 체크리스트입니다. 예측이 아닙니다 — 선행조건 충족은
               "하락이 곧 온다"가 아니라 "만약 온다면 깊고 길 수 있는 출발점"이라는 뜻입니다.
-              데이터는 이 앱의 검증된 번들(FRED·Shiller·야후 교차 검증)에서 매 갱신 시 자동
-              재계산됩니다.
+              데이터는 이 앱에 내장된 검증 데이터(실러·미 연준 FRED·야후를 교차 검증)에서
+              매 갱신 시 자동 재계산됩니다.
             </HelpTip>
           </span>
         </h2>

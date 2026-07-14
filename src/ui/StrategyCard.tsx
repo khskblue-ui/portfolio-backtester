@@ -56,7 +56,7 @@ export function StrategyCard({
             자산 배분
             <HelpTip title="자산 배분">
               보유할 자산(티커)과 목표 비중 — 합계 100%. 입력창에서 자동완성으로 장기 히스토리
-              자산(^GSPC 1927~, SPY 1993~ 등)을 고를 수 있습니다. CASH는 현금 슬리브(유휴현금
+              자산(^GSPC 1927~, SPY 1993~ 등)을 고를 수 있습니다. CASH는 현금 보유분(유휴현금
               금리 적용), ^로 시작하면 지수 자체 보유 가정(배당 미포함 주의).
             </HelpTip>
           </span>
@@ -137,7 +137,7 @@ export function StrategyCard({
             적립 배분
             <HelpTip title="적립 배분">
               매달 들어오는 적립금을 어느 자산에 나눠 살지 정하는 규칙.
-              <br />· <b>미달 슬리브 우선</b>: 목표 대비 부족한 자산부터, 부족분에 비례해 채움 —
+              <br />· <b>부족한 자산 우선</b>: 목표 비중보다 부족한 자산부터, 부족분에 비례해 채움 —
               적립만으로 자연스럽게 리밸런싱 효과
               <br />· <b>목표비중 비례</b>: 현재 상태와 무관하게 항상 목표 비중대로
               <br />· <b>고정 분할</b>: 자산별로 직접 정한 비율대로 (적립% 입력란이 생김)
@@ -150,7 +150,7 @@ export function StrategyCard({
             }
             className={selectCls}
           >
-            <option value="to_underweight">미달 슬리브 우선</option>
+            <option value="to_underweight">부족한 자산 우선</option>
             <option value="pro_rata">목표비중 비례</option>
             <option value="fixed_split">고정 분할</option>
           </select>

@@ -238,8 +238,9 @@ export function HistoryView({
               재투자만(우리가 계좌에서 보는 숫자). 인플레형 약세장은 명목으론 완만해 보여도
               실질로는 깊고 깁니다 — 두 기준을 전환하며 비교해 보세요. 음영 구간·구간 카드
               수치는 <b>실질 기준으로 고정</b>입니다(구매력이 투자자의 실제 손익이므로).
-              로그 스케일, 1900년 = 100. 데이터: Shiller 월간(가격은 일별 종가의 월평균 —
-              일별 시리즈보다 낙폭이 완만하게 표기됨).
+              로그 스케일, 1900년 = 100. 데이터: 노벨상 수상자 로버트 실러(예일대)가 공개한
+              월간 데이터 — 1957년 이전은 S&P500의 전신 지수를 소급 연결한 것이고, 가격이
+              일별 종가의 월평균이라 일별 그래프보다 낙폭이 완만하게 보입니다.
             </HelpTip>
           </h2>
           {/* 실질/명목 토글 */}
@@ -260,7 +261,7 @@ export function HistoryView({
           </div>
         </div>
         <p className="text-xs text-zinc-400 mb-3">
-          기준: S&P500 지수(1957년 이전은 Cowles·S&P90 소급 합성) 배당 재투자 총수익 · 음영 구간 = 실질 기준 −25% 이상 낙폭 + 전고점 회복까지 3년 이상 · 클릭해 상세 보기
+          붉은 음영 = 실질 가치가 25% 이상 떨어지고 회복까지 3년 넘게 걸린 구간입니다. 음영이나 아래 카드를 클릭하면 상세가 열립니다.
         </p>
         <ResponsiveContainer width="100%" height={320}>
           <LineChart data={overviewData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
@@ -297,8 +298,8 @@ export function HistoryView({
 
       {/* 구간 카드 */}
       <p className="text-[11px] text-zinc-400 leading-relaxed">
-        카드 수치 기준(전부 실질·CPI 조정) — <b>주식: 고점→저점 최대 낙폭</b> · <b>채권·금: 주식 고점→회복 시점 누적 수익</b> (측정 창이 다름에 주의 — 주식도
-        회복 시점엔 정의상 0% 부근). 주식 = S&P500 총수익 · 채권 = 미 10년물 총수익 근사(GS10 파생) · 금 = 현물가 · 현금(3개월 T-bill)은 구간 상세에서
+        카드의 수치는 모두 물가를 반영한 실질 기준입니다. <b>주식은 고점→저점 최대 하락률</b>, <b>채권·금은 고점→회복까지 전체 기간의 누적 수익률</b> —
+        재는 구간이 서로 다르니 그대로 비교하지는 마세요.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {data.episodes.map((e) => {
@@ -378,7 +379,7 @@ export function HistoryView({
                   onExplore(
                     `${selectedEp.peak}-01`,
                     `${end}-01`,
-                    `역사 구간 프리셋: ${title} (${selectedEp.peak} ~ ${end}) — 전략을 "역사 월간" 자산 3종(주식100 / 60·40 / 주식·채권·금)으로 교체했습니다. 백테스트 실행을 누르세요. 결과는 명목 기준·월간 해상도입니다.`,
+                    `역사 구간 프리셋: ${title} (${selectedEp.peak} ~ ${end}) — 전략을 "역사 월간" 자산 3종(주식100 / 60·40 / 주식·채권·금)으로 교체했습니다. 백테스트 실행을 누르세요. 결과는 명목 기준이며, 월 단위 데이터로 계산됩니다.`,
                     histEraStrategies(),
                   )
                 }}
@@ -410,6 +411,18 @@ export function HistoryView({
           <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">{EPISODE_INFO[selectedEp.peak]?.cause}</p>
 
           {/* 자산 추이 (고점=100) */}
+          <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 pt-1">
+            <span className="block text-[8px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">ASSETS · PEAK = 100</span>
+            자산별 추이 — 주식이 무너질 때 무엇이 버텼나 ({basisLabel} 기준, 고점=100)
+            <HelpTip title="각 자산을 어떻게 계산했나">
+              위의 실질/명목 토글이 이 차트에도 적용됩니다. <b>주식</b> = S&P500 배당 재투자
+              총수익(1957년 이전은 전신 지수를 소급 연결). <b>국채</b> = 미 10년물 금리로 계산한
+              총수익 근사치 — 실제 채권지수는 아닙니다. <b>현금</b> = 3개월 만기 단기국채 이자를
+              복리로 쌓은 값(1934년 이전은 단기 상업어음 금리로 연결). <b>금</b> = 현물 가격 —
+              1933~1974년은 미국에서 민간 금 보유가 금지돼 정부 고시가격 시대였고, 1950년 이전
+              자료는 연 단위라 계단 모양으로 표시됩니다(월별 움직임으로 읽지 마세요).
+            </HelpTip>
+          </h4>
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={detailData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }} syncId="era-detail">
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" vertical={false} />
@@ -428,28 +441,27 @@ export function HistoryView({
               <Line type="monotone" dataKey="현금(3개월물)" stroke={c('bill')} strokeWidth={1.6} strokeDasharray="5 3" dot={false} />
             </LineChart>
           </ResponsiveContainer>
-          <p className="text-[11px] text-zinc-400 leading-relaxed">
-            자산 추이는 {basisLabel} 기준(토글 연동)·고점=100 · 주식 = S&P500 총수익(1957 이전 소급 합성) ·
-            국채 = 미 10년물 총수익 근사(GS10 수익률 파생 만기고정 — 실제 지수 아님) ·
-            현금 = 3개월 T-bill(1934 이전은 NY 상업어음 금리 접합) 복리 · 금 = 현물가, 1933-1974 미국 민간보유 금지·공정가 시대 주의
-            (1950년 이전 금은 연 단위 런던 시장가 계열이라 계단형으로 표시됨 — 월 단위 해석 금지, 1949년의 하락 표시는 소스 아티팩트)
-          </p>
+          {selectedEp.peak < '1950' && (
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              이 시대의 금 가격은 연 단위 자료라 계단 모양으로 표시됩니다 — 월별 움직임으로 읽지 마세요 (1949년의 하락 표시도 실제 시세가 아닌 자료상의 흔적입니다).
+            </p>
+          )}
 
           {/* 매크로 배경 */}
           <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 pt-1">
             <span className="block text-[8px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">MACRO BACKDROP</span>
             매크로 배경 — 인플레이션 · 금리 · 밸류에이션
             <HelpTip title="매크로 지표 선정과 신뢰도">
-              1900년 전체를 커버하는 신뢰 가능한 월간 시계열은 Shiller 데이터셋 파생이 사실상
-              유일해 이 4종을 채택했습니다: <b>CPI 인플레(전년동월비)</b> · <b>10년물 국채 명목
-              금리(GS10)</b> · <b>실질금리(GS10 − CPI YoY, 사후적 근사)</b> · <b>CAPE(주가/10년
-              평균 실질이익)</b>. 실질금리가 사후적 기준인 이유: 시장 기반 사전적 실질금리(TIPS)는
-              1997년에야 도입되어 20세기 구간에는 존재하지 않습니다 — 시대 비교가 가능한 유일한
-              실질금리가 사후적입니다(현재의 TIPS는 "현재 신호" 탭). 빌드 시점에 검증된 역사
-              앵커(1929 CAPE 32.6, 2000 CAPE ~44,
-              1981-09 금리 15.32%, 1920/1932/1947/1980 인플레 등)와 자동 대조해 어긋나면 빌드가
-              실패합니다. 연준 기준금리(1913~)·M2(1959~)·하이일드 스프레드(1996~)는 1900년대
-              전반을 커버하지 못해 제외했습니다. 주의: 1913년 이전 CPI는 재구성 물가지수 접합.
+              1900년 이후 전체를 커버하는 신뢰 가능한 월간 자료는 실러(예일대) 데이터가 사실상
+              유일해 이 4종을 채택했습니다: <b>CPI 인플레이션(전년동월비)</b> · <b>10년물 국채
+              명목 금리</b> · <b>실질금리(명목 금리 − 인플레이션, 사후적 근사)</b> · <b>CAPE(주가
+              ÷ 10년 평균 실질 이익)</b>. 실질금리가 사후적 기준인 이유: 시장이 매기는 사전적
+              실질금리(TIPS)는 1997년에야 도입되어 20세기 구간에는 존재하지 않습니다 — 시대
+              비교가 가능한 유일한 실질금리가 사후적입니다(현재의 TIPS는 "현재 신호" 탭).
+              수치는 널리 검증된 역사 기준값(1929년 CAPE 32.6, 2000년 CAPE ~44, 1981년 금리
+              15.32% 등)과 자동 대조를 통과한 것만 싣습니다. 연준 기준금리·통화량·회사채
+              스프레드는 1900년대 전반을 커버하지 못해 제외했습니다. 1913년 이전 CPI는 재구성
+              물가지수입니다. 출처: 실러(예일대) 공개 데이터셋과 미 연준 경제 데이터(FRED).
             </HelpTip>
           </h4>
           <ResponsiveContainer width="100%" height={240}>
@@ -486,9 +498,8 @@ export function HistoryView({
             </LineChart>
           </ResponsiveContainer>
           <p className="text-[11px] text-zinc-400 leading-relaxed">
-            좌축 % = CPI 인플레(전년동월비)·10년물 명목 금리·실질금리(명목 − 인플레, 사후적 — TIPS는 1997년 도입이라 이 시대엔 부재) · 우축(점선) = CAPE ·
-            인플레형(A) 구간은 실질금리가 마이너스로 파묻히고, 밸류에이션 붕괴형(B)은 CAPE 극단에서 출발하는 패턴을 확인할 수 있습니다 ·
-            출처: Shiller(Yale) 미러 (ODC-PDDL) · 방법론·검증: docs/research/negative-real-return-eras.md
+            왼쪽 축 = %(인플레이션·금리), 오른쪽 점선 = CAPE(주가가 최근 10년 평균 이익의 몇 배인가).
+            인플레이션형 구간은 실질금리가 마이너스로 가라앉고, 밸류에이션 붕괴형은 CAPE가 극단인 상태에서 하락이 시작되는 패턴을 확인해 보세요.
           </p>
 
           {/* 밸류에이션의 착시 — 트레일링 vs 실현 선행 P/E */}
@@ -508,6 +519,10 @@ export function HistoryView({
                   트레일링 110배(이익 붕괴가 만든 착시)로 비싸 보였지만 실현 선행은 12배 — 실제로는
                   헐값이었습니다. 주의: 실현 선행 P/E는 미래 정보를 당겨온 사후 지표라 그 당시엔
                   계산 자체가 불가능했습니다 — 실시간 신호가 될 수 없고 역사 해석 전용입니다.
+                  위기 구간의 극단값은 회계상 대규모 손실 처리가 이익을 붕괴시킨 결과라 영업이익
+                  기준으로는 덜 극단적입니다. 두 지표 모두 실러 월간 이익 데이터에서 직접 계산했고
+                  (추정치 미사용), 세로축은 로그 눈금입니다. 실시간 선행 P/E(애널리스트 추정)를
+                  신호로 쓰지 않는 이유는 가이드북의 CAPE 절에 있습니다.
                 </HelpTip>
               </h4>
               <ResponsiveContainer width="100%" height={240}>
@@ -541,10 +556,8 @@ export function HistoryView({
                 </LineChart>
               </ResponsiveContainer>
               <p className="text-[11px] text-zinc-400 leading-relaxed">
-                둘 다 Shiller 월간 이익(트레일링 12개월 as-reported GAAP, 분기 발표치의 월간 보간)에서 직접 계산 — 추정치 미사용 ·
-                실현 선행 P/E = 주가 ÷ 12개월 뒤 확정 이익: 사후 정보라 당시엔 알 수 없던 값이므로 역사 해석 전용("현재 신호" 탭에는 없음, 최근 12개월은 정의상 공백) ·
-                위기 구간의 극단값(2008년 192배)은 GAAP 대규모 상각이 만든 이익 붕괴가 원인 — 영업이익 기준으로는 덜 극단적 ·
-                로그 스케일 · 왜 실시간 선행(Forward) P/E(애널리스트 추정)를 신호로 쓰지 않는지는 가이드북 2부 CAPE 절 참조
+                점선 = 당시 투자자가 실제로 알던 값(직전 1년 이익 기준), 파란 선 = 나중에 확정된 "다음 1년" 실제 이익으로 다시 계산한 값.
+                두 선의 간극이 클수록 시장이 미래 이익을 잘못 산 것입니다. 미래를 알아야 계산되는 지표라 역사 공부 전용이며, 최근 12개월은 계산할 수 없습니다.
               </p>
             </>
           )}
@@ -557,10 +570,10 @@ export function HistoryView({
                   <span className="block text-[8px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">TIMELINE · FOLLOW THE FLOW</span>
                   흐름 따라가기 — 시간 순서로 읽는 이 구간
                   <HelpTip title="연대기 읽는 법">
-                    이 구간을 시간 순서의 국면으로 쪼갠 연대기입니다. 국면을 클릭하면 <b>위의 자산·매크로
-                    차트에 해당 기간이 파란 음영</b>으로 표시되어, 데이터의 꺾임과 그 이유를 짝지어 읽을 수
-                    있습니다. 각 국면의 수치는 이 앱의 검증된 번들에서 추출한 실측값이고, 서사는 컨센서스
-                    수준의 해석만 담았습니다(해석이 갈리는 지점은 본문에 명시).
+                    이 구간을 시간 순서의 국면으로 쪼갠 연대기입니다. 국면을 클릭하면 <b>위의
+                    차트들에 해당 기간이 파란 음영</b>으로 표시되어, 데이터의 꺾임과 그 이유를 짝지어 읽을 수
+                    있습니다. 각 국면의 수치는 이 앱에 내장된 검증 데이터에서 추출한 실측값이고,
+                    서사는 학계·시장의 표준 해석만 담았습니다(해석이 갈리는 지점은 본문에 명시).
                   </HelpTip>
                 </h4>
                 <div className="flex items-center gap-1.5 text-[11px]">
@@ -622,7 +635,7 @@ export function HistoryView({
                 })}
               </ol>
               <p className="mt-2 text-[11px] text-zinc-400">
-                국면을 선택하면 위 차트 2개에 해당 기간이 파란 음영으로 표시됩니다 · "왜 이렇게 움직였나" 버튼의 자산별 스토리와 함께 읽으면 좋습니다
+                국면을 선택하면 위 차트들에 해당 기간이 파란 음영으로 표시됩니다. "왜 이렇게 움직였나" 버튼의 자산별 스토리와 함께 읽으면 좋습니다.
               </p>
             </div>
           )}

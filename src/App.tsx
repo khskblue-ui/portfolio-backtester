@@ -121,7 +121,7 @@ export default function App() {
 
   const addStrategy = () => {
     if (strategies.length >= MAX_STRATEGIES) {
-      setNotice(`전략은 최대 ${MAX_STRATEGIES}개까지 (팔레트 순서 고정)`)
+      setNotice(`전략은 최대 ${MAX_STRATEGIES}개까지 비교할 수 있습니다`)
       return
     }
     setStrategies((prev) => [...prev, emptyStrategy(`전략 ${prev.length + 1}`)])
@@ -356,7 +356,7 @@ export default function App() {
                 onChange={(updater) => updateStrategy(s.id, updater)}
                 onDuplicate={() => {
                   if (strategies.length >= MAX_STRATEGIES) {
-                    setNotice(`전략은 최대 ${MAX_STRATEGIES}개까지 (팔레트 순서 고정)`)
+                    setNotice(`전략은 최대 ${MAX_STRATEGIES}개까지 비교할 수 있습니다`)
                     return
                   }
                   setStrategies((prev) => {
@@ -405,7 +405,7 @@ export default function App() {
         </datalist>
 
         <footer className="text-center text-[11px] font-mono tracking-wide text-zinc-400 dark:text-zinc-600 border-t border-[#e0e3eb] dark:border-[#2a2e39] pt-5 pb-8">
-          데이터: Yahoo Finance (일별 EOD) · 모든 금액 USD · 결과는 원화 실현손익이 아닙니다
+          데이터: 야후 파이낸스 일별 종가 · 모든 금액은 미국 달러(USD) 기준 — 원화 손익과는 다릅니다
         </footer>
       </div>
     </div>

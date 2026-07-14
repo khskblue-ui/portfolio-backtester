@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer } from 'recharts'
 import { Flame } from 'lucide-react'
 import { NowPanel } from './NowPanel'
+import { HelpTip } from './HelpTip'
 import { assessNow, type LiveSnapshot } from './nowSignals'
 import { fetchLiveSnapshot } from './nowData'
 import { ManiaStoryModal } from './ManiaStoryModal'
@@ -163,18 +164,18 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
       },
       {
         title: 'CPI 인플레이션 (전년동월비)',
-        sub: '기준선 = 3% (상승 추세 동반 시 주의; 3.5%+는 단독 주의) · A형 본격화 5%',
+        sub: '3%를 넘어 오르는 추세면 주의 — 5%는 과거 인플레이션형 하락이 본격화되던 수준입니다',
         color: theme === 'dark' ? '#f97316' : '#c2410c',
         data: mk(m.cpiYoY, live?.cpi && refs && live.cpi.ym > refs.ym ? { label: live.cpi.ym, v: cpiLive } : undefined),
         refs: [
           { y: 3, label: '3%' },
-          { y: 5, label: '5% A형', danger: true },
+          { y: 5, label: '5% 인플레형', danger: true },
         ],
         fmt: (v) => `${v.toFixed(1)}%`,
       },
       {
-        title: '실질 10년 금리 — 사전적 TIPS',
-        sub: '시장의 실질 할인율 (TIPS는 1997 도입 · 데이터 2003~). 0% 미만 = 초완화(2020-21년형) · 2.5%+ = 긴축적(2022년형). 그 이전 시대의 실질금리(사후적)는 역사 연구 탭 참고',
+        title: '실질 10년 금리 (TIPS)',
+        sub: '물가를 뺀 "진짜 금리"에 대한 시장의 기대치 (자료는 2003년부터). 0% 미만 = 초완화(2020-21년형), 2.5% 이상 = 긴축(2022년형) — 그 이전 시대의 실질금리는 역사 연구 탭에 있습니다',
         color: theme === 'dark' ? '#34d399' : '#059669',
         data: tipsRows,
         bands: tipsBands,
@@ -208,7 +209,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
     <div className="space-y-5">
       {!assessment.live && (
         <div className="bg-[#faf4e0] dark:bg-[#1d1a10] border-l-4 border-amber-700 dark:border-amber-500 rounded-lg px-4 py-3 text-xs text-amber-900 dark:text-amber-200/90">
-          라이브 조회(야후·FRED)에 실패해 번들 데이터({data.meta.dataEnd}) 기준으로 표시 중입니다 — 네트워크 상태를 확인하거나 잠시 후 새로고침하세요.
+          최신 데이터 조회(야후·FRED)에 실패해 내장 데이터({data.meta.dataEnd}) 기준으로 표시 중입니다 — 네트워크 상태를 확인하거나 잠시 후 새로고침하세요.
         </div>
       )}
 
@@ -267,10 +268,19 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
       </div>
 
       <p className="text-[11px] text-zinc-400 leading-relaxed">
-        소스·실시간성 — 주가: ^SP500TR 일별 종가(야후, 전일까지) · 금리: FRED DGS10·DTB3·DFII10(TIPS) 일별(전일까지) · CPI: FRED CPIAUCNS
-        최신 발표월(통상 1~2개월 지연) · 과거 흐름: 검증된 번들 데이터(1900~{data.meta.dataEnd}, 월평균). 라이브 값은 번들
-        기준값 대비 비율로 체인되며 3시간 캐시됩니다. CAPE는 2023-06 이후 프록시(근사) — 카드의 판정 이유 참조. 선행(Forward) P/E를 쓰지 않는 이유: 분모(애널리스트 추정 이익)가 침체 직전에 체계적으로 과대해(2008년 +43%) 고점에서 오히려 싸 보이기 때문 — 가이드북 2부 CAPE 절 참조.
-        추정 편향이 없는 사후 변형(실현 선행 P/E = 주가 ÷ 12개월 뒤 확정 이익)은 미래 정보라 실시간 신호가 될 수 없어 "역사 연구" 탭의 구간 상세에 실었습니다.
+        주가·금리는 전일까지, CPI는 최신 발표월(보통 1~2개월 지연) 기준으로 자동 갱신됩니다. 과거 흐름은 검증된 데이터(1900~{data.meta.dataEnd})입니다.
+        <HelpTip title="데이터 출처와 한계">
+          주가 = S&P500 총수익지수(야후 파이낸스), 금리 = 미 연준 공개 데이터 FRED(10년물·3개월물·물가연동국채
+          TIPS), CPI = FRED 공식 소비자물가지수. 최신 값은 검증된 과거 데이터의 기준점에 이어
+          붙여 계산하고 3시간 동안 저장해 다시 씁니다. 과거 흐름은 월 단위 평균값이고 차트의
+          마지막 점만 하루 단위 최신 값이라, 마지막 점은 과거 선보다 더 크게 출렁여 보일 수
+          있습니다 — 역사 하락 구간(음영)의 기준과 비교할 때는 이 차이를 감안하세요. CAPE는 이익 데이터가 끝나는 2023-06
+          이후로는 근사치(프록시)입니다 — 카드의 판정 이유에 표기됩니다. 선행(Forward) P/E를
+          신호로 쓰지 않는 이유: 분모인 애널리스트 추정 이익이 하필 침체 직전에 크게
+          부풀어(2008년 +43%) 고점에서 오히려 싸 보이기 때문입니다 — 가이드북의 CAPE 절 참조.
+          추정 없이 계산한 변형(실현 선행 P/E)은 미래 정보가 필요해 실시간 신호가 될 수 없어,
+          역사 연구 탭의 구간 상세에 있습니다.
+        </HelpTip>
       </p>
     </div>
   )
