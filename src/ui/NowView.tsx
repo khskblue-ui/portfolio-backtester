@@ -33,6 +33,8 @@ interface ChartSpec {
   sub: string
   color: string
   data: { ym: string; v: number | null }[]
+  /** 최근 5년 확대용 — 다운샘플 없는 월 해상도 (+ 라이브 최신점) */
+  dataRecent: { ym: string; v: number | null }[]
   refs: { y: number; label: string; danger?: boolean }[]
   /** y 값 포맷 */
   fmt: (v: number) => string
@@ -49,6 +51,9 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
   const [liveTried, setLiveTried] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [maniaOpen, setManiaOpen] = useState(false)
+  // 차트 기간: 전체(1900~) vs 최근 5년 확대 — 역사 전 구간에서는 최근 움직임이 뭉개져
+  // 신호 포착이 어렵다는 피드백으로 추가. 임계 기준선은 확대해도 그대로 유지된다
+  const [zoom, setZoom] = useState<'all' | 'recent'>('all')
 
   useEffect(() => {
     fetch('/data/history.json')
@@ -90,6 +95,14 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
       const rows: { ym: string; v: number | null }[] = []
       for (let i = 0; i < n; i += step) rows.push({ ym: dates[i], v: round2(arr[i]) })
       if ((n - 1) % step !== 0) rows.push({ ym: dates[n - 1], v: round2(arr[n - 1]) })
+      if (liveTail && liveTail.v != null) rows.push({ ym: liveTail.label, v: round2(liveTail.v) })
+      return rows
+    }
+    // 최근 5년(60개월) 확대 — 전체 보기는 3개월 간격으로 다운샘플되므로 별도로 월 해상도 생성
+    const recentFrom = Math.max(0, n - 60)
+    const mkRecent = (arr: (number | null)[], liveTail?: { label: string; v: number | null }) => {
+      const rows: { ym: string; v: number | null }[] = []
+      for (let i = recentFrom; i < n; i++) rows.push({ ym: dates[i], v: round2(arr[i]) })
       if (liveTail && liveTail.v != null) rows.push({ ym: liveTail.label, v: round2(liveTail.v) })
       return rows
     }
@@ -146,6 +159,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
         sub: '음수 구간 진입선 = −25% (역사 7개 구간의 검출 기준)',
         color: theme === 'dark' ? '#3987e5' : '#2a78d6',
         data: mk(dd, { label: liveLabel, v: ddLive }),
+        dataRecent: mkRecent(dd, { label: liveLabel, v: ddLive }),
         refs: [{ y: -25, label: '−25% 구간 기준', danger: true }],
         fmt: (v) => `${v.toFixed(1)}%`,
         domain: ['auto', 0],
@@ -155,6 +169,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
         sub: '기준선 = 역사 하락 시작점: 1968년 24 · 1929년 32.6 · 2000년 44',
         color: theme === 'dark' ? '#a3a3a3' : '#525252',
         data: mk(capeArr, { label: liveLabel, v: capeLive }),
+        dataRecent: mkRecent(capeArr, { label: liveLabel, v: capeLive }),
         refs: [
           { y: 24, label: '1968' },
           { y: 32.6, label: '1929', danger: true },
@@ -167,6 +182,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
         sub: '3%를 넘어 오르는 추세면 주의 — 5%는 과거 인플레이션형 하락이 본격화되던 수준입니다',
         color: theme === 'dark' ? '#f97316' : '#c2410c',
         data: mk(m.cpiYoY, live?.cpi && refs && live.cpi.ym > refs.ym ? { label: live.cpi.ym, v: cpiLive } : undefined),
+        dataRecent: mkRecent(m.cpiYoY, live?.cpi && refs && live.cpi.ym > refs.ym ? { label: live.cpi.ym, v: cpiLive } : undefined),
         refs: [
           { y: 3, label: '3%' },
           { y: 5, label: '5% 인플레형', danger: true },
@@ -178,6 +194,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
         sub: '물가를 뺀 "진짜 금리"에 대한 시장의 기대치 (자료는 2003년부터). 0% 미만 = 초완화(2020-21년형), 2.5% 이상 = 긴축(2022년형) — 그 이전 시대의 실질금리는 역사 연구 탭에 있습니다',
         color: theme === 'dark' ? '#34d399' : '#059669',
         data: tipsRows,
+        dataRecent: tipsRows.slice(-61),
         bands: tipsBands,
         range: '2003 ~ 현재',
         refs: [
@@ -191,6 +208,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
         sub: '0 아래 = 역전 (1969·1973·1980·2000·2007·2019 침체 선행)',
         color: theme === 'dark' ? '#2dd4bf' : '#0f766e',
         data: mk(spreadArr, { label: liveLabel, v: spreadLive }),
+        dataRecent: mkRecent(spreadArr, { label: liveLabel, v: spreadLive }),
         refs: [{ y: 0, label: '역전', danger: true }],
         fmt: (v) => `${v.toFixed(2)}%p`,
       },
@@ -231,40 +249,76 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
 
       {maniaOpen && <ManiaStoryModal onClose={() => setManiaOpen(false)} />}
 
-      {/* 신호별 흐름 그래프 */}
+      {/* 신호별 흐름 그래프 — 기간 토글 (전체 / 최근 5년) */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">SIGNAL CHARTS</span>
+          신호별 흐름 그래프
+        </h3>
+        <div className="flex rounded border border-[#d3d8e3] dark:border-[#363a45] overflow-hidden text-xs font-mono">
+          {(['all', 'recent'] as const).map((z) => (
+            <button
+              key={z}
+              onClick={() => setZoom(z)}
+              className={`px-3 py-1.5 transition-colors ${
+                zoom === z ? 'ink-chip font-semibold' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+              }`}
+            >
+              {z === 'all' ? '전체 역사' : '최근 5년'}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {charts.map((c) => (
-          <div key={c.title} className={`${cardCls} p-4`}>
-            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{c.title}</h3>
-            <p className="text-[11px] text-zinc-400 mb-2">{c.sub} · 음영 = 역사 하락 구간 · {c.range ?? '1900 ~ 현재'}</p>
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={c.data} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" vertical={false} />
-                <XAxis dataKey="ym" tick={{ fontSize: 10, fill: axisTickColor }} stroke={axisTickColor} minTickGap={55} tickFormatter={(d: string) => d.slice(0, 4)} />
-                <YAxis tick={{ fontSize: 10, fill: axisTickColor }} stroke={axisTickColor} width={42} domain={c.domain ?? ['auto', 'auto']} />
-                <Tooltip
-                  formatter={(v) => [c.fmt(Number(v)), c.title]}
-                  labelStyle={tooltipLabelStyle}
-                  contentStyle={tooltipContentStyle}
-                />
-                {(c.bands ?? bands).map((b) => (
-                  <ReferenceArea key={`${b.x1}-${b.x2}`} x1={b.x1} x2={b.x2} fill="rgba(227,73,72,0.10)" stroke="none" />
-                ))}
-                {c.refs.map((r) => (
-                  <ReferenceLine
-                    key={r.label}
-                    y={r.y}
-                    stroke={r.danger ? '#dc2626' : axisTickColor}
-                    strokeDasharray="4 3"
-                    strokeOpacity={0.6}
-                    label={{ value: r.label, position: 'insideTopRight', fontSize: 10, fill: r.danger ? '#dc2626' : axisTickColor }}
+        {charts.map((c) => {
+          const view = zoom === 'recent' ? c.dataRecent : c.data
+          // 확대 창과 겹치는 음영만, 시작점은 창 시작으로 클램프 (카테고리 축은 도메인 밖 좌표를 못 그림)
+          const first = view[0]?.ym ?? ''
+          const viewBands = (c.bands ?? bands)
+            .filter((b) => b.x2 >= first)
+            .map((b) => ({ x1: b.x1 >= first ? b.x1 : first, x2: b.x2 }))
+          return (
+            <div key={c.title} className={`${cardCls} p-4`}>
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{c.title}</h3>
+              <p className="text-[11px] text-zinc-400 mb-2">
+                {c.sub} · {zoom === 'recent' ? '최근 5년 확대 — 기준선은 그대로' : `음영 = 역사 하락 구간 · ${c.range ?? '1900 ~ 현재'}`}
+              </p>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={view} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" vertical={false} />
+                  <XAxis
+                    dataKey="ym"
+                    tick={{ fontSize: 10, fill: axisTickColor }}
+                    stroke={axisTickColor}
+                    minTickGap={55}
+                    tickFormatter={(d: string) => (zoom === 'recent' ? d.slice(0, 7) : d.slice(0, 4))}
                   />
-                ))}
-                <Line type="monotone" dataKey="v" name={c.title} stroke={c.color} strokeWidth={1.6} dot={false} connectNulls />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        ))}
+                  <YAxis tick={{ fontSize: 10, fill: axisTickColor }} stroke={axisTickColor} width={42} domain={c.domain ?? ['auto', 'auto']} />
+                  <Tooltip
+                    formatter={(v) => [c.fmt(Number(v)), c.title]}
+                    labelStyle={tooltipLabelStyle}
+                    contentStyle={tooltipContentStyle}
+                  />
+                  {viewBands.map((b) => (
+                    <ReferenceArea key={`${b.x1}-${b.x2}`} x1={b.x1} x2={b.x2} fill="rgba(227,73,72,0.10)" stroke="none" />
+                  ))}
+                  {c.refs.map((r) => (
+                    <ReferenceLine
+                      key={r.label}
+                      y={r.y}
+                      ifOverflow="extendDomain"
+                      stroke={r.danger ? '#dc2626' : axisTickColor}
+                      strokeDasharray="4 3"
+                      strokeOpacity={0.6}
+                      label={{ value: r.label, position: 'insideTopRight', fontSize: 10, fill: r.danger ? '#dc2626' : axisTickColor }}
+                    />
+                  ))}
+                  <Line type="monotone" dataKey="v" name={c.title} stroke={c.color} strokeWidth={1.6} dot={false} connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )
+        })}
       </div>
 
       <p className="text-[11px] text-zinc-400 leading-relaxed">
