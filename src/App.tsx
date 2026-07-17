@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, TrendingUp, X, FileText, BarChart3, Landmark, Activity, GraduationCap } from 'lucide-react'
+import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, X, FileText, BarChart3, Landmark, Activity, GraduationCap } from 'lucide-react'
 import {
   loadDataBundle,
   runComparison,
@@ -181,8 +181,9 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 flex items-center justify-between flex-wrap gap-x-4 gap-y-1 min-h-14 py-1.5">
           <div className="flex items-center gap-3 sm:gap-7 min-w-0">
             <div className="flex items-center gap-2 flex-shrink-0">
-              <div className="w-7 h-7 ink-chip rounded-lg flex items-center justify-center">
-                <TrendingUp className="w-4 h-4" strokeWidth={2.5} />
+              {/* 로고: 파비콘(favicon.svg)과 동일한 正 마크 */}
+              <div className="w-7 h-7 ink-chip rounded-lg flex items-center justify-center text-[16px] font-black leading-none select-none" aria-hidden="true">
+                正
               </div>
               {/* 좁은 화면에선 내비 공간 확보를 위해 로고 텍스트 생략 */}
               <h1 className="max-[479px]:hidden text-[15px] sm:text-base font-bold tracking-tight whitespace-nowrap">투자의 정석</h1>
