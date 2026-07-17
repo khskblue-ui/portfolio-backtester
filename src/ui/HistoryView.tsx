@@ -10,6 +10,7 @@ import {
   ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
+  Brush,
 } from 'recharts'
 import { FlaskConical, CalendarRange, BookOpen, Flame } from 'lucide-react'
 import { HelpTip } from './HelpTip'
@@ -105,6 +106,10 @@ export function HistoryView({
   // 연대기("흐름 따라가기")에서 선택된 국면 — 위 상세 차트 2개에 음영으로 반영.
   // 구간 변경 시 선택 지점(setSelected 호출부)에서 함께 리셋한다
   const [phaseIdx, setPhaseIdx] = useState<number | null>(null)
+  // 개요 차트 기간 확대(브러시) — 인덱스는 overviewData 기준. 밴드 클램프·축 라벨에 사용.
+  // 브러시 자체는 비제어로 두고, 리셋은 key 재마운트(brushEpoch)로 처리한다
+  const [zoomRange, setZoomRange] = useState<{ s: number; e: number } | null>(null)
+  const [brushEpoch, setBrushEpoch] = useState(0)
 
   const [retryTick, setRetryTick] = useState(0)
   useEffect(() => {
@@ -243,57 +248,106 @@ export function HistoryView({
               일별 종가의 월평균이라 일별 그래프보다 낙폭이 완만하게 보입니다.
             </HelpTip>
           </h2>
-          {/* 실질/명목 토글 */}
-          <div className="flex rounded border border-[#d3d8e3] dark:border-[#363a45] overflow-hidden text-xs font-mono">
-            {(['real', 'nominal'] as const).map((b) => (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* 기간 확대 리셋 — 브러시로 확대 중일 때만 표시 */}
+            {zoomRange && (zoomRange.s > 0 || zoomRange.e < overviewData.length - 1) && (
               <button
-                key={b}
-                onClick={() => setBasis(b)}
-                className={`px-3 py-1.5 transition-colors ${
-                  basis === b
-                    ? 'ink-chip font-semibold'
-                    : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
-                }`}
+                onClick={() => { setZoomRange(null); setBrushEpoch((k) => k + 1) }}
+                className={`px-3 py-1.5 rounded text-xs font-medium ${btnGhostCls}`}
               >
-                {b === 'real' ? '실질' : '명목'}
+                전체 기간으로
               </button>
-            ))}
+            )}
+            {/* 실질/명목 토글 */}
+            <div className="flex rounded border border-[#d3d8e3] dark:border-[#363a45] overflow-hidden text-xs font-mono">
+              {(['real', 'nominal'] as const).map((b) => (
+                <button
+                  key={b}
+                  onClick={() => setBasis(b)}
+                  className={`px-3 py-1.5 transition-colors ${
+                    basis === b
+                      ? 'ink-chip font-semibold'
+                      : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+                  }`}
+                >
+                  {b === 'real' ? '실질' : '명목'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         <p className="text-xs text-zinc-400 mb-3">
           붉은 음영 = 실질 가치가 25% 이상 떨어지고 회복까지 3년 넘게 걸린 구간입니다. 음영이나 아래 카드를 클릭하면 상세가 열립니다.
+          차트 아래의 미니 차트 손잡이를 끌면 원하는 기간만 확대해 볼 수 있습니다.
         </p>
-        <ResponsiveContainer width="100%" height={320}>
-          <LineChart data={overviewData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" vertical={false} />
-            <XAxis dataKey="ym" tick={{ fontSize: 11, fill: axisTickColor }} stroke={axisTickColor} minTickGap={60} tickFormatter={(d: string) => d.slice(0, 4)} />
-            <YAxis
-              scale="log"
-              domain={['auto', 'auto']}
-              tick={{ fontSize: 11, fill: axisTickColor }}
-              stroke={axisTickColor}
-              width={52}
-              tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(Math.round(v)))}
-            />
-            <Tooltip
-              formatter={(v) => [`${Number(v).toFixed(0)} (1900=100)`, `${basisLabel} 총수익`]}
-              labelStyle={tooltipLabelStyle}
-              contentStyle={tooltipContentStyle}
-            />
-            {data.episodes.map((e) => (
-              <ReferenceArea
-                key={e.peak}
-                x1={snapYm(e.peak)}
-                x2={snapYm(e.recovery ?? data.meta.dataEnd)}
-                fill={selected === e.peak ? 'rgba(227,73,72,0.28)' : 'rgba(227,73,72,0.12)'}
-                stroke="none"
-                onClick={() => { setSelected(selected === e.peak ? null : e.peak); setPhaseIdx(null) }}
-                style={{ cursor: 'pointer' }}
-              />
-            ))}
-            <Line type="monotone" dataKey="stock" stroke={c('stock')} strokeWidth={1.8} dot={false} name={`${basisLabel} 총수익`} />
-          </LineChart>
-        </ResponsiveContainer>
+        {(() => {
+          // 브러시 확대 창 — 밴드는 창과 겹치는 부분만 클램프해 표시 (카테고리 축은
+          // 창 밖 좌표를 그릴 수 없음), 축 라벨은 20년 이하 창에서 월 단위로 전환
+          const zs = zoomRange?.s ?? 0
+          const ze = zoomRange?.e ?? overviewData.length - 1
+          const visFirst = overviewData[zs]?.ym ?? ''
+          const visLast = overviewData[ze]?.ym ?? ''
+          const winMonths = ze - zs
+          return (
+            <ResponsiveContainer width="100%" height={352}>
+              <LineChart data={overviewData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" vertical={false} />
+                <XAxis
+                  dataKey="ym"
+                  tick={{ fontSize: 11, fill: axisTickColor }}
+                  stroke={axisTickColor}
+                  minTickGap={60}
+                  tickFormatter={(d: string) => (winMonths <= 240 ? d.slice(0, 7) : d.slice(0, 4))}
+                />
+                <YAxis
+                  scale="log"
+                  domain={['auto', 'auto']}
+                  tick={{ fontSize: 11, fill: axisTickColor }}
+                  stroke={axisTickColor}
+                  width={52}
+                  tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(Math.round(v)))}
+                />
+                <Tooltip
+                  formatter={(v) => [`${Number(v).toFixed(0)} (1900=100)`, `${basisLabel} 총수익`]}
+                  labelStyle={tooltipLabelStyle}
+                  contentStyle={tooltipContentStyle}
+                />
+                {data.episodes.map((e) => {
+                  const x1 = snapYm(e.peak)
+                  const x2 = snapYm(e.recovery ?? data.meta.dataEnd)
+                  const cx1 = x1 < visFirst ? visFirst : x1
+                  const cx2 = x2 > visLast ? visLast : x2
+                  if (cx1 > cx2) return null
+                  return (
+                    <ReferenceArea
+                      key={e.peak}
+                      x1={cx1}
+                      x2={cx2}
+                      fill={selected === e.peak ? 'rgba(227,73,72,0.28)' : 'rgba(227,73,72,0.12)'}
+                      stroke="none"
+                      onClick={() => { setSelected(selected === e.peak ? null : e.peak); setPhaseIdx(null) }}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  )
+                })}
+                <Line type="monotone" dataKey="stock" stroke={c('stock')} strokeWidth={1.8} dot={false} name={`${basisLabel} 총수익`} />
+                <Brush
+                  key={brushEpoch}
+                  dataKey="ym"
+                  height={26}
+                  travellerWidth={9}
+                  stroke={theme === 'dark' ? '#5b8aff' : '#2962ff'}
+                  fill={theme === 'dark' ? '#131722' : '#f8fafc'}
+                  tickFormatter={(d: string) => d.slice(0, 4)}
+                  onChange={(r) => {
+                    const rr = r as { startIndex?: number; endIndex?: number }
+                    setZoomRange(rr?.startIndex != null && rr?.endIndex != null ? { s: rr.startIndex, e: rr.endIndex } : null)
+                  }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )
+        })()}
       </div>
 
       {/* 구간 카드 */}
