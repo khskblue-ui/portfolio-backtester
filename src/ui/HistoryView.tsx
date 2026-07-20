@@ -21,6 +21,7 @@ import { ManiaStoryModal } from './ManiaStoryModal'
 import { MANIA_STORY } from './maniaStory'
 import { cardCls, btnGhostCls, fmtSignedPct } from './common'
 import { EPISODE_INFO } from './episodeInfo'
+import { fetchNasdaqMonthly, type NasdaqSeries } from './historyExtra'
 import { histEraStrategies, type StrategyConfig } from '@/core'
 
 /**
@@ -107,9 +108,43 @@ export function HistoryView({
   // 구간 변경 시 선택 지점(setSelected 호출부)에서 함께 리셋한다
   const [phaseIdx, setPhaseIdx] = useState<number | null>(null)
   // 개요 차트 기간 확대(브러시) — 인덱스는 overviewData 기준. 밴드 클램프·축 라벨에 사용.
-  // 브러시 자체는 비제어로 두고, 리셋은 key 재마운트(brushEpoch)로 처리한다
+  // 브러시 자체는 비제어로 두고, 리셋은 key 재마운트(brushEpoch)로 처리한다.
+  // 주의: recharts는 data 배열의 "참조"가 바뀌면 브러시 내부 창을 onChange 호출 없이
+  // 전체 범위로 되돌린다 — 그래서 데이터 정체성이 바뀌는 모든 조작(실질/명목 전환,
+  // 나스닥 토글·도착)에서 resetZoom()을 함께 호출해 zoomRange가 어긋나지 않게 한다
   const [zoomRange, setZoomRange] = useState<{ s: number; e: number } | null>(null)
   const [brushEpoch, setBrushEpoch] = useState(0)
+  const resetZoom = () => {
+    setZoomRange(null)
+    setBrushEpoch((k) => k + 1)
+  }
+  // 나스닥 비교 오버레이 — 켤 때 처음 한 번 /fred 프록시에서 조회 (historyExtra)
+  const [nasdaq, setNasdaq] = useState<NasdaqSeries | null>(null)
+  const [nasdaqState, setNasdaqState] = useState<'off' | 'loading' | 'on' | 'fail'>('off')
+  const nasdaqOn = nasdaqState === 'on'
+  const toggleNasdaq = () => {
+    if (nasdaqState === 'on') {
+      resetZoom()
+      return setNasdaqState('off')
+    }
+    if (nasdaqState === 'loading') return
+    if (nasdaq) {
+      resetZoom()
+      return setNasdaqState('on')
+    }
+    setNasdaqState('loading')
+    void fetchNasdaqMonthly().then((s) => {
+      if (s) setNasdaq(s)
+      setNasdaqState((cur) => {
+        if (cur !== 'loading') return cur
+        if (s) {
+          resetZoom()
+          return 'on'
+        }
+        return 'fail'
+      })
+    })
+  }
 
   const [retryTick, setRetryTick] = useState(0)
   useEffect(() => {
@@ -157,17 +192,45 @@ export function HistoryView({
   // 전체 차트 데이터 (주식 총수익, 로그 스케일) — 마지막 포인트는 항상 유지하고,
   // 밴드 경계(ym)는 다운샘플된 라벨로 스냅 (카테고리 축에서 라벨이 사라지면 밴드도 사라짐)
   const { overviewData, snapYm } = useMemo(() => {
-    if (!data || !pick) return { overviewData: [], snapYm: (ym: string) => ym }
+    const empty = { overviewData: [] as { ym: string; stock: number | null; nasdaq: number | null }[], snapYm: (ym: string) => ym }
+    if (!data || !pick) return empty
     const { dates } = data.series
     const n = dates.length
     const step = Math.max(1, Math.floor(n / 800))
-    const rows = []
-    for (let i = 0; i < n; i += step) rows.push({ ym: dates[i], stock: pick.stock[i] })
-    if ((n - 1) % step !== 0) rows.push({ ym: dates[n - 1], stock: pick.stock[n - 1] })
+    // 나스닥 오버레이 — 시작월(1971-02)의 S&P500 값에 이어붙임(co-basing).
+    // 실질 모드의 CPI 디플레이터는 번들의 명목/실질 비에서 그대로 복원된다:
+    // CPI(t)/CPI(b) = (stockNom(t)/stock(t)) ÷ (stockNom(b)/stock(b))
+    let nasdaqAt: (i: number) => number | null = () => null
+    if (nasdaqOn && nasdaq) {
+      const nmap = new Map(nasdaq.ym.map((m, k) => [m, nasdaq.value[k]]))
+      const baseYm = nasdaq.ym[0]
+      const b = dates.indexOf(baseYm)
+      const baseVal = nmap.get(baseYm)
+      const sBase = b >= 0 ? pick.stock[b] : null
+      if (b >= 0 && baseVal && sBase != null) {
+        const cpiF = (i: number) => {
+          const nom = data.series.stockNom[i]
+          const real = data.series.stock[i]
+          return nom != null && real != null && real > 0 ? nom / real : null
+        }
+        const fb = cpiF(b)
+        nasdaqAt = (i) => {
+          if (i < b) return null
+          const v = nmap.get(dates[i])
+          if (v == null) return null
+          if (basis === 'nominal') return (v / baseVal) * sBase
+          const ft = cpiF(i)
+          return ft != null && fb != null ? (v / baseVal) * (fb / ft) * sBase : null
+        }
+      }
+    }
+    const rows: { ym: string; stock: number | null; nasdaq: number | null }[] = []
+    for (let i = 0; i < n; i += step) rows.push({ ym: dates[i], stock: pick.stock[i], nasdaq: nasdaqAt(i) })
+    if ((n - 1) % step !== 0) rows.push({ ym: dates[n - 1], stock: pick.stock[n - 1], nasdaq: nasdaqAt(n - 1) })
     const sampled = rows.map((r) => r.ym)
     const snapYm = (ym: string) => sampled.find((d) => d >= ym) ?? sampled[sampled.length - 1]
     return { overviewData: rows, snapYm }
-  }, [data, pick])
+  }, [data, pick, basis, nasdaq, nasdaqOn])
 
   const selectedEp = data?.episodes.find((e) => e.peak === selected) ?? null
   const timeline = useMemo(() => (selectedEp ? ERA_TIMELINES[selectedEp.peak] ?? [] : []), [selectedEp])
@@ -246,6 +309,8 @@ export function HistoryView({
               로그 스케일, 1900년 = 100. 데이터: 노벨상 수상자 로버트 실러(예일대)가 공개한
               월간 데이터 — 1957년 이전은 S&P500의 전신 지수를 소급 연결한 것이고, 가격이
               일별 종가의 월평균이라 일별 그래프보다 낙폭이 완만하게 보입니다.
+              "나스닥 비교"를 켜면 나스닥 종합지수(미 연준 FRED, 1971년 시작)가 같은 월평균
+              관례로 함께 표시됩니다 — 실질 모드에서는 나스닥도 같은 CPI로 보정합니다.
             </HelpTip>
           </h2>
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -258,12 +323,27 @@ export function HistoryView({
                 전체 기간으로
               </button>
             )}
+            {/* 나스닥 비교 토글 — 1971~ 종합지수(가격) 오버레이 */}
+            <button
+              onClick={toggleNasdaq}
+              className={`px-3 py-1.5 rounded text-xs font-mono transition-colors border ${
+                nasdaqOn
+                  ? 'ink-chip font-semibold border-transparent'
+                  : `border-[#d3d8e3] dark:border-[#363a45] ${
+                      nasdaqState === 'fail'
+                        ? 'text-red-600 dark:text-red-400'
+                        : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+                    }`
+              }`}
+            >
+              {nasdaqState === 'loading' ? '나스닥 불러오는 중…' : nasdaqState === 'fail' ? '나스닥 조회 실패 — 다시 시도' : '나스닥 비교'}
+            </button>
             {/* 실질/명목 토글 */}
             <div className="flex rounded border border-[#d3d8e3] dark:border-[#363a45] overflow-hidden text-xs font-mono">
               {(['real', 'nominal'] as const).map((b) => (
                 <button
                   key={b}
-                  onClick={() => setBasis(b)}
+                  onClick={() => { if (b !== basis) resetZoom(); setBasis(b) }}
                   className={`px-3 py-1.5 transition-colors ${
                     basis === b
                       ? 'ink-chip font-semibold'
@@ -308,10 +388,11 @@ export function HistoryView({
                   tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(Math.round(v)))}
                 />
                 <Tooltip
-                  formatter={(v) => [`${Number(v).toFixed(0)} (1900=100)`, `${basisLabel} 총수익`]}
+                  formatter={(v, name) => [`${Number(v).toFixed(0)} (1900=100)`, name]}
                   labelStyle={tooltipLabelStyle}
                   contentStyle={tooltipContentStyle}
                 />
+                {nasdaqOn && <Legend verticalAlign="top" wrapperStyle={{ fontSize: 12 }} />}
                 {data.episodes.map((e) => {
                   const x1 = snapYm(e.peak)
                   const x2 = snapYm(e.recovery ?? data.meta.dataEnd)
@@ -330,7 +411,10 @@ export function HistoryView({
                     />
                   )
                 })}
-                <Line type="monotone" dataKey="stock" stroke={c('stock')} strokeWidth={1.8} dot={false} name={`${basisLabel} 총수익`} />
+                <Line type="monotone" dataKey="stock" stroke={c('stock')} strokeWidth={1.8} dot={false} name={`S&P500 ${basisLabel} 총수익`} />
+                {nasdaqOn && (
+                  <Line type="monotone" dataKey="nasdaq" stroke={c('real')} strokeWidth={1.6} dot={false} name="나스닥 종합 (가격지수 · 1971~)" />
+                )}
                 <Brush
                   key={brushEpoch}
                   dataKey="ym"
@@ -348,6 +432,18 @@ export function HistoryView({
             </ResponsiveContainer>
           )
         })()}
+        {nasdaqOn && (
+          <p className="text-[11px] text-zinc-400 leading-relaxed mt-1.5">
+            나스닥 선은 종합지수(1971년 2월 시작)를 그 달의 S&P500 값에 이어붙여 이후의 상대 성과를 보여줍니다.
+            다만 나스닥 선은 배당이 빠진 가격지수라 총수익인 S&P500 선보다 불리하게 표시됩니다 — 연 1% 안팎의 배당도
+            50년 넘게 쌓이면 약 2배 차이가 되므로, 두 선의 간격을 그대로 우열로 읽지 마세요. 붉은 음영 구간은 계속 S&P500 기준입니다.
+          </p>
+        )}
+        {nasdaqState === 'fail' && (
+          <p className="text-[11px] text-red-600 dark:text-red-400 leading-relaxed mt-1.5">
+            나스닥 데이터를 불러오지 못했습니다 — 네트워크 상태를 확인하고 버튼을 다시 눌러 주세요.
+          </p>
+        )}
       </div>
 
       {/* 구간 카드 */}

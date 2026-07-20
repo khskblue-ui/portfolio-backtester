@@ -32,6 +32,13 @@ export default defineConfig({
           Referer: 'https://stooq.com/',
         },
       },
+      // FRED: 프로덕션은 vercel.json rewrite(또는 functions/fred)가 담당 —
+      // dev 서버에서도 /fred/fredgraph.csv가 동작하도록 프록시
+      '/fred': {
+        target: 'https://fred.stlouisfed.org',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/fred/, '/graph'),
+      },
       // Yahoo Finance: 프로덕션은 Cloudflare Pages Function(functions/yf)이 담당 —
       // dev 서버에서도 동일한 /yf/* 경로가 동작하도록 프록시
       '/yf': {
