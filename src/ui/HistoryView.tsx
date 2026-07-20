@@ -337,29 +337,19 @@ export function HistoryView({
                 전체 기간으로
               </button>
             )}
-            {/* 나스닥 비교 선택 — 없음 / 종합(가격, 1971~) / 나스닥100 총수익(배당 포함, 1999~) */}
-            <div className="flex rounded border border-[#d3d8e3] dark:border-[#363a45] overflow-hidden text-xs font-mono">
-              <span className="px-2 py-1.5 text-zinc-400 dark:text-zinc-500 border-r border-[#d3d8e3] dark:border-[#363a45] select-none">나스닥</span>
-              {(
-                [
-                  { k: 'off', label: '없음' },
-                  { k: 'comp', label: '종합 1971~' },
-                  { k: 'ndx100', label: '100 총수익 1999~' },
-                ] as const
-              ).map((o) => (
-                <button
-                  key={o.k}
-                  onClick={() => selectOverlay(o.k)}
-                  className={`px-2.5 py-1.5 transition-colors ${
-                    overlay === o.k
-                      ? 'ink-chip font-semibold'
-                      : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
-                  }`}
-                >
-                  {overlay === o.k && overlayLoading ? `${o.label} …` : o.label}
-                </button>
-              ))}
-            </div>
+            {/* 나스닥 비교 선택 — 드롭다운 (없음 / 종합 1971~ 가격 / 나스닥100 1999~ 배당 포함) */}
+            <select
+              value={overlay}
+              onChange={(e) => selectOverlay(e.target.value as 'off' | 'comp' | 'ndx100')}
+              className={`text-xs rounded border px-2 py-1.5 bg-white dark:bg-[#1e222d] border-[#d3d8e3] dark:border-[#363a45] ${
+                overlay === 'off' ? 'text-zinc-500 dark:text-zinc-400' : 'text-[#2962ff] dark:text-[#5b8aff] font-semibold'
+              }`}
+              aria-label="나스닥 비교 지수 선택"
+            >
+              <option value="off">나스닥 비교 안 함</option>
+              <option value="comp">나스닥 종합과 비교 (1971~ · 배당 제외)</option>
+              <option value="ndx100">나스닥100과 비교 (1999~ · 배당 포함)</option>
+            </select>
             {/* 실질/명목 토글 */}
             <div className="flex rounded border border-[#d3d8e3] dark:border-[#363a45] overflow-hidden text-xs font-mono">
               {(['real', 'nominal'] as const).map((b) => (
@@ -380,7 +370,6 @@ export function HistoryView({
         </div>
         <p className="text-xs text-zinc-400 mb-3">
           붉은 음영 = 실질 가치가 25% 이상 떨어지고 회복까지 3년 넘게 걸린 구간입니다. 음영이나 아래 카드를 클릭하면 상세가 열립니다.
-          차트 아래의 미니 차트 손잡이를 끌면 원하는 기간만 확대해 볼 수 있습니다.
         </p>
         {(() => {
           // 본 차트 — 확대 시 viewRows(슬라이스·재정규화)를 그림. 밴드는 창과 겹치는
@@ -442,17 +431,18 @@ export function HistoryView({
             </ResponsiveContainer>
           )
         })()}
-        {/* 기간 선택 미니 차트 — 데이터(fullRows)가 확대와 무관하게 고정이라, 위 본 차트가
-            확대마다 다시 그려져도 브러시 창이 리셋되지 않는다 */}
-        <ResponsiveContainer width="100%" height={64}>
-          <LineChart data={fullRows} margin={{ top: 2, right: 8, left: 52, bottom: 0 }}>
+        {/* 기간 선택 슬라이더 — 별도 차트에 브러시만 두고(전체 흐름 실루엣은 트랙 안에),
+            데이터(fullRows)가 확대와 무관하게 고정이라 위 본 차트가 확대마다 다시
+            그려져도 브러시 창이 리셋되지 않는다 */}
+        <ResponsiveContainer width="100%" height={44}>
+          <LineChart data={fullRows} margin={{ top: 4, right: 8, left: 52, bottom: 0 }}>
             <XAxis dataKey="ym" hide />
-            <YAxis hide scale="log" domain={['auto', 'auto']} />
-            <Line type="monotone" dataKey="stock" stroke={c('stock')} strokeWidth={1} dot={false} isAnimationActive={false} />
+            <YAxis hide />
+            <Line dataKey="stock" hide />
             <Brush
               key={brushEpoch}
               dataKey="ym"
-              height={24}
+              height={36}
               travellerWidth={9}
               stroke={theme === 'dark' ? '#5b8aff' : '#2962ff'}
               fill={theme === 'dark' ? '#131722' : '#f8fafc'}
@@ -463,9 +453,15 @@ export function HistoryView({
                 if (rr.startIndex <= 0 && rr.endIndex >= fullRows.length - 1) setZoomRange(null)
                 else setZoomRange({ s: rr.startIndex, e: rr.endIndex })
               }}
-            />
+            >
+              <LineChart data={fullRows}>
+                <YAxis hide scale="log" domain={['auto', 'auto']} />
+                <Line type="monotone" dataKey="stock" stroke={c('stock')} strokeWidth={1} strokeOpacity={0.55} dot={false} isAnimationActive={false} />
+              </LineChart>
+            </Brush>
           </LineChart>
         </ResponsiveContainer>
+        <p className="text-[10px] text-zinc-400 mt-0.5 ml-[52px]">기간 선택 — 손잡이를 끌어 원하는 구간만 확대</p>
         {rebased && (
           <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mt-1.5">
             확대 중에는 두 선을 <b>확대 구간 시작 = 100</b>으로 다시 맞춰, 그 구간에서의 상대 성과를 같은 출발선에서 비교합니다.
@@ -475,20 +471,26 @@ export function HistoryView({
           <p className="text-[11px] text-zinc-400 leading-relaxed mt-1.5">
             나스닥 종합 선은 1971년 2월(지수 시작)의 S&P500 값에 이어붙여 이후의 상대 성과를 보여줍니다.
             다만 배당이 빠진 가격지수라 총수익인 S&P500 선보다 불리하게 표시됩니다 — 연 1% 안팎의 배당도 50년 넘게 쌓이면
-            약 2배 차이가 되므로, 두 선의 간격을 그대로 우열로 읽지 마세요. 같은 기준의 비교는 "100 총수익"을 선택하세요.
+            약 2배 차이가 되므로, 두 선의 간격을 그대로 우열로 읽지 마세요. 같은 기준(배당 포함)의 비교는 "나스닥100과 비교"를 선택하세요.
             붉은 음영 구간은 계속 S&P500 기준입니다.
           </p>
         )}
         {overlayOn && overlay === 'ndx100' && (
           <p className="text-[11px] text-zinc-400 leading-relaxed mt-1.5">
-            나스닥100 선은 배당 재투자 총수익 지수(1999년 3월 산출 시작)를 그 달의 S&P500 값에 이어붙인 것입니다 —
-            두 선 모두 배당 포함이라 같은 기준으로 비교할 수 있습니다. 다만 나스닥100은 나스닥 상장 비금융 대형주
-            100종목이라 나스닥 전체보다 좁습니다. 붉은 음영 구간은 계속 S&P500 기준입니다.
+            나스닥100 선은 배당 재투자 총수익{overlayData?.src === 'qqq' ? '(추종 ETF인 QQQ의 배당 포함 수익률로 계산 — 연 0.2% 보수만큼 지수보다 낮게 표시)' : ' 지수'}
+            (1999년 3월 시작)를 그 달의 S&P500 값에 이어붙인 것입니다 — 두 선 모두 배당 포함이라 같은 기준으로 비교할 수 있습니다.
+            다만 나스닥100은 나스닥 상장 비금융 대형주 100종목이라 나스닥 전체보다 좁습니다. 붉은 음영 구간은 계속 S&P500 기준입니다.
           </p>
+        )}
+        {overlayLoading && (
+          <p className="text-[11px] text-zinc-400 leading-relaxed mt-1.5">나스닥 데이터를 불러오는 중…</p>
         )}
         {overlayFail && (
           <p className="text-[11px] text-red-600 dark:text-red-400 leading-relaxed mt-1.5">
-            나스닥 데이터를 불러오지 못했습니다 — 네트워크 상태를 확인하고 같은 버튼을 다시 눌러 재시도하세요.
+            나스닥 데이터를 불러오지 못했습니다 — 네트워크 상태를 확인해 주세요.
+            <button onClick={() => selectOverlay(overlay)} className="ml-2 underline font-semibold">
+              다시 시도
+            </button>
           </p>
         )}
       </div>

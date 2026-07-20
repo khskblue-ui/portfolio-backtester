@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { parseNasdaqDailyCsv, parseNdx100Chart } from '../src/ui/historyExtra'
+import { parseNasdaqDailyCsv, parseNdx100Chart, parseQqqChart } from '../src/ui/historyExtra'
 
 /** 1971-02 ~ 2026-05, 월 앵커 로그-선형 보간 일별(월 2회 관측) 합성 CSV */
 function syntheticCsv(anchors: [string, number][]): string {
@@ -149,5 +149,38 @@ describe('나스닥100 총수익 차트 JSON → 월평균 + 무결성 가드', 
   it('가드: 형식 불량(빈 결과)이면 null', () => {
     expect(parseNdx100Chart({})).toBeNull()
     expect(parseNdx100Chart({ chart: { result: [] } })).toBeNull()
+  })
+
+  it('정상 시리즈에 src=xndx 표기', () => {
+    expect(parseNdx100Chart(syntheticChart(NDX_ANCHORS))!.src).toBe('xndx')
+  })
+})
+
+describe('QQQ 폴백 (조정 종가 = 배당 포함)', () => {
+  /** quote.close를 adjclose로 옮긴 차트 — QQQ 응답 형태 */
+  function toAdjChart(chart: unknown): unknown {
+    const j = structuredClone(chart) as {
+      chart: { result: { indicators: { quote?: { close: (number | null)[] }[]; adjclose?: { adjclose: (number | null)[] }[] } }[] }
+    }
+    const ind = j.chart.result[0].indicators
+    ind.adjclose = [{ adjclose: ind.quote![0].close }]
+    delete ind.quote
+    return j
+  }
+
+  it('절대 눈금 가드 없이(조정 종가 스케일) 비율 가드만으로 통과, src=qqq', () => {
+    // QQQ 스케일(지수의 ~1/20) — 비율은 동일하므로 붕괴 가드는 그대로 성립해야 함
+    const scaled = NDX_ANCHORS.map(([m, v]) => [m, v * 0.05] as [string, number])
+    const s = parseQqqChart(toAdjChart(syntheticChart(scaled)))
+    expect(s).not.toBeNull()
+    expect(s!.src).toBe('qqq')
+    expect(s!.ym[0]).toBe('1999-03')
+    const at = (m: string) => s!.value[s!.ym.indexOf(m)]
+    expect(at('2002-10') / at('2000-03')).toBeLessThan(0.35)
+  })
+
+  it('가드: 닷컴 붕괴가 없으면 QQQ도 null', () => {
+    const noCrash: [string, number][] = [['1999-03', 50], ['2000-03', 110], ['2002-10', 100], ['2026-05', 600]]
+    expect(parseQqqChart(toAdjChart(syntheticChart(noCrash)))).toBeNull()
   })
 })
