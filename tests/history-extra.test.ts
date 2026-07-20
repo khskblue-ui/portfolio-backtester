@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { parseNasdaqDailyCsv } from '../src/ui/historyExtra'
+import { parseNasdaqDailyCsv, parseNdx100Chart } from '../src/ui/historyExtra'
 
 /** 1971-02 ~ 2026-05, 월 앵커 로그-선형 보간 일별(월 2회 관측) 합성 CSV */
 function syntheticCsv(anchors: [string, number][]): string {
@@ -77,5 +77,77 @@ describe('나스닥 일별 CSV → 월평균 + 무결성 가드', () => {
   it('가드: 표본 부족(600개월 미만)이면 null', () => {
     const short = syntheticCsv([['1971-02', 100.8], ['2000-03', 4800]])
     expect(parseNasdaqDailyCsv(short)).toBeNull()
+  })
+})
+
+/** 야후 차트 JSON 합성 — 월 앵커 로그-선형 보간, 월 1포인트 */
+function syntheticChart(anchors: [string, number][], prepend?: { ym: string; v: number }[]): unknown {
+  const mIdx = (ym: string) => {
+    const [y, m] = ym.split('-').map(Number)
+    return y * 12 + m
+  }
+  const ts: number[] = []
+  const close: number[] = []
+  for (const p of prepend ?? []) {
+    const [y, m] = p.ym.split('-').map(Number)
+    ts.push(Date.UTC(y, m - 1, 15) / 1000)
+    close.push(p.v)
+  }
+  for (let k = 0; k < anchors.length - 1; k++) {
+    const [a, va] = anchors[k]
+    const [b, vb] = anchors[k + 1]
+    const ia = mIdx(a)
+    const ib = mIdx(b)
+    for (let i = ia; i < ib + (k === anchors.length - 2 ? 1 : 0); i++) {
+      const y = Math.floor((i - 1) / 12)
+      const m = i - y * 12
+      ts.push(Date.UTC(y, m - 1, 15) / 1000)
+      close.push(va * Math.exp(Math.log(vb / va) * ((i - ia) / (ib - ia))))
+    }
+  }
+  return { chart: { result: [{ meta: { gmtoffset: 0 }, timestamp: ts, indicators: { quote: [{ close }] } }] } }
+}
+
+const NDX_ANCHORS: [string, number][] = [
+  ['1999-03', 1000],
+  ['2000-03', 2270],
+  ['2002-10', 400],
+  ['2026-05', 13000],
+]
+
+describe('나스닥100 총수익 차트 JSON → 월평균 + 무결성 가드', () => {
+  it('정상 시리즈: 1999-03 시작·기준값·붕괴 앵커 통과', () => {
+    const s = parseNdx100Chart(syntheticChart(NDX_ANCHORS))
+    expect(s).not.toBeNull()
+    expect(s!.ym[0]).toBe('1999-03')
+    expect(s!.ym.length).toBeGreaterThan(300)
+    expect(s!.value[0]).toBeCloseTo(1000, -1)
+    const at = (m: string) => s!.value[s!.ym.indexOf(m)]
+    expect(at('2002-10') / at('2000-03')).toBeLessThan(0.35)
+  })
+
+  it('1999-03 이전 소급 데이터는 잘라낸다', () => {
+    const withBackfill = syntheticChart(NDX_ANCHORS, [
+      { ym: '1998-01', v: 700 },
+      { ym: '1999-02', v: 950 },
+    ])
+    const s = parseNdx100Chart(withBackfill)
+    expect(s).not.toBeNull()
+    expect(s!.ym[0]).toBe('1999-03')
+  })
+
+  it('가드: 기준값이 1000 부근이 아니면 null', () => {
+    const wrongBase: [string, number][] = [['1999-03', 300], ['2000-03', 680], ['2002-10', 120], ['2026-05', 3900]]
+    expect(parseNdx100Chart(syntheticChart(wrongBase))).toBeNull()
+  })
+
+  it('가드: 닷컴 붕괴 앵커가 없으면 null', () => {
+    const noCrash: [string, number][] = [['1999-03', 1000], ['2000-03', 2270], ['2002-10', 2000], ['2026-05', 13000]]
+    expect(parseNdx100Chart(syntheticChart(noCrash))).toBeNull()
+  })
+
+  it('가드: 형식 불량(빈 결과)이면 null', () => {
+    expect(parseNdx100Chart({})).toBeNull()
+    expect(parseNdx100Chart({ chart: { result: [] } })).toBeNull()
   })
 })
