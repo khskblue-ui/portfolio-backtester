@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { parseNasdaqDailyCsv, parseNdx100Chart, parseQqqChart } from '../src/ui/historyExtra'
+import { parseNasdaqDailyCsv, parseQqqChart } from '../src/ui/historyExtra'
 
 /** 1971-02 ~ 2026-05, 월 앵커 로그-선형 보간 일별(월 2회 관측) 합성 CSV */
 function syntheticCsv(anchors: [string, number][]): string {
@@ -108,55 +108,7 @@ function syntheticChart(anchors: [string, number][], prepend?: { ym: string; v: 
   return { chart: { result: [{ meta: { gmtoffset: 0 }, timestamp: ts, indicators: { quote: [{ close }] } }] } }
 }
 
-const NDX_ANCHORS: [string, number][] = [
-  ['1999-03', 1000],
-  ['2000-03', 2270],
-  ['2002-10', 400],
-  ['2026-05', 13000],
-]
-
-describe('나스닥100 총수익 차트 JSON → 월평균 + 무결성 가드', () => {
-  it('정상 시리즈: 1999-03 시작·기준값·붕괴 앵커 통과', () => {
-    const s = parseNdx100Chart(syntheticChart(NDX_ANCHORS))
-    expect(s).not.toBeNull()
-    expect(s!.ym[0]).toBe('1999-03')
-    expect(s!.ym.length).toBeGreaterThan(300)
-    expect(s!.value[0]).toBeCloseTo(1000, -1)
-    const at = (m: string) => s!.value[s!.ym.indexOf(m)]
-    expect(at('2002-10') / at('2000-03')).toBeLessThan(0.35)
-  })
-
-  it('1999-03 이전 소급 데이터는 잘라낸다', () => {
-    const withBackfill = syntheticChart(NDX_ANCHORS, [
-      { ym: '1998-01', v: 700 },
-      { ym: '1999-02', v: 950 },
-    ])
-    const s = parseNdx100Chart(withBackfill)
-    expect(s).not.toBeNull()
-    expect(s!.ym[0]).toBe('1999-03')
-  })
-
-  it('가드: 기준값이 1000 부근이 아니면 null', () => {
-    const wrongBase: [string, number][] = [['1999-03', 300], ['2000-03', 680], ['2002-10', 120], ['2026-05', 3900]]
-    expect(parseNdx100Chart(syntheticChart(wrongBase))).toBeNull()
-  })
-
-  it('가드: 닷컴 붕괴 앵커가 없으면 null', () => {
-    const noCrash: [string, number][] = [['1999-03', 1000], ['2000-03', 2270], ['2002-10', 2000], ['2026-05', 13000]]
-    expect(parseNdx100Chart(syntheticChart(noCrash))).toBeNull()
-  })
-
-  it('가드: 형식 불량(빈 결과)이면 null', () => {
-    expect(parseNdx100Chart({})).toBeNull()
-    expect(parseNdx100Chart({ chart: { result: [] } })).toBeNull()
-  })
-
-  it('정상 시리즈에 src=xndx 표기', () => {
-    expect(parseNdx100Chart(syntheticChart(NDX_ANCHORS))!.src).toBe('xndx')
-  })
-})
-
-describe('QQQ 폴백 (조정 종가 = 배당 포함)', () => {
+describe('나스닥100 총수익 (QQQ 월봉 · 조정 종가 = 배당 포함)', () => {
   /** quote.close를 adjclose로 옮긴 차트 — QQQ 응답 형태 */
   function toAdjChart(chart: unknown): unknown {
     const j = structuredClone(chart) as {
@@ -168,19 +120,43 @@ describe('QQQ 폴백 (조정 종가 = 배당 포함)', () => {
     return j
   }
 
-  it('절대 눈금 가드 없이(조정 종가 스케일) 비율 가드만으로 통과, src=qqq', () => {
-    // QQQ 스케일(지수의 ~1/20) — 비율은 동일하므로 붕괴 가드는 그대로 성립해야 함
-    const scaled = NDX_ANCHORS.map(([m, v]) => [m, v * 0.05] as [string, number])
-    const s = parseQqqChart(toAdjChart(syntheticChart(scaled)))
+  // 실측 앵커(2026-07 프로덕션 QQQ 조정 종가): 2000-03 92.27 → 2002-10 17.46
+  const QQQ_ANCHORS: [string, number][] = [
+    ['1999-04', 45.3],
+    ['2000-03', 92.27],
+    ['2002-10', 17.46],
+    ['2026-05', 620],
+  ]
+
+  it('정상 시리즈: 1999-04 시작(월봉 첫 완전월) 허용·붕괴 앵커 통과·src=qqq', () => {
+    const s = parseQqqChart(toAdjChart(syntheticChart(QQQ_ANCHORS)))
     expect(s).not.toBeNull()
     expect(s!.src).toBe('qqq')
-    expect(s!.ym[0]).toBe('1999-03')
+    expect(s!.ym[0]).toBe('1999-04')
+    expect(s!.ym.length).toBeGreaterThan(300)
     const at = (m: string) => s!.value[s!.ym.indexOf(m)]
     expect(at('2002-10') / at('2000-03')).toBeLessThan(0.35)
   })
 
-  it('가드: 닷컴 붕괴가 없으면 QQQ도 null', () => {
-    const noCrash: [string, number][] = [['1999-03', 50], ['2000-03', 110], ['2002-10', 100], ['2026-05', 600]]
+  it('1999-03 시작도 허용, 그 이전 소급치는 잘라낸다', () => {
+    const withMarch: [string, number][] = [['1999-03', 44], ...QQQ_ANCHORS]
+    const s = parseQqqChart(toAdjChart(syntheticChart(withMarch)))
+    expect(s).not.toBeNull()
+    expect(s!.ym[0]).toBe('1999-03')
+  })
+
+  it('가드: 시작월이 1999-05 이후면 null', () => {
+    const late: [string, number][] = [['2005-01', 30], ['2026-05', 400]]
+    expect(parseQqqChart(toAdjChart(syntheticChart(late)))).toBeNull()
+  })
+
+  it('가드: 닷컴 붕괴가 없으면 null', () => {
+    const noCrash: [string, number][] = [['1999-04', 45], ['2000-03', 92], ['2002-10', 80], ['2026-05', 620]]
     expect(parseQqqChart(toAdjChart(syntheticChart(noCrash)))).toBeNull()
+  })
+
+  it('가드: 형식 불량(빈 결과)이면 null', () => {
+    expect(parseQqqChart({})).toBeNull()
+    expect(parseQqqChart({ chart: { result: [] } })).toBeNull()
   })
 })
