@@ -43,20 +43,6 @@ describe('역사 차트 번들 (public/data/history.json) 무결성', async () =
     expect(at(peTrail, '2023-07')).toBeNull()
   })
 
-  it('유동성 격차(m2Gap3y) — 1962-01 시작, 1987 극단·2000 고점 앵커', () => {
-    const { dates } = h.series
-    const g = h.macro.m2Gap3y
-    expect(g.length).toBe(dates.length)
-    const at = (ym: string) => g[dates.indexOf(ym)]
-    expect(at('1961-12')).toBeNull()
-    expect(at('1962-01')).not.toBeNull()
-    expect(at('1987-08')).toBeGreaterThan(20)
-    expect(at('2000-08')).toBeGreaterThan(10)
-    expect(at('2000-08')).toBeLessThan(14)
-    // 1974 약세장 바닥 부근은 딥마이너스 (주식이 M2보다 훨씬 뒤처짐)
-    expect(at('1974-12')).toBeLessThan(-10)
-  })
-
   it('현금(단기국채) 시리즈 — 1929 디플레 실질 플러스 / 1946 금융억압 실질 마이너스', () => {
     interface Ep { peak: string; assets: Record<string, { toTroughPct: number | null; toRecoveryPct: number | null } | null> }
     const ep = (p: string): Ep => h.episodes.find((e: Ep) => e.peak.startsWith(p))

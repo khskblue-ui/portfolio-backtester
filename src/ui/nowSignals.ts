@@ -29,7 +29,7 @@
 export type SignalLevel = 'ok' | 'watch' | 'alert'
 
 export interface Signal {
-  key: 'market' | 'valuation' | 'liquidity' | 'inflation' | 'realRate' | 'curve'
+  key: 'market' | 'valuation' | 'inflation' | 'realRate' | 'curve'
   label: string
   value: string
   level: SignalLevel
@@ -73,7 +73,6 @@ interface HistoryLike {
     capeProxy?: (number | null)[]
     tbill3m?: (number | null)[]
     tips10?: (number | null)[]
-    m2Gap3y?: (number | null)[]
   }
   meta: { dataEnd: string; liveRefs?: { ym: string; cpi: number; capeProxy: number | null; stockRealLast: number } }
 }
@@ -152,29 +151,6 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
             capeV >= 44 ? '2000년 닷컴 버블 수준' : capeV >= 32.6 ? '1929년 수준 초과' : capeV >= 24 ? '1968년 수준 초과' : '역사적 위험 구간 미만'
           }. (프록시: 2023-06까지의 실측 CAPE를 이후 주가 변화로 연장한 근사치 — 외부 공표치와 정합 확인)`
         : 'CAPE 데이터 없음',
-  })
-
-  // ── 2.5 유동성 격차 (주식 − M2 3년 연율 성장, B형 보조) ──
-  // 사건연구(1962~2026, 빌드 시 검증): 상위 10%(+14.4%p↑) 진입 달의 46%가 3년 내
-  // −20% 이상 낙폭(전체 기간 25%), 상위 5%(+19.5%p↑)는 53%·3년 실질수익 24%→8%.
-  // 단기 타이밍 불가(1985·1993·2012 진입 후 수년 상승), 인플레형(1968·1973) 고점은
-  // M2도 같이 불어 감지 못함 — CPI 신호가 A형을, 이 신호가 B형 과열을 나눠 맡는다.
-  // 월간 지표(발표 지연 ~4주)라 라이브 연장 없이 번들 기준으로 판정
-  const m2Bundle = m.m2Gap3y ? latest(m.m2Gap3y) : null
-  const m2V = m2Bundle?.v ?? null
-  let liqLevel: SignalLevel = 'ok'
-  if (m2V != null && m2V >= 19.5) liqLevel = 'alert'
-  else if (m2V != null && m2V >= 14.4) liqLevel = 'watch'
-  signals.push({
-    key: 'liquidity',
-    label: '유동성 대비 주가 (M2 격차)',
-    value: m2V != null ? `${m2V >= 0 ? '+' : ''}${m2V.toFixed(1)}%p` : '—',
-    level: liqLevel,
-    asOf: m2Bundle ? dates[m2Bundle.i] : dates[n],
-    reason:
-      m2V != null
-        ? `최근 3년간 주가(배당 포함)가 통화량(M2)보다 연 ${m2V.toFixed(1)}%p ${m2V >= 0 ? '빠르게' : '느리게'} 늘었습니다. 1959년 이후 이 격차가 상위 10%(+14.4%p 이상)였던 달은 46%가 3년 안에 −20% 이상 하락을 겪었고(평상시 25%), 상위 5%(+19.5%p)에서는 53%였습니다. 이 구간은 1987년, 1997~2000년, 2025~26년뿐입니다. 다만 단기 타이밍 지표가 아닙니다 — 신호에 들어선 뒤 수년 더 오른 사례(1985·1993·2012)가 흔하고, 통화량이 같이 불어나는 인플레이션형(1968·1973) 고점은 잡지 못합니다(그쪽은 CPI 신호의 몫).`
-        : 'M2 데이터 없음',
   })
 
   // ── 3. 인플레이션 (A형 선행조건) ──

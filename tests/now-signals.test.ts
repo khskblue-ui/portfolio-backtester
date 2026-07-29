@@ -11,7 +11,6 @@ function mkHistory(over: {
   gs10?: (number | null)[]
   cape?: (number | null)[]
   tbill3m?: (number | null)[]
-  m2Gap3y?: (number | null)[]
 }) {
   const n = over.stock?.length ?? 24
   const dates = Array.from({ length: n }, (_, i) => `${2024 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`)
@@ -22,7 +21,7 @@ function mkHistory(over: {
   const realRate10 = gs10.map((g, i) => (g != null && cpiYoY[i] != null ? (g as number) - (cpiYoY[i] as number) : null))
   return {
     series: { dates, stock },
-    macro: { cpiYoY, gs10, realRate10, cape, capeProxy: cape, tbill3m: over.tbill3m ?? Array(n).fill(3.5), m2Gap3y: over.m2Gap3y },
+    macro: { cpiYoY, gs10, realRate10, cape, capeProxy: cape, tbill3m: over.tbill3m ?? Array(n).fill(3.5) },
     meta: { dataEnd: dates[n - 1] },
   }
 }
@@ -41,22 +40,6 @@ describe('신호 규칙 경계', () => {
     const a = assessNow(mkHistory({ stock }))
     expect(a.signals.find((s) => s.key === 'market')!.level).toBe('alert')
     expect(a.headline).toContain('한복판')
-  })
-
-  it('유동성 격차(M2): +19.5%p 이상 경계, +14.4%p 이상 주의, 미만 양호, 데이터 없으면 판정 제외', () => {
-    const at = (v: number | null) => {
-      const m2Gap3y = v == null ? undefined : Array(24).fill(v)
-      return assessNow(mkHistory({ m2Gap3y })).signals.find((s) => s.key === 'liquidity')!
-    }
-    expect(at(20).level).toBe('alert')
-    expect(at(15).level).toBe('watch')
-    expect(at(15).reason).toContain('46%')
-    expect(at(15).reason).toContain('단기 타이밍 지표가 아닙니다')
-    expect(at(5).level).toBe('ok')
-    expect(at(-3).value).toBe('-3.0%p')
-    const none = at(null)
-    expect(none.level).toBe('ok')
-    expect(none.value).toBe('—')
   })
 
   it('CAPE 32 이상 = 경계 (1929 시작 수준), 24 이상 = 주의 (1968 수준)', () => {
@@ -174,10 +157,10 @@ describe('실제 번들 데이터 정합성', async () => {
   const { readFileSync } = await import('node:fs')
   const h = JSON.parse(readFileSync(new URL('../public/data/history.json', import.meta.url), 'utf8'))
 
-  it('기준월 = dataEnd, 신호 6종 모두 판정 존재', () => {
+  it('기준월 = dataEnd, 신호 5종 모두 판정 존재', () => {
     const a = assessNow(h)
     expect(a.asOf).toBe(h.meta.dataEnd)
-    expect(a.signals).toHaveLength(6)
+    expect(a.signals).toHaveLength(5)
     for (const s of a.signals) {
       expect(['ok', 'watch', 'alert']).toContain(s.level)
       expect(s.reason.length).toBeGreaterThan(20)
