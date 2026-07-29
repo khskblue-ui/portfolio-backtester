@@ -387,3 +387,57 @@ describe('프로퍼티 테스트 (§9) — 랜덤워크 × 모드 조합', () =>
     expect(result.warnings.some((w) => w.code === 'band_unclosable')).toBe(true)
   })
 })
+
+describe('골든마스터: 현금 100% (유휴현금 금리 복리 — 시장 자산 없음)', () => {
+  const n = 261 // ~1년치 주중일
+  const dates = makeDates('2023-01-02', n)
+  const bundle = makeBundle(dates, {}) // 시장 시리즈 없음
+
+  it('일시금: 최종 가치 = 10000 × 1.04^(경과일/365), 매매·경고 없음', () => {
+    const result = runBacktest(
+      cleanStrategy({
+        sleeves: [{ ticker: 'CASH', targetWeight: 1 }],
+        contribution: { initialUsd: 10_000, monthlyUsd: 0, allocation: 'pro_rata' },
+        execution: { fractionalShares: true, cashAnnualYieldPct: 4, minTradeUsd: 100 },
+      }),
+      bundle
+    )
+    const days = (Date.parse(dates[n - 1]) - Date.parse(dates[0])) / 86_400_000
+    expect(result.finalValue).toBeCloseTo(10_000 * Math.pow(1.04, days / 365), 6)
+    expect(result.trades).toHaveLength(0)
+    expect(result.warnings).toHaveLength(0)
+    expect(result.daily[n - 1].sleeveValues['CASH']).toBeCloseTo(result.finalValue, 6)
+  })
+
+  it('월 적립: 각 납입액이 납입일부터 개별 복리 (합산 손계산 일치)', () => {
+    const result = runBacktest(
+      cleanStrategy({
+        sleeves: [{ ticker: 'CASH', targetWeight: 1 }],
+        contribution: { initialUsd: 10_000, monthlyUsd: 1_000, allocation: 'pro_rata' },
+        execution: { fractionalShares: true, cashAnnualYieldPct: 4, minTradeUsd: 100 },
+      }),
+      bundle
+    )
+    const last = Date.parse(dates[n - 1])
+    let expected = 0
+    for (const d of result.daily) {
+      if (d.externalFlow > 0) {
+        expected += d.externalFlow * Math.pow(1.04, (last - Date.parse(d.date)) / 86_400_000 / 365)
+      }
+    }
+    expect(result.finalValue).toBeCloseTo(expected, 6)
+    expect(result.trades).toHaveLength(0)
+  })
+
+  it('세금 활성이어도 현금 이자에는 과세 이벤트 없음 (v1 모델 스코프)', () => {
+    const s = cleanStrategy({
+      sleeves: [{ ticker: 'CASH', targetWeight: 1 }],
+      contribution: { initialUsd: 10_000, monthlyUsd: 0, allocation: 'pro_rata' },
+      execution: { fractionalShares: true, cashAnnualYieldPct: 4, minTradeUsd: 100 },
+    })
+    s.tax.enabled = true
+    const result = runBacktest(s, bundle)
+    expect(result.taxes).toHaveLength(0)
+    expect(result.totalTaxesUsd).toBe(0)
+  })
+})

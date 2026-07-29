@@ -471,7 +471,6 @@ export function validateStrategy(config: StrategyConfig, bundle?: AlignedDataBun
   const wSum = config.sleeves.reduce((s, x) => s + x.targetWeight, 0)
   if (Math.abs(wSum - 1) > 1e-6) errors.push(`목표비중 합이 1이 아님 (${wSum.toFixed(4)})`)
   if (config.sleeves.some((s) => s.targetWeight < 0)) errors.push('음수 목표비중 (숏 미지원 — v1 스코프)')
-  if (config.sleeves.filter((s) => s.ticker !== CASH_TICKER).length === 0) errors.push('시장 자산 슬리브 없음')
   const tickerSet = new Set(config.sleeves.map((s) => s.ticker))
   if (tickerSet.size !== config.sleeves.length) errors.push('중복 티커')
   if (config.sleeves.some((s) => s.ticker.trim() === '')) errors.push('빈 티커 — 심볼을 입력하거나 해당 행을 삭제하세요')

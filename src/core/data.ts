@@ -475,7 +475,8 @@ export async function loadDataBundle(
   const unique = [...new Set(tickers.map((t) => t.trim().toUpperCase()))].filter(
     (t) => t !== '' && t !== CASH_TICKER
   )
-  if (unique.length === 0) throw new Error('시장 자산이 없습니다 (CASH만으로는 백테스트 불가)')
+  // 전 전략이 현금뿐이면 시장 데이터 없이도 실행 가능 — 이자 복리는 달력만 있으면 된다
+  if (unique.length === 0) return buildCashOnlyBundle(options)
 
   // 역사 월간(-HIST) 자산은 일별 자산과 혼합 불가 — 캘린더 교집합(월초 vs 거래일)이
   // 사실상 공집합이 되어 조용히 왜곡되므로 명시적으로 차단하고 대체 티커를 안내
@@ -535,4 +536,44 @@ export async function loadDataBundle(
   })
 
   return alignToCommonCalendar(seriesList, { ...options, monthlyExpected })
+}
+
+/**
+ * 현금 100% 실행용 번들 — 시장 자산이 없으면 거래일 달력을 만들 데이터가 없으므로,
+ * 주중(월~금) 달력을 합성해 빈 번들을 반환한다. 유휴현금 이자는 엔진이 실제
+ * 경과일수 기준으로 붙이므로 휴장일 유무는 결과에 영향을 주지 않는다.
+ */
+const CASH_ONLY_DEFAULT_YEARS = 10
+
+function buildCashOnlyBundle(options?: { startDate?: string; endDate?: string }): AlignedDataBundle {
+  const today = new Date().toISOString().slice(0, 10)
+  const end = options?.endDate && options.endDate < today ? options.endDate : today
+  const clipWarnings: string[] = []
+  let start = options?.startDate ?? ''
+  if (!start) {
+    const d = new Date(end + 'T00:00:00Z')
+    d.setUTCFullYear(d.getUTCFullYear() - CASH_ONLY_DEFAULT_YEARS)
+    start = d.toISOString().slice(0, 10)
+    clipWarnings.push(
+      `시작일이 비어 있어 최근 ${CASH_ONLY_DEFAULT_YEARS}년(${start}~)으로 계산했습니다 — 기간은 시작일·종료일 설정으로 바꿀 수 있습니다`
+    )
+  }
+  if (start >= end) throw new Error('기간이 비어 있습니다 — 시작일·종료일을 확인하세요')
+
+  const dates: string[] = []
+  for (let t = Date.parse(start + 'T00:00:00Z'); t <= Date.parse(end + 'T00:00:00Z'); t += 86_400_000) {
+    const d = new Date(t)
+    const dow = d.getUTCDay()
+    if (dow !== 0 && dow !== 6) dates.push(d.toISOString().slice(0, 10))
+  }
+  if (dates.length < 2) throw new Error('기간이 너무 짧습니다 — 시작일·종료일을 확인하세요')
+
+  clipWarnings.push(
+    '현금 100% 실행: 시장 데이터 없이 유휴현금 금리만으로 복리 계산합니다 — ' +
+      '금리를 전 기간 고정으로 가정하므로, 시기마다 변한 실제 예금·단기금리 수익과는 차이가 있습니다'
+  )
+
+  const bundle: AlignedDataBundle = { dates, series: {}, snapshotHash: '', firstDates: {}, clipWarnings }
+  bundle.snapshotHash = hashBundle(bundle)
+  return bundle
 }

@@ -214,6 +214,11 @@ describe('빈 티커 검증 (HTTP 404 원인 차단)', async () => {
     })
     expect(validateStrategy(s).some((e) => e.includes('빈 티커'))).toBe(true)
   })
+
+  it('현금 100% 전략은 유효 (유휴현금 금리 복리로 실행 가능)', () => {
+    const s = cleanStrategy({ sleeves: [{ ticker: 'CASH', targetWeight: 1 }] })
+    expect(validateStrategy(s)).toEqual([])
+  })
 })
 
 describe('Yahoo 해상도 강등 감지 (^GSPC 등 초장기 히스토리)', async () => {
@@ -310,5 +315,32 @@ describe('캘린더 해상도 방어선', async () => {
     const s = { ticker: 'BAD', dates, open: dates.map(() => 100), close: dates.map(() => 100), adjClose: dates.map(() => 100), dividends: {} }
     const bundle = alignToCommonCalendar([s])
     expect(bundle.clipWarnings.some((w) => w.includes('해상도'))).toBe(true)
+  })
+})
+
+describe('현금 100% 번들 (시장 티커 없음 — 주중 달력 합성)', async () => {
+  const { loadDataBundle } = await import('../data')
+
+  it('기간 옵션대로 주중(월~금) 달력을 만들고 시리즈는 비어 있음', async () => {
+    const b = await loadDataBundle(['CASH'], { startDate: '2020-01-01', endDate: '2020-12-31' })
+    expect(b.dates[0]).toBe('2020-01-01') // 수요일
+    expect(b.dates[b.dates.length - 1]).toBe('2020-12-31') // 목요일
+    expect(b.dates.every((d) => {
+      const dow = new Date(d + 'T00:00:00Z').getUTCDay()
+      return dow !== 0 && dow !== 6
+    })).toBe(true)
+    expect(Object.keys(b.series)).toHaveLength(0)
+    expect(b.clipWarnings.some((w) => w.includes('현금 100%'))).toBe(true)
+    expect(b.snapshotHash).toMatch(/^[0-9a-f]{8}$/)
+  })
+
+  it('시작일이 비어 있으면 최근 10년 기본값 + 안내 경고', async () => {
+    const b = await loadDataBundle([])
+    expect(b.clipWarnings.some((w) => w.includes('10년'))).toBe(true)
+    expect(b.dates.length).toBeGreaterThan(2500) // 10년 × ~261 주중일
+  })
+
+  it('시작일 ≥ 종료일이면 명확한 에러', async () => {
+    await expect(loadDataBundle([], { startDate: '2021-01-01', endDate: '2020-01-01' })).rejects.toThrow('기간')
   })
 })
