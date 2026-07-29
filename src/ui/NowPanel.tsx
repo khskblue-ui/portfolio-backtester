@@ -30,7 +30,7 @@ export function NowPanel({ assessment }: { assessment: NowAssessment }) {
             <Activity className="w-4 h-4 text-[#2962ff]" />
             지금은? — {a.headline}
             <HelpTip title="이 판정을 읽는 법">
-              아래 5개 신호는 <b>역사 7개 하락 구간이 시작될 때 실측된 조건</b>(임계값의 출처)과
+              아래 6개 신호는 <b>역사 7개 하락 구간이 시작될 때 실측된 조건</b>(임계값의 출처)과
               지금을 같은 잣대로 비교한 체크리스트입니다. 예측이 아닙니다 — 선행조건 충족은
               "하락이 곧 온다"가 아니라 "만약 온다면 깊고 길 수 있는 출발점"이라는 뜻입니다.
               데이터는 이 앱에 내장된 검증 데이터(실러·미 연준 FRED·야후를 교차 검증)에서
@@ -54,7 +54,7 @@ export function NowPanel({ assessment }: { assessment: NowAssessment }) {
       {open && (
         <>
           {/* 신호 카드 */}
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2.5">
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
             {a.signals.map((s) => {
               const st = LEVEL_STYLE[s.level]
               return (

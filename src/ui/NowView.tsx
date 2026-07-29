@@ -25,6 +25,7 @@ interface HistoryData {
     capeProxy?: (number | null)[]
     tbill3m?: (number | null)[]
     tips10?: (number | null)[]
+    m2Gap3y?: (number | null)[]
   }
 }
 
@@ -141,6 +142,20 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
             }))
         : []
 
+    // 4.5) 유동성 격차 — 주식−M2 3년 연율 성장 격차 (1962~, 월간 그대로)
+    const m2Start = m.m2Gap3y ? m.m2Gap3y.findIndex((v) => v != null) : -1
+    const m2Rows: { ym: string; v: number | null }[] =
+      m2Start >= 0 ? dates.slice(m2Start).map((ym, k) => ({ ym, v: round2(m.m2Gap3y![m2Start + k]) })) : []
+    const m2Bands =
+      m2Start >= 0
+        ? data.episodes
+            .filter((e) => (e.recovery ?? dates[n - 1]) >= dates[m2Start])
+            .map((e) => ({
+              x1: e.peak >= dates[m2Start] ? e.peak : dates[m2Start],
+              x2: e.recovery ?? dates[n - 1],
+            }))
+        : []
+
     // 5) 장단기 금리차
     const spreadArr = dates.map((_, i) => (m.gs10[i] != null && m.tbill3m?.[i] != null ? (m.gs10[i] as number) - (m.tbill3m[i] as number) : null))
     const spreadLive = live?.gs10 && live?.tbill3m ? live.gs10.value - live.tbill3m.value : null
@@ -202,6 +217,20 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
           { y: 2.5, label: '2.5 긴축적', danger: true },
         ],
         fmt: (v) => `${v.toFixed(2)}%`,
+      },
+      {
+        title: '유동성 대비 주가 (주식 − M2 성장 격차)',
+        sub: '최근 3년 연율 성장률 차이 — +14%p 이상은 1959년 이후 상위 10% 과열 구간(1987 · 1997~2000 · 2025~)',
+        color: theme === 'dark' ? '#f472b6' : '#db2777',
+        data: m2Rows,
+        dataRecent: m2Rows.slice(-61),
+        bands: m2Bands,
+        range: '1962 ~ 현재',
+        refs: [
+          { y: 14.4, label: '상위 10%' },
+          { y: 19.5, label: '상위 5%', danger: true },
+        ],
+        fmt: (v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%p`,
       },
       {
         title: '장단기 금리차 (10년 − 3개월)',

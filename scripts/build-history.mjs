@@ -63,6 +63,8 @@ const fred = parseCsv(join(root, 'data-src/fred-macro-monthly.csv'))
 const trExt = parseCsv(join(root, 'data-src/sp500tr-monthly-avg.csv'))
 const tipsRaw = parseCsv(join(root, 'data-src/fred-tips10-monthly.csv'))
 const tipsMap = new Map(tipsRaw.map((r) => [r.observation_date.slice(0, 7), r.FII10 === '' ? null : Number(r.FII10)]))
+const m2Raw = parseCsv(join(root, 'data-src/fred-m2-monthly.csv'))
+const m2Map = new Map(m2Raw.map((r) => [r.observation_date.slice(0, 7), Number(r.M2SL) > 0 ? Number(r.M2SL) : null]))
 
 const goldMap = new Map(goldRaw.map((r) => [r.Date, Number(r.Price)]))
 const trMap = new Map(trExt.map((r) => [r.Date, Number(r.SP500TR_MonthlyAvg)]))
@@ -244,6 +246,24 @@ for (let i = 0; i < dates.length; i++) {
   tips10.push(tipsMap.get(dates[i]) ?? null)
 }
 
+// 유동성 격차(m2Gap3y) — 주식(명목 총수익)과 통화량(M2, FRED M2SL 1959~)의
+// 3년 연율 성장률 차이(%p). 사건연구(1962~): 이 격차가 상위 10%(+14.4%p 이상)였던
+// 달의 46%가 3년 내 −20% 이상 낙폭을 겪음(전체 기간 25%) · 상위 5%(+19.5%p)는 53%.
+// 단기 타이밍 지표가 아니고(진입 후 수년 상승 사례: 1985·1993·2012),
+// 인플레형(1968·1973) 고점은 감지하지 못함 — B형(과열) 보조 지표.
+const m2Gap3y = []
+for (let i = 0; i < dates.length; i++) {
+  const cur = m2Map.get(dates[i])
+  const ago = i >= 36 ? m2Map.get(dates[i - 36]) : null
+  if (!cur || !ago) {
+    m2Gap3y.push(null)
+    continue
+  }
+  const gs = Math.pow(stockNom[i] / stockNom[i - 36], 1 / 3) - 1
+  const gm = Math.pow(cur / ago, 1 / 3) - 1
+  m2Gap3y.push((gs - gm) * 100)
+}
+
 // 트레일링 P/E와 "실현 선행 P/E" — 둘 다 Shiller 월간 이익(트레일링 12개월
 // as-reported GAAP, 분기 발표치의 월간 보간)에서 직접 계산:
 //   peTrail   = P(t) ÷ E(t)     — 그 시점에 확정돼 있던 직전 12개월 이익
@@ -387,6 +407,10 @@ assert(at(peTrail, '2009-03') > 60, `트레일링 P/E 2009-03 = ${at(peTrail, '2
 assert(at(peFwdReal, '2009-03') < 15, `실현 선행 P/E 2009-03 = ${at(peFwdReal, '2009-03')} (<15 기대)`)
 assert(at(peFwdReal, '2000-08') > 40 && at(peFwdReal, '2000-08') < 55, `실현 선행 P/E 2000-08 = ${at(peFwdReal, '2000-08')}`)
 assert(at(peTrail, '1929-09') > 17 && at(peTrail, '1929-09') < 23, `트레일링 P/E 1929-09 = ${at(peTrail, '1929-09')}`)
+// 유동성 격차 앵커: 1987-08 극단(+23), 2000-08 고점(+11.8), 1962-01 이전 null
+assert(at(m2Gap3y, '1961-12') == null && at(m2Gap3y, '1962-01') != null, 'm2Gap3y 시작 경계 오류')
+assert(Math.abs(at(m2Gap3y, '1987-08') - 23.0) < 1, `m2Gap3y 1987-08 = ${at(m2Gap3y, '1987-08')}`)
+assert(Math.abs(at(m2Gap3y, '2000-08') - 11.8) < 1, `m2Gap3y 2000-08 = ${at(m2Gap3y, '2000-08')}`)
 // 현금(단기채) 앵커: 명목 지수는 단조 증가(금리 ≥ 0), 1981년 전후 실질 강세 전환
 for (let i = baseI + 1; i < dates.length; i++) assert(billNomN[i] >= billNomN[i - 1] - 1e-9, `현금 명목 지수 역행 ${dates[i]}`)
 console.log('\n앵커 검증 통과: 구간·CAPE·GS10·CPI·실질금리·연장(2022 인플레, 2026 금리)·현금 단조성 ✓')
@@ -407,7 +431,7 @@ const out = {
       bond: '미 10년물(GS10) 수익률 파생 만기고정 근사 총수익 — 실제 채권지수 아님',
       gold: '금 현물가 (배당 없음). 1933-1974 미국 민간 금보유 금지·공정가 시대 주의',
       bill: '단기국채(현금): 3개월 T-bill(1934~) + NBER 상업어음 NY(1871~1933 접합 — 신용 프리미엄만큼 소폭 높음) 월할 복리',
-      macro: 'cpiYoY = 직전 12개월 CPI 상승률(2025-10 결측 1개월 선형보간), realRate10 = GS10 − cpiYoY (사후적 근사), cape = Shiller PE10(1881~2023-06, 이후 이익 데이터 부재로 결측), capeProxy = 이후 실질가격 변화 연장 근사(배당수익률 1.3%·E10 성장 2%/년 가정 — 라벨 필수), tbill3m = 3개월 단기금리, tips10 = 10년 TIPS 수익률(사전적 실질금리, 2003~ — realRate10은 사후적 근사로 역사 비교용), peTrail = P(t)/E(t) 트레일링 12개월 as-reported GAAP P/E(1871~2023-06), peFwdReal = P(t)/E(t+12) 실현 선행 P/E — 그 뒤 12개월 실제 확정 이익 기준(사후 정보, 역사 해석 전용, ~2022-06)',
+      macro: 'cpiYoY = 직전 12개월 CPI 상승률(2025-10 결측 1개월 선형보간), realRate10 = GS10 − cpiYoY (사후적 근사), cape = Shiller PE10(1881~2023-06, 이후 이익 데이터 부재로 결측), capeProxy = 이후 실질가격 변화 연장 근사(배당수익률 1.3%·E10 성장 2%/년 가정 — 라벨 필수), tbill3m = 3개월 단기금리, tips10 = 10년 TIPS 수익률(사전적 실질금리, 2003~ — realRate10은 사후적 근사로 역사 비교용), peTrail = P(t)/E(t) 트레일링 12개월 as-reported GAAP P/E(1871~2023-06), peFwdReal = P(t)/E(t+12) 실현 선행 P/E — 그 뒤 12개월 실제 확정 이익 기준(사후 정보, 역사 해석 전용, ~2022-06), m2Gap3y = 주식(명목 TR)−M2 3년 연율 성장률 격차 %p (FRED M2SL 1959~, 1962-01부터)',
       base: '1900-01 = 100 · 실질 = CPI-U(NSA) 디플레이트',
     },
     dataEnd: dates[dates.length - 1],
@@ -443,6 +467,7 @@ const out = {
     tips10: round(tips10.slice(baseI), 2),
     peTrail: round(peTrail.slice(baseI), 2),
     peFwdReal: round(peFwdReal.slice(baseI), 2),
+    m2Gap3y: round(m2Gap3y.slice(baseI), 2),
   },
   episodes: episodes.map((e) => ({
     peak: e.peak,
