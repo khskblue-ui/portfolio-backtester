@@ -302,7 +302,7 @@ export default function App() {
               onClick={() => setView('guide')}
               className="flex items-center gap-1 text-[11px] text-zinc-400 dark:text-zinc-500 hover:text-[#2962ff] dark:hover:text-[#5b8aff]"
             >
-              <GraduationCap className="w-3.5 h-3.5" /> 용어가 어렵다면 — 가이드북 (실질·TIPS·CAPE 등 개념 4단계)
+              <GraduationCap className="w-3.5 h-3.5" /> 용어가 어렵다면 — 가이드북 (실질·기준금리·TIPS·CAPE 등 경제 문해력)
             </button>
           </div>
         )}
