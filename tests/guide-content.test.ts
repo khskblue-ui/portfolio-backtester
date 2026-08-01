@@ -47,7 +47,7 @@ describe('용어 사전', () => {
 
   it('두 탭의 핵심 용어를 모두 커버한다', () => {
     const all = GUIDE_GLOSSARY.map((g) => g.term).join(' ')
-    for (const must of ['사전적', '사후적', 'CAPE', '스태그플레이션', '실질 수익률', '명목', '장단기', '채권', 'TIPS', '금융억압', '할인율', '화폐 착시'])
+    for (const must of ['사전적', '사후적', 'CAPE', '스태그플레이션', '실질 수익률', '명목', '장단기', '채권', 'TIPS', '금융억압', '할인율', '화폐 착시', '기준금리', '금통위', 'FOMC'])
       expect(all, must).toContain(must)
   })
 
