@@ -6,8 +6,8 @@ import { describe, it, expect } from 'vitest'
 import { GUIDE_CHAPTERS, GUIDE_GLOSSARY, GUIDE_INTRO } from '../src/ui/guideContent'
 
 describe('가이드 구조', () => {
-  it('4단계가 순서대로 있고, 각 단계에 목표·시간·2개 이상의 절이 있다', () => {
-    expect(GUIDE_CHAPTERS.map((c) => c.step)).toEqual([1, 2, 3, 4])
+  it('7단계가 순서대로 있고, 각 단계에 목표·시간·2개 이상의 절이 있다', () => {
+    expect(GUIDE_CHAPTERS.map((c) => c.step)).toEqual([1, 2, 3, 4, 5, 6, 7])
     for (const c of GUIDE_CHAPTERS) {
       expect(c.goal).toContain('해석')
       expect(c.minutes).toBeGreaterThan(0)
@@ -47,7 +47,7 @@ describe('용어 사전', () => {
 
   it('두 탭의 핵심 용어를 모두 커버한다', () => {
     const all = GUIDE_GLOSSARY.map((g) => g.term).join(' ')
-    for (const must of ['사전적', '사후적', 'CAPE', '스태그플레이션', '실질 수익률', '명목', '장단기', '채권', 'TIPS', '금융억압', '할인율', '화폐 착시', '기준금리', '금통위', 'FOMC'])
+    for (const must of ['사전적', '사후적', 'CAPE', '스태그플레이션', '실질 수익률', '명목', '장단기', '채권', 'TIPS', '금융억압', '할인율', '화폐 착시', '기준금리', '금통위', 'FOMC', '유동성', 'QE', 'QT', '달러인덱스', '환헤지', '신용 스프레드'])
       expect(all, must).toContain(must)
   })
 
