@@ -32,14 +32,23 @@ describe('광기의 해부 콘텐츠', () => {
 
   it('핵심 수치·사건이 포함된다 (역사 앵커와 최신 데이터)', () => {
     const all = JSON.stringify(MANIA_STORY)
-    for (const must of ['5,048', '−78%', 'Burning Up', '1.00% → 5.25%', '리먼', '−57%', '$4.77조', '36.4%', '41.3', '7,250억', '순환 거래'])
+    for (const must of ['5,048', '−81.1%', '−78%', 'Burning Up', '1.00% → 5.25%', '리먼', '−57%', '$4.77조', '36.4%', '42.1', '44.2', '7,250억', '순환 거래', '항등식', '흑자 요건', 'SpaceX'])
       expect(all, must).toContain(must)
+  })
+
+  it('해부학 파트 — 항등식 산수와 인식론 문구가 있다', () => {
+    expect(MANIA_STORY.anatomy.paras.length).toBeGreaterThanOrEqual(4)
+    const t = MANIA_STORY.anatomy.paras.join(' ')
+    expect(t).toContain('항등식')
+    expect(t).toContain('확률 추정이 아니라')
+    expect(t).toContain('−81.1%')
   })
 
   it('굵게 마크업(**)이 짝을 이룬다', () => {
     const texts = [
       ...MANIA_STORY.grammar,
       ...MANIA_STORY.parts.flatMap((p) => [...p.mania, p.outcome, p.lesson]),
+      ...MANIA_STORY.anatomy.paras,
       ...MANIA_STORY.now.paras,
       MANIA_STORY.now.closing,
     ]

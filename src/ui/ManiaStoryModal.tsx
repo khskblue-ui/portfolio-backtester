@@ -114,6 +114,19 @@ export function ManiaStoryModal({ onClose }: { onClose: () => void }) {
             </div>
           ))}
 
+          {/* 해부학 — 낙폭의 산수 */}
+          <div className="border-t border-[#e0e3eb] dark:border-[#2a2e39] pt-4 space-y-3">
+            <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+              <span className="block text-[9px] font-mono tracking-[0.22em] text-[#c98500]">{s.anatomy.kicker}</span>
+              {s.anatomy.title}
+            </h4>
+            {s.anatomy.paras.map((p, i) => (
+              <p key={i} className="text-[13px] leading-relaxed text-zinc-700 dark:text-zinc-200">
+                {rich(p)}
+              </p>
+            ))}
+          </div>
+
           {/* 3부 — 지금 (2026 AI) */}
           <div className="border-t border-[#e0e3eb] dark:border-[#2a2e39] pt-4 space-y-3">
             <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
