@@ -4,10 +4,10 @@ import { cardCls, btnGhostCls } from './common'
 import { GUIDE_INTRO, GUIDE_CHAPTERS, GUIDE_GLOSSARY, type GuideChapter, type GuideSection } from './guideContent'
 import { TRADING_GUIDE_CHAPTERS } from './tradingGuide'
 
-/** 탭의 2부 구성 — 1부 지침서(최상단), 2부 경제 문해력 */
+/** 탭의 2부 구성 — 1부 지침서(최상단), 2부 경제 공부 */
 const PARTS: { label: string; chapters: GuideChapter[] }[] = [
   { label: '1부 · 매매 습관 교정 지침서', chapters: TRADING_GUIDE_CHAPTERS },
-  { label: '2부 · 경제 문해력', chapters: GUIDE_CHAPTERS },
+  { label: '2부 · 경제 공부', chapters: GUIDE_CHAPTERS },
 ]
 
 /**
@@ -351,7 +351,7 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
             <div className="flex gap-2 flex-wrap">
               {part === 0 ? (
                 <button onClick={() => switchPart(1)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium ${btnGhostCls}`}>
-                  <GraduationCap className="w-4 h-4" /> 2부 경제 문해력으로
+                  <GraduationCap className="w-4 h-4" /> 2부 경제 공부으로
                 </button>
               ) : (
                 <>
