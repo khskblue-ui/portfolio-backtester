@@ -86,11 +86,11 @@ export default function App() {
     // 다른 탭에서 실행해도 결과가 보이도록 백테스트 탭으로 전환
     setView('backtest')
     if (strategies.length === 0) {
-      setNotice('전략이 없습니다 — 전략을 추가하세요')
+      setNotice('전략이 없습니다. 전략을 추가하세요')
       return
     }
     if (shared.startDate && shared.endDate && shared.endDate <= shared.startDate) {
-      setNotice('종료일이 시작일보다 빠릅니다 — 날짜를 확인하세요')
+      setNotice('종료일이 시작일보다 빠릅니다. 날짜를 확인하세요')
       return
     }
     const applied = strategies.map((s) => applyShared(s, shared))
@@ -382,7 +382,7 @@ export default function App() {
           <>
             {resultsStale && (
               <div className="bg-[#faf4e0] dark:bg-[#1d1a10] border-l-4 border-amber-700 dark:border-amber-500 rounded-lg px-4 py-3 text-sm text-amber-900 dark:text-amber-200/90">
-                설정이 변경되었습니다 — 아래 결과(와 보고서)는 <b>이전 설정 기준</b>입니다. "백테스트 실행"을 눌러 갱신하세요.
+                설정이 변경되었습니다. 아래 결과(와 보고서)는 <b>이전 설정 기준</b>입니다. "백테스트 실행"을 눌러 갱신하세요.
               </div>
             )}
             <ResultsSection runs={runs} bundle={bundle} palette={palette} theme={theme} taxEnabled={shared.taxEnabled} />
@@ -406,7 +406,7 @@ export default function App() {
         </datalist>
 
         <footer className="text-center text-[11px] font-mono tracking-wide text-zinc-400 dark:text-zinc-600 border-t border-[#e0e3eb] dark:border-[#2a2e39] pt-5 pb-8">
-          데이터: 야후 파이낸스 일별 종가 · 모든 금액은 미국 달러(USD) 기준 — 원화 손익과는 다릅니다
+          데이터: 야후 파이낸스 일별 종가 · 모든 금액은 미국 달러(USD) 기준이며, 원화 손익과는 다릅니다
         </footer>
       </div>
     </div>

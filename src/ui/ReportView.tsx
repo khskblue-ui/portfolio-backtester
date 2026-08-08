@@ -303,7 +303,7 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
 
       {post.result.warnings.length > 0 && (
         <p className="text-xs text-gray-500">
-          ⚠ 엔진 경고 {post.result.warnings.length}건 — 첫 건: {post.result.warnings[0].message}
+          ⚠ 엔진 경고 {post.result.warnings.length}건 · 첫 건: {post.result.warnings[0].message}
         </p>
       )}
     </div>

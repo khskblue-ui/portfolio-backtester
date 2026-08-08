@@ -346,7 +346,7 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
           {/* 파트 말미 — 다음 동선 */}
           <div className={`${cardCls} p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3`}>
             <p className="text-[13px] text-zinc-600 dark:text-zinc-300">
-              {part === 0 ? '지침서를 마쳤다면 — 앱의 용어와 지표를 읽는 법(2부)으로.' : '준비됐다면 — 배운 눈으로 두 탭의 문장을 직접 읽어 보세요.'}
+              {part === 0 ? '지침서를 마쳤다면, 앱의 용어와 지표를 읽는 법(2부)으로.' : '준비됐다면, 배운 눈으로 두 탭의 문장을 직접 읽어 보세요.'}
             </p>
             <div className="flex gap-2 flex-wrap">
               {part === 0 ? (

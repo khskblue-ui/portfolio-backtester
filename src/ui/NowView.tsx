@@ -179,7 +179,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
       },
       {
         title: 'CPI 인플레이션 (전년동월비)',
-        sub: '3%를 넘어 오르는 추세면 주의 — 5%는 과거 인플레이션형 하락이 본격화되던 수준입니다',
+        sub: '3%를 넘어 오르는 추세면 주의. 5%는 과거 인플레이션형 하락이 본격화되던 수준입니다',
         color: theme === 'dark' ? '#f97316' : '#c2410c',
         data: mk(m.cpiYoY, live?.cpi && refs && live.cpi.ym > refs.ym ? { label: live.cpi.ym, v: cpiLive } : undefined),
         dataRecent: mkRecent(m.cpiYoY, live?.cpi && refs && live.cpi.ym > refs.ym ? { label: live.cpi.ym, v: cpiLive } : undefined),
@@ -191,7 +191,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
       },
       {
         title: '실질 10년 금리 (TIPS)',
-        sub: '물가를 뺀 "진짜 금리"에 대한 시장의 기대치 (자료는 2003년부터). 0% 미만 = 초완화(2020-21년형), 2.5% 이상 = 긴축(2022년형) — 그 이전 시대의 실질금리는 역사 연구 탭에 있습니다',
+        sub: '물가를 뺀 "진짜 금리"에 대한 시장의 기대치 (자료는 2003년부터). 0% 미만 = 초완화(2020-21년형), 2.5% 이상 = 긴축(2022년형). 그 이전 시대의 실질금리는 역사 연구 탭에 있습니다',
         color: theme === 'dark' ? '#34d399' : '#059669',
         data: tipsRows,
         dataRecent: tipsRows.slice(-61),
@@ -227,7 +227,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
     <div className="space-y-5">
       {!assessment.live && (
         <div className="bg-[#faf4e0] dark:bg-[#1d1a10] border-l-4 border-amber-700 dark:border-amber-500 rounded-lg px-4 py-3 text-xs text-amber-900 dark:text-amber-200/90">
-          최신 데이터 조회(야후·FRED)에 실패해 내장 데이터({data.meta.dataEnd}) 기준으로 표시 중입니다 — 네트워크 상태를 확인하거나 잠시 후 새로고침하세요.
+          최신 데이터 조회(야후·FRED)에 실패해 내장 데이터({data.meta.dataEnd}) 기준으로 표시 중입니다. 네트워크 상태를 확인하거나 잠시 후 새로고침하세요.
         </div>
       )}
 
@@ -328,10 +328,10 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
           TIPS), CPI = FRED 공식 소비자물가지수. 최신 값은 검증된 과거 데이터의 기준점에 이어
           붙여 계산하고 3시간 동안 저장해 다시 씁니다. 과거 흐름은 월 단위 평균값이고 차트의
           마지막 점만 하루 단위 최신 값이라, 마지막 점은 과거 선보다 더 크게 출렁여 보일 수
-          있습니다 — 역사 하락 구간(음영)의 기준과 비교할 때는 이 차이를 감안하세요. CAPE는 이익 데이터가 끝나는 2023-06
-          이후로는 근사치(프록시)입니다 — 카드의 판정 이유에 표기됩니다. 선행(Forward) P/E를
+          있습니다. 역사 하락 구간(음영)의 기준과 비교할 때는 이 차이를 감안하세요. CAPE는 이익 데이터가 끝나는 2023-06
+          이후로는 근사치(프록시)입니다. 카드의 판정 이유에 표기됩니다. 선행(Forward) P/E를
           신호로 쓰지 않는 이유: 분모인 애널리스트 추정 이익이 하필 침체 직전에 크게
-          부풀어(2008년 +43%) 고점에서 오히려 싸 보이기 때문입니다 — 가이드북의 CAPE 절 참조.
+          부풀어(2008년 +43%) 고점에서 오히려 싸 보이기 때문입니다(가이드북의 CAPE 절 참조).
           추정 없이 계산한 변형(실현 선행 P/E)은 미래 정보가 필요해 실시간 신호가 될 수 없어,
           역사 연구 탭의 구간 상세에 있습니다.
         </HelpTip>

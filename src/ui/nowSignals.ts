@@ -125,7 +125,7 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
     asOf: stockAsOf,
     reason: atHigh
       ? `${stockAsOf} 기준 실질 총수익 지수가 역사상 최고 수준 — 이 앱의 구간 검출 규칙(낙폭 −25% 이상 + 3년 이상 미회복)에 해당하는 하락은 진행되고 있지 않습니다.`
-      : `실질 전고점(${dates[peakI]}) 대비 ${ddPct.toFixed(1)}% — 역사 구간 기준(−25%·36개월)에 ${ddPct <= -25 ? '낙폭은 도달' : '아직 미달'}.`,
+      : `실질 전고점(${dates[peakI]}) 대비 ${ddPct.toFixed(1)}%로, 역사 구간 기준(−25%·36개월)에 ${ddPct <= -25 ? '낙폭은 도달' : '아직 미달'}.`,
   })
 
   // ── 2. 밸류에이션 (CAPE — B형 선행조건) ──
@@ -149,7 +149,7 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
       capeV != null
         ? `역사적 대형 하락(B형)의 시작 밸류에이션: 1968년 24.1 · 1929년 32.6 · 2000년 44. 현재 ${capeV.toFixed(1)}은 ${
             capeV >= 44 ? '2000년 닷컴 버블 수준' : capeV >= 32.6 ? '1929년 수준 초과' : capeV >= 24 ? '1968년 수준 초과' : '역사적 위험 구간 미만'
-          }. (프록시: 2023-06까지의 실측 CAPE를 이후 주가 변화로 연장한 근사치 — 외부 공표치와 정합 확인)`
+          }. (프록시: 2023-06까지의 실측 CAPE를 이후 주가 변화로 연장한 근사치, 외부 공표치와 정합 확인)`
         : 'CAPE 데이터 없음',
   })
 
@@ -168,7 +168,7 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
       cpiV != null
         ? `인플레이션형(A형) 구간의 본격화 수준은 5%+ (1946년 19%, 1973년 12%). 최신 발표(${cpiAsOf}) ${cpiV.toFixed(1)}%${
             cpi6mAgo != null ? ` (6개월 전 ${cpi6mAgo.toFixed(1)}%${rising ? ' — 상승 추세' : ''})` : ''
-          }${cpiV >= 3 && rising ? ' — 1968년의 "인플레 이륙 초입"과 유사한 재가속 패턴' : ''}. CPI는 월간 지표라 발표 지연(1~2개월)이 있습니다.`
+          }${cpiV >= 3 && rising ? '. 1968년의 "인플레 이륙 초입"과 유사한 재가속 패턴' : ''}. CPI는 월간 지표라 발표 지연(1~2개월)이 있습니다.`
         : '데이터 없음',
   })
 
@@ -187,17 +187,17 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
   if (tipsV != null) {
     if (tipsV >= 2.5) {
       rrLevel = 'watch'
-      rrNote = `TIPS ${tipsV.toFixed(2)}% = 물가를 빼고도 이자가 꽤 높은 긴축 구간 — 주가가 비쌀 때는 주가를 끌어내리는 압력이 됩니다(2022년이 그랬습니다)`
+      rrNote = `TIPS ${tipsV.toFixed(2)}% = 물가를 빼고도 이자가 꽤 높은 긴축 구간입니다. 주가가 비쌀 때는 주가를 끌어내리는 압력이 됩니다(2022년이 그랬습니다)`
     } else if (tipsV < 0) {
       rrLevel = 'watch'
-      rrNote = `TIPS ${tipsV.toFixed(2)}% = 초완화 — 자산가격엔 순풍이지만 과열을 키우는 환경입니다(2020-21년형)`
+      rrNote = `TIPS ${tipsV.toFixed(2)}% = 초완화 구간입니다. 자산가격엔 순풍이지만 과열을 키우는 환경입니다(2020-21년형)`
     } else {
       rrNote = `TIPS ${tipsV.toFixed(2)}% = 중립 범위 — 긴축(2.5% 이상)도 초완화(0% 미만)도 아닙니다`
     }
     // 1946·1973년형 감지: 실현 인플레이션이 명목 10년 금리를 앞지르는 인플레 쇼크
     if (rrV != null && cpiV != null && rrV < 0 && cpiV >= 3.5) {
       rrLevel = 'alert'
-      rrNote = `실제 물가상승률(${cpiV.toFixed(1)}%)이 10년물 금리를 앞지르는 1946·1973년형 인플레 쇼크 국면입니다 — 시장(TIPS ${tipsV.toFixed(2)}%)이 이 물가를 일시적으로 보고 있다면, 그 기대가 틀릴 때 금리가 급등해 자산가격을 흔들 수 있습니다`
+      rrNote = `실제 물가상승률(${cpiV.toFixed(1)}%)이 10년물 금리를 앞지르는 1946·1973년형 인플레 쇼크 국면입니다. 시장(TIPS ${tipsV.toFixed(2)}%)이 이 물가를 일시적으로 보고 있다면, 그 기대가 틀릴 때 금리가 급등해 자산가격을 흔들 수 있습니다`
     } else if (rrV != null && cpiV != null && cpiV >= 3 && tipsV - rrV > 1) {
       rrNote += `. 다만 실제 물가상승률(${cpiV.toFixed(1)}%)에 비해 금리가 낮습니다 — 시장은 지금 물가를 일시적이라 보는 중이고, 이 기대가 틀리면 금리가 다시 뛸 위험이 있습니다`
     }
@@ -211,9 +211,9 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
       rrNote = '물가가 금리보다 빨리 오르며 실질금리가 눌리는 국면입니다'
     } else if (rrV != null && rrV < 0) {
       rrLevel = 'watch'
-      rrNote = '금리에서 물가상승률을 빼면 마이너스(저인플레형) — 자산가격엔 순풍이지만 과열을 키우는 환경입니다(2010년대형)'
+      rrNote = '금리에서 물가상승률을 빼면 마이너스(저인플레형)입니다. 자산가격엔 순풍이지만 과열을 키우는 환경입니다(2010년대형)'
     } else {
-      rrNote = '금리에서 물가상승률을 뺀 값 기준으로 중립 범위 — 인플레이션형 하락과는 거리가 있습니다 (실시간 TIPS 조회에 실패해 이 방식으로 근사했습니다)'
+      rrNote = '금리에서 물가상승률을 뺀 값 기준으로 중립 범위라, 인플레이션형 하락과는 거리가 있습니다 (실시간 TIPS 조회에 실패해 이 방식으로 근사했습니다)'
     }
   }
   signals.push({
@@ -248,7 +248,7 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
     asOf: live.gs10 || live.tbill3m ? `10y ${gs10AsOf} · 3m ${tbAsOf}` : dates[n],
     reason:
       spread != null
-        ? `역전(음수)은 침체의 고전적 선행 신호 — 1969·1973·1980·2000·2007·2019년 역전 후 침체가 뒤따랐습니다. 현재 ${spread >= 0 ? '+' : ''}${spread.toFixed(2)}%p로 ${spread < 0 ? '역전 상태' : spread < 0.3 ? '평탄 — 역전에 근접' : '정상 기울기'}.${
+        ? `역전(음수)은 침체의 고전적 선행 신호 — 1969·1973·1980·2000·2007·2019년 역전 후 침체가 뒤따랐습니다. 현재 ${spread >= 0 ? '+' : ''}${spread.toFixed(2)}%p로 ${spread < 0 ? '역전 상태' : spread < 0.3 ? '평탄(역전에 근접)' : '정상 기울기'}.${
             curveMixed ? ' (주의: 한쪽 금리만 라이브 조회에 성공해 일별·월평균이 섞인 근사입니다)' : ''
           }`
         : '데이터 없음',
@@ -288,7 +288,7 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
     } 계산한 체크리스트입니다. ` +
     `${signals.filter((s) => s.level === 'alert').map((s) => s.label).join(', ') || '없음'} = 경계, ` +
     `${signals.filter((s) => s.level === 'watch').map((s) => s.label).join(', ') || '없음'} = 주의. ` +
-    `역사가 보여주는 것: 선행조건 충족은 "하락이 곧 온다"가 아니라 "만약 하락이 오면 깊고 길 수 있는 출발점"이라는 뜻입니다 — ` +
+    `역사가 보여주는 것: 선행조건 충족은 "하락이 곧 온다"가 아니라 "만약 하락이 오면 깊고 길 수 있는 출발점"이라는 뜻입니다. ` +
     `CAPE가 1968년 수준(24)을 넘은 1996년 이후에도 시장은 4년을 더 올랐고, 고평가 해소가 하락 없이 이익 성장만으로 이뤄진 사례도 있습니다. ` +
     `반대로 1929·2000년의 공통점은 "극단 밸류에이션에서 출발한 하락은 얕게 끝나지 않았다"는 것입니다.`
 
