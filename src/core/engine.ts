@@ -18,6 +18,8 @@
 
 import type {
   StrategyConfig,
+  DrawdownRule,
+  SleeveConfig,
   AlignedDataBundle,
   BacktestResult,
   TradeLogEntry,
@@ -59,6 +61,16 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
   const N = dates.length
   const marketSleeves = config.sleeves.filter((s) => s.ticker !== CASH_TICKER)
   const cashTarget = config.sleeves.find((s) => s.ticker === CASH_TICKER)?.targetWeight ?? 0
+
+  // ── 낙폭 대응 규칙 (얕은 것부터 정렬 — 순회하며 마지막 발동 규칙 = 가장 깊은 규칙) ──
+  const ddRules = [...(config.contribution.rules ?? [])].sort((a, b) => a.drawdownPct - b.drawdownPct)
+  const overrides = config.contribution.overrides ?? []
+  // growth-of-$1 추적 (metrics와 같은 정의: 유입은 당일 종가 직전 유입으로 간주)
+  let growth = 1
+  let growthPeak = 1
+  let prevCloseValue = 0
+  /** 전일 종가 관측으로 확정된 발동 규칙 (오늘의 유입·오늘 저녁 결정에 적용) */
+  let activeRule: DrawdownRule | null = null
 
   // ── 상태 (4.1) ──
   const state: Record<string, SleeveState> = {}
@@ -187,7 +199,14 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     // ── 4) 외부 현금 유입 ──
     let externalFlow = 0
     if (i === 0 && config.contribution.initialUsd > 0) externalFlow += config.contribution.initialUsd
-    if (isMonthStart && config.contribution.monthlyUsd > 0) externalFlow += config.contribution.monthlyUsd
+    if (isMonthStart) {
+      const ym = monthOf(date)
+      const ov = overrides.find((o) => o.from <= ym && ym <= o.to)
+      let monthly = ov ? ov.monthlyUsd : config.contribution.monthlyUsd
+      // 배수는 전일 종가에서 관측된 규칙 기준 (당일 정보 사용 금지)
+      if (activeRule?.contributionMultiplier != null) monthly *= activeRule.contributionMultiplier
+      if (monthly > 0) externalFlow += monthly
+    }
     if (externalFlow > 0) {
       cash += externalFlow
       cashLedger += externalFlow
@@ -196,6 +215,31 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
 
     // ── 5) 종가 평가 ──
     let value = cash + marketValue(i)
+
+    // ── 5.5) 낙폭 관측 (growth-of-$1 — 납입 효과 제거, metrics 6.2와 같은 자) ──
+    // 오늘 종가 관측이 오늘 저녁의 결정(6)과 내일의 유입(4)에 적용된다.
+    if (prevCloseValue > 0) growth *= Math.max(0, (value - externalFlow) / prevCloseValue)
+    if (growth > growthPeak) growthPeak = growth
+    prevCloseValue = value
+    if (ddRules.length > 0) {
+      const ddPct = (1 - growth / growthPeak) * 100
+      let next: DrawdownRule | null = null
+      for (const r of ddRules) if (ddPct >= r.drawdownPct) next = r
+      if ((next?.drawdownPct ?? -1) !== (activeRule?.drawdownPct ?? -1)) {
+        warnings.push({
+          date,
+          code: 'dd_rule',
+          message: next
+            ? `낙폭 규칙 발동 (전고점 대비 −${ddPct.toFixed(1)}%): ` +
+              [
+                next.contributionMultiplier != null ? `적립 ×${next.contributionMultiplier}` : null,
+                next.cashTargetOverride != null ? `현금 목표 ${(next.cashTargetOverride * 100).toFixed(0)}%` : null,
+              ].filter(Boolean).join(' · ')
+            : `낙폭 규칙 해제 (전고점 대비 −${ddPct.toFixed(1)}%로 회복)`,
+        })
+      }
+      activeRule = next
+    }
 
     // ── 6) 의사결정 (t 종가 → t+1 시가 체결) ──
     if (i < N - 1) {
@@ -312,6 +356,11 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
       weights[s.ticker] = v / value
     }
 
+    // 낙폭 규칙의 현금 목표 대체 — 시장 목표는 (1−유효현금)/(1−기본현금)으로 비례 확대
+    const effCash = activeRule?.cashTargetOverride != null ? activeRule.cashTargetOverride : cashTarget
+    const mktScale = cashTarget < 1 ? (1 - effCash) / (1 - cashTarget) : 1
+    const effTarget = (s: SleeveConfig) => (s.ticker === CASH_TICKER ? effCash : s.targetWeight * mktScale)
+
     // 리밸런싱 트리거 판정 (4.4)
     const isMonthStart = i > 0 && monthOf(dates[i - 1]) !== monthOf(date)
     const periodMonths = config.rebalance.periodMonths ?? 0
@@ -324,12 +373,13 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     let bandBreached = false
     if (config.rebalance.trigger === 'bands' || config.rebalance.trigger === 'band_or_periodic') {
       for (const s of config.sleeves) {
-        const dev = Math.abs(weights[s.ticker] - s.targetWeight)
+        const tw = effTarget(s)
+        const dev = Math.abs(weights[s.ticker] - tw)
         const abs = config.rebalance.bandAbsPct != null && dev >= config.rebalance.bandAbsPct / 100
         const rel =
           config.rebalance.bandRelPct != null &&
-          s.targetWeight > 0 &&
-          Math.abs(weights[s.ticker] / s.targetWeight - 1) >= config.rebalance.bandRelPct / 100
+          tw > 0 &&
+          Math.abs(weights[s.ticker] / tw - 1) >= config.rebalance.bandRelPct / 100
         if (abs || rel) { bandBreached = true; break }
       }
     }
@@ -376,7 +426,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
       // 전면 리밸런싱: 목표 대비 초과분 매도(주식 수 확정) + 미달분 매수(예산)
       const reason = i === 0 ? 'initial' : 'rebalance'
       for (const s of marketSleeves) {
-        const target = s.targetWeight * value
+        const target = effTarget(s) * value
         const current = state[s.ticker].shares * closeAt(s.ticker, i)
         const delta = target - current
         if (delta < -1e-9) {
@@ -391,11 +441,11 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     }
 
     // 적립/유휴현금 배분 (4.3 + 4.5 현금 스윕) — 매수만
-    const targetCashUsd = cashTarget * value
+    const targetCashUsd = effCash * value
     const investable = cash - targetCashUsd
     if (investable < config.execution.minTradeUsd) return orders
 
-    const budgets = allocateBuys(investable, i, value)
+    const budgets = allocateBuys(investable, i, value, mktScale)
     const isContributionLike = daily.length === 0 || (daily[daily.length - 1]?.cumContributions ?? 0) < cumContributions
     for (const [ticker, budget] of Object.entries(budgets)) {
       if (budget > 1e-9) {
@@ -415,7 +465,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
    * to_underweight = "부족분 비례 배분". 전 슬리브 부족분이 충족되면
    * 잔여는 목표비중 비례. (가장-미달-우선 워터폴이 아님 — 명세 고정)
    */
-  function allocateBuys(investable: number, i: number, value: number): Record<string, number> {
+  function allocateBuys(investable: number, i: number, value: number, mktScale = 1): Record<string, number> {
     const budgets: Record<string, number> = {}
     const policy = config.contribution.allocation
 
@@ -442,7 +492,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     let totalShortfall = 0
     for (const s of marketSleeves) {
       const current = state[s.ticker].shares * closeAt(s.ticker, i)
-      const sf = Math.max(0, s.targetWeight * projected - current)
+      const sf = Math.max(0, s.targetWeight * mktScale * projected - current)
       shortfalls[s.ticker] = sf
       totalShortfall += sf
     }
@@ -477,6 +527,19 @@ export function validateStrategy(config: StrategyConfig, bundle?: AlignedDataBun
 
   if (config.contribution.initialUsd <= 0 && config.contribution.monthlyUsd <= 0)
     errors.push('초기 투자금 또는 월 적립금이 필요')
+  const rules = config.contribution.rules ?? []
+  for (const r of rules) {
+    if (!(r.drawdownPct > 0)) errors.push('낙폭 규칙: 발동 낙폭은 0보다 커야 합니다')
+    if (r.contributionMultiplier != null && r.contributionMultiplier < 0) errors.push('낙폭 규칙: 적립 배수는 0 이상이어야 합니다')
+    if (r.cashTargetOverride != null && (r.cashTargetOverride < 0 || r.cashTargetOverride > 1)) errors.push('낙폭 규칙: 현금 목표는 0~100% 사이여야 합니다')
+    if (r.contributionMultiplier == null && r.cashTargetOverride == null) errors.push('낙폭 규칙: 적립 배수나 현금 목표 중 하나는 지정해야 합니다')
+  }
+  if (new Set(rules.map((r) => r.drawdownPct)).size !== rules.length) errors.push('낙폭 규칙: 발동 낙폭이 중복됩니다')
+  for (const o of config.contribution.overrides ?? []) {
+    if (!/^\d{4}-\d{2}$/.test(o.from) || !/^\d{4}-\d{2}$/.test(o.to)) errors.push('기간별 적립: 월 형식(YYYY-MM)이 아닙니다')
+    else if (o.from > o.to) errors.push('기간별 적립: 시작 월이 종료 월보다 늦습니다')
+    if (o.monthlyUsd < 0) errors.push('기간별 적립: 금액은 0 이상이어야 합니다')
+  }
   if (config.contribution.allocation === 'fixed_split') {
     const split = config.contribution.fixedSplit
     if (!split) errors.push('fixed_split에 배분 비율 필요')

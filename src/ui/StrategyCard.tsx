@@ -221,6 +221,91 @@ export function StrategyCard({
           </div>
         )}
       </div>
+
+      {/* 낙폭 대응 규칙 */}
+      <div className="space-y-1.5">
+        <label className={labelCls}>
+          낙폭 대응 규칙
+          <HelpTip title="낙폭 대응 규칙">
+            이 전략 자체의 누적 수익률(납입 효과 제거)이 전고점 대비 지정한 낙폭
+            이하로 떨어져 있는 동안 적용되는 규칙입니다. 전일 종가에서 관측한
+            낙폭이 다음 결정부터 반영되고(미래 정보 사용 없음), 회복하면 자동
+            해제됩니다. 여러 규칙이 겹치면 가장 깊은 규칙 하나만 적용됩니다.
+            <br />· <b>적립 배수</b>: 발동 중 월 적립금에 곱할 배수 (예: 2 = 두 배)
+            <br />· <b>현금 목표 %</b>: 발동 중 현금 목표 비중을 이 값으로 대체
+            (빈칸 = 유지). 0이면 현금을 전량 투입하고, 시장 자산 목표는 비례
+            확대됩니다. 규칙 발동·해제는 결과의 경고 로그에 기록됩니다.
+          </HelpTip>
+        </label>
+        {(strategy.contribution.rules ?? []).map((r, i) => (
+          <div key={i} className="flex items-center gap-1.5 flex-wrap text-xs text-zinc-500 dark:text-zinc-400">
+            <span>낙폭</span>
+            <NumberInput
+              value={r.drawdownPct}
+              onChange={(v) =>
+                onChange((s) => ({
+                  ...s,
+                  contribution: { ...s.contribution, rules: (s.contribution.rules ?? []).map((x, j) => (j === i ? { ...x, drawdownPct: v } : x)) },
+                }))
+              }
+              allowDecimal
+              className={`${inputCls} !w-16 text-right`}
+            />
+            <span>% 이상이면: 적립 ×</span>
+            <NumberInput
+              value={r.contributionMultiplier ?? 1}
+              onChange={(v) =>
+                onChange((s) => ({
+                  ...s,
+                  contribution: { ...s.contribution, rules: (s.contribution.rules ?? []).map((x, j) => (j === i ? { ...x, contributionMultiplier: v } : x)) },
+                }))
+              }
+              allowDecimal
+              className={`${inputCls} !w-14 text-right`}
+            />
+            <span>· 현금 목표</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              placeholder="유지"
+              value={r.cashTargetOverride != null ? Math.round(r.cashTargetOverride * 100) : ''}
+              onChange={(e) => {
+                const raw = e.target.value
+                onChange((s) => ({
+                  ...s,
+                  contribution: {
+                    ...s.contribution,
+                    rules: (s.contribution.rules ?? []).map((x, j) =>
+                      j === i ? { ...x, cashTargetOverride: raw === '' ? undefined : Number(raw) / 100 } : x,
+                    ),
+                  },
+                }))
+              }}
+              className={`${inputCls} !w-16 text-right`}
+            />
+            <span>%</span>
+            <button
+              onClick={() => onChange((s) => ({ ...s, contribution: { ...s.contribution, rules: (s.contribution.rules ?? []).filter((_, j) => j !== i) } }))}
+              className="p-1 text-gray-300 hover:text-red-500"
+              aria-label="규칙 삭제"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={() =>
+            onChange((s) => ({
+              ...s,
+              contribution: { ...s.contribution, rules: [...(s.contribution.rules ?? []), { drawdownPct: 10, contributionMultiplier: 2 }] },
+            }))
+          }
+          className="text-xs text-emerald-700 dark:text-emerald-400 hover:underline"
+        >
+          + 낙폭 규칙 추가 (예: −10%에서 적립 2배)
+        </button>
+      </div>
     </div>
   )
 }

@@ -7,8 +7,10 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  Brush,
   ResponsiveContainer,
 } from 'recharts'
+import { NumberInput } from './NumberInput'
 import { assetCautionFor, type StrategyRun, type AlignedDataBundle } from '@/core'
 import { HelpTip } from './HelpTip'
 import { cardCls, fmtUsd, fmtSignedUsd, fmtPct, fmtSignedPct , uniqueRunLabels } from './common'
@@ -23,14 +25,20 @@ export function ResultsSection({
   palette,
   theme,
   taxEnabled,
+  onAddOverride,
 }: {
   runs: StrategyRun[]
   bundle: AlignedDataBundle
   palette: string[]
   theme: 'light' | 'dark'
   taxEnabled: boolean
+  /** 차트에서 드래그로 고른 기간에 월 적립 조정을 추가 (고급) */
+  onAddOverride?: (from: string, to: string, monthlyUsd: number) => void
 }) {
   const [taxView, setTaxView] = useState<'postTax' | 'preTax'>('postTax')
+  // 차트 브러시 선택 구간 (기간별 적립 조정용)
+  const [sel, setSel] = useState<{ s: number; e: number } | null>(null)
+  const [ovAmount, setOvAmount] = useState(2000)
 
   // 전략별 고정 색 (등수 아닌 엔티티 기준 — 정렬돼도 색 유지)
   const colorOf = useMemo(() => {
@@ -200,8 +208,47 @@ export function ResultsSection({
                 activeDot={{ r: 4 }}
               />
             ))}
+            {onAddOverride && (
+              <Brush
+                dataKey="date"
+                height={26}
+                travellerWidth={8}
+                stroke={axisTickColor}
+                fill="transparent"
+                tickFormatter={(d: string) => d.slice(0, 7)}
+                onChange={(r) => {
+                  const si = r?.startIndex ?? 0
+                  const ei = r?.endIndex ?? chartData.length - 1
+                  setSel(si === 0 && ei === chartData.length - 1 ? null : { s: si, e: ei })
+                }}
+              />
+            )}
           </LineChart>
         </ResponsiveContainer>
+        {onAddOverride && (
+          <p className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
+            아래 손잡이를 끌어 구간을 고르면 그 기간의 월 적립금을 바꿀 수 있습니다 (고급)
+          </p>
+        )}
+        {onAddOverride && sel && chartData[sel.s] && chartData[sel.e] && (
+          <div className="mt-2 flex items-center gap-2 flex-wrap text-xs text-zinc-600 dark:text-zinc-300 rounded-lg border border-[#e0e3eb] dark:border-[#2a2e39] bg-[#fafbfd] dark:bg-[#171c28] px-3 py-2">
+            <span>
+              선택 구간 <b>{String(chartData[sel.s].date).slice(0, 7)} ~ {String(chartData[sel.e].date).slice(0, 7)}</b>의 월 적립을
+            </span>
+            <NumberInput value={ovAmount} onChange={setOvAmount} className="w-24 bg-white dark:bg-[#171c28] border border-[#d3d8e3] dark:border-[#363a45] rounded-md px-2 py-1 text-right" />
+            <span>달러로</span>
+            <button
+              onClick={() => {
+                onAddOverride(String(chartData[sel.s].date).slice(0, 7), String(chartData[sel.e].date).slice(0, 7), ovAmount)
+                setSel(null)
+              }}
+              className="px-2.5 py-1 rounded-md bg-[#2962ff] text-white font-medium hover:bg-[#1e4fd6]"
+            >
+              기간 조정 추가
+            </button>
+            <span className="text-zinc-400">추가 후 "백테스트 실행"을 눌러야 반영됩니다</span>
+          </div>
+        )}
       </div>
 
       {/* 비교 테이블 (§7 TWRR 정렬) */}

@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { runBacktest } from '../engine'
+import { runBacktest, validateStrategy } from '../engine'
 import { makeDates, makeBundle, constSeries, cleanStrategy, lcg, randomWalk } from './helpers'
 
 const EPS = 1e-6
@@ -439,5 +439,78 @@ describe('골든마스터: 현금 100% (유휴현금 금리 복리 — 시장 �
     const result = runBacktest(s, bundle)
     expect(result.taxes).toHaveLength(0)
     expect(result.totalTaxesUsd).toBe(0)
+  })
+})
+
+describe('낙폭 대응 규칙 + 기간별 적립 조정 (전일 관측 — 룩어헤드 금지)', () => {
+  // A: 100 고정 → 20일째(1/30)부터 60 (−40% 급락 유지)
+  const n = 80
+  const dates = makeDates('2023-01-02', n)
+  const close = constSeries(100, n).map((v, i) => (i >= 20 ? 60 : v))
+  const bundle = makeBundle(dates, { A: { close } })
+
+  it('낙폭 ≥10% 발동: 이후 월 적립이 2배 + 발동 로그 기록', () => {
+    const r = runBacktest(
+      cleanStrategy({
+        sleeves: [{ ticker: 'A', targetWeight: 1 }],
+        contribution: { initialUsd: 10_000, monthlyUsd: 1_000, allocation: 'pro_rata', rules: [{ drawdownPct: 10, contributionMultiplier: 2 }] },
+      }),
+      bundle
+    )
+    const flows = r.daily.filter((d) => d.externalFlow > 0)
+    expect(flows[0].externalFlow).toBe(10_000) // 초기 일시금 (규칙 무관)
+    for (const f of flows.slice(1)) expect(f.externalFlow, f.date).toBe(2_000) // 2~4월: 급락(1/30) 관측 후
+    expect(r.totalContributions).toBe(10_000 + 2_000 * (flows.length - 1))
+    expect(r.warnings.some((w) => w.code === 'dd_rule' && w.message.includes('발동'))).toBe(true)
+  })
+
+  it('기간별 조정이 기본 적립을 대체하고, 배수와 곱으로 결합된다', () => {
+    const r = runBacktest(
+      cleanStrategy({
+        sleeves: [{ ticker: 'A', targetWeight: 1 }],
+        contribution: {
+          initialUsd: 10_000, monthlyUsd: 1_000, allocation: 'pro_rata',
+          rules: [{ drawdownPct: 10, contributionMultiplier: 2 }],
+          overrides: [{ from: '2023-03', to: '2023-03', monthlyUsd: 500 }],
+        },
+      }),
+      bundle
+    )
+    const flowOf = (ym: string) => r.daily.find((d) => d.date.startsWith(ym) && d.externalFlow > 0)!.externalFlow
+    expect(flowOf('2023-02')).toBe(2_000) // 기본 1,000 × 2
+    expect(flowOf('2023-03')).toBe(1_000) // 조정 500 × 2
+    expect(flowOf('2023-04')).toBe(2_000)
+  })
+
+  it('현금 목표 대체: 발동 다음 거래일에 현금이 시장으로 스윕 매수된다', () => {
+    const r = runBacktest(
+      cleanStrategy({
+        sleeves: [{ ticker: 'A', targetWeight: 0.7 }, { ticker: 'CASH', targetWeight: 0.3 }],
+        contribution: { initialUsd: 10_000, monthlyUsd: 0, allocation: 'pro_rata', rules: [{ drawdownPct: 10, cashTargetOverride: 0 }] },
+      }),
+      bundle
+    )
+    // 1/30 종가 관측(포트 낙폭 ≈ −28%) → 1/31 시가에 현금 투입
+    expect(r.trades.some((t) => t.side === 'BUY' && t.reason === 'cash_sweep' && t.date === '2023-01-31')).toBe(true)
+    const last = r.daily[r.daily.length - 1]
+    expect(last.cash / last.value).toBeLessThan(0.02) // 현금 목표 0%로 유지
+    // 급락 전에는 70/30 유지 (규칙 미발동)
+    const before = r.daily[10]
+    expect(before.cash / before.value).toBeGreaterThan(0.25)
+  })
+
+  it('검증: 잘못된 규칙·기간 형식을 실행 전에 잡는다', () => {
+    const errors = validateStrategy(
+      cleanStrategy({
+        sleeves: [{ ticker: 'A', targetWeight: 1 }],
+        contribution: {
+          initialUsd: 1_000, monthlyUsd: 0, allocation: 'pro_rata',
+          rules: [{ drawdownPct: 0, contributionMultiplier: 2 }, { drawdownPct: 0, cashTargetOverride: 2 }],
+          overrides: [{ from: '2023-1', to: '2022-01', monthlyUsd: -5 }],
+        },
+      })
+    )
+    expect(errors.some((e) => e.includes('낙폭 규칙'))).toBe(true)
+    expect(errors.some((e) => e.includes('기간별 적립'))).toBe(true)
   })
 })

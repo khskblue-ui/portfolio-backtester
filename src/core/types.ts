@@ -71,6 +71,31 @@ export type TaxAssetClass = 'foreign_equity' | 'crypto' | 'exempt'
  */
 export type AllocationPolicy = 'to_underweight' | 'pro_rata' | 'fixed_split'
 
+/**
+ * 낙폭 대응 규칙 — 전략 자체 성과(growth-of-$1, 납입 효과 제거)의 전고점 대비
+ * 낙폭으로 발동. t 종가에서 관측한 낙폭이 그날 저녁의 배분 결정과 다음 유입부터
+ * 적용된다(룩어헤드 금지). 여러 규칙이 동시에 발동하면 가장 깊은 규칙 하나만 적용.
+ * 낙폭이 임계 미만으로 회복되면 자동 해제.
+ */
+export interface DrawdownRule {
+  /** 발동 낙폭 (%, 양수 — 10이면 전고점 대비 −10% 이하에서 발동) */
+  drawdownPct: number
+  /** 발동 중 월 적립 배수 (기본 1 — 2면 두 배) */
+  contributionMultiplier?: number
+  /** 발동 중 현금 목표 비중 대체 (0~1 — 0이면 현금 전량 투입, 시장 목표는 비례 확대) */
+  cashTargetOverride?: number
+}
+
+/** 기간별 월 적립 조정 — 공통 설정에서 전 전략에 동일 적용 (공정 비교 유지) */
+export interface ContributionOverride {
+  /** 시작 월 (YYYY-MM, 포함) */
+  from: string
+  /** 종료 월 (YYYY-MM, 포함) */
+  to: string
+  /** 이 기간의 월 적립금 (기본 월 적립금을 대체) */
+  monthlyUsd: number
+}
+
 export interface ContributionConfig {
   /** 초기 일시 투자금 (USD) */
   initialUsd: number
@@ -79,6 +104,10 @@ export interface ContributionConfig {
   allocation: AllocationPolicy
   /** fixed_split일 때 ticker → 비율 (합 1) */
   fixedSplit?: Record<string, number>
+  /** 낙폭 대응 규칙 (전략별) */
+  rules?: DrawdownRule[]
+  /** 기간별 월 적립 조정 (공통 설정에서 주입) */
+  overrides?: ContributionOverride[]
 }
 
 /** 4.4 리밸런싱 트리거 */
@@ -208,7 +237,7 @@ export interface DailyPoint {
 
 export interface EngineWarning {
   date: string
-  code: 'no_sell_overweight' | 'negative_cash_tax' | 'negative_cash_retry' | 'band_unclosable' | 'reconciliation'
+  code: 'no_sell_overweight' | 'negative_cash_tax' | 'negative_cash_retry' | 'band_unclosable' | 'reconciliation' | 'dd_rule'
   message: string
 }
 

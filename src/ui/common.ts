@@ -2,7 +2,7 @@
  * UI 공통 — 팔레트·포맷터·스타일 토큰·공통 설정 모델
  */
 
-import { defaultTaxConfig, type StrategyConfig } from '@/core'
+import { defaultTaxConfig, type StrategyConfig, type ContributionOverride } from '@/core'
 
 /** 검증된 카테고리컬 팔레트 (라이트/다크 별도 스텝, 순서 고정 — 순환 금지) */
 export const SERIES_COLORS_LIGHT = ['#2a78d6', '#1baf7a', '#eda100', '#008300', '#4a3aa7', '#e34948']
@@ -27,6 +27,8 @@ export interface SharedSettings {
   cryptoTaxEnabled: boolean
   startDate: string
   endDate: string
+  /** 기간별 월 적립 조정 (고급) — 전 전략 동일 적용 */
+  contributionOverrides: ContributionOverride[]
 }
 
 export const defaultSharedSettings = (): SharedSettings => ({
@@ -43,6 +45,7 @@ export const defaultSharedSettings = (): SharedSettings => ({
   cryptoTaxEnabled: false,
   startDate: '',
   endDate: '',
+  contributionOverrides: [],
 })
 
 /** 공통 설정을 전략에 주입 — 실행 직전에 적용해 전략 간 가정 불일치를 차단 */
@@ -55,7 +58,7 @@ export function applyShared(s: StrategyConfig, g: SharedSettings): StrategyConfi
   tax.crypto.enabled = g.cryptoTaxEnabled
   return {
     ...s,
-    contribution: { ...s.contribution, initialUsd: g.initialUsd, monthlyUsd: g.monthlyUsd },
+    contribution: { ...s.contribution, initialUsd: g.initialUsd, monthlyUsd: g.monthlyUsd, overrides: g.contributionOverrides },
     costs: { feeBps: g.feeBps, spreadBps: g.spreadBps },
     execution: {
       ...s.execution,

@@ -92,6 +92,55 @@ export function SettingsPanel({
           ))}
         </div>
       </div>
+
+      {/* 기간별 월 적립 조정 (고급) */}
+      <div className="space-y-1.5 pt-1 border-t border-[#e0e3eb] dark:border-[#2a2e39]">
+        <label className={labelCls}>
+          기간별 월 적립 조정 (고급)
+          <HelpTip title="기간별 월 적립 조정">
+            지정한 기간 동안 월 적립금을 기본값 대신 이 금액으로 바꿉니다. 모든
+            전략에 동일하게 적용되어 공정 비교가 유지됩니다. 결과의 누적 수익률
+            차트에서 구간을 드래그해서 추가할 수도 있습니다. 겹치는 기간이 있으면
+            먼저 만든 행이 우선합니다.
+          </HelpTip>
+        </label>
+        {(shared.contributionOverrides ?? []).map((o, i) => (
+          <div key={i} className="flex items-center gap-1.5 flex-wrap text-xs text-zinc-500 dark:text-zinc-400">
+            <input
+              type="month"
+              value={o.from}
+              onChange={(e) => onChange((p) => ({ ...p, contributionOverrides: p.contributionOverrides.map((x, j) => (j === i ? { ...x, from: e.target.value } : x)) }))}
+              className={`${inputCls} !w-40`}
+            />
+            <span>~</span>
+            <input
+              type="month"
+              value={o.to}
+              onChange={(e) => onChange((p) => ({ ...p, contributionOverrides: p.contributionOverrides.map((x, j) => (j === i ? { ...x, to: e.target.value } : x)) }))}
+              className={`${inputCls} !w-40`}
+            />
+            <span>월 적립 $</span>
+            <NumberInput
+              value={o.monthlyUsd}
+              onChange={(v) => onChange((p) => ({ ...p, contributionOverrides: p.contributionOverrides.map((x, j) => (j === i ? { ...x, monthlyUsd: v } : x)) }))}
+              className={`${inputCls} !w-24 text-right`}
+            />
+            <button
+              onClick={() => onChange((p) => ({ ...p, contributionOverrides: p.contributionOverrides.filter((_, j) => j !== i) }))}
+              className="text-red-400 hover:text-red-600 px-1"
+              aria-label="기간 조정 삭제"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={() => onChange((p) => ({ ...p, contributionOverrides: [...(p.contributionOverrides ?? []), { from: '', to: '', monthlyUsd: shared.monthlyUsd }] }))}
+          className="text-xs text-emerald-700 dark:text-emerald-400 hover:underline"
+        >
+          + 기간 추가 (예: 특정 2년만 적립 2배)
+        </button>
+      </div>
     </div>
   )
 }

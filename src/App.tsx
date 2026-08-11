@@ -385,7 +385,17 @@ export default function App() {
                 설정이 변경되었습니다. 아래 결과(와 보고서)는 <b>이전 설정 기준</b>입니다. "백테스트 실행"을 눌러 갱신하세요.
               </div>
             )}
-            <ResultsSection runs={runs} bundle={bundle} palette={palette} theme={theme} taxEnabled={shared.taxEnabled} />
+            <ResultsSection
+              runs={runs}
+              bundle={bundle}
+              palette={palette}
+              theme={theme}
+              taxEnabled={shared.taxEnabled}
+              onAddOverride={(from, to, monthlyUsd) => {
+                setShared((p) => ({ ...p, contributionOverrides: [...(p.contributionOverrides ?? []), { from, to, monthlyUsd }] }))
+                setNotice(`기간 조정 추가됨: ${from}~${to} 월 $${monthlyUsd.toLocaleString()} — "백테스트 실행"을 누르면 반영됩니다`, 'info')
+              }}
+            />
           </>
         )}
           </>
