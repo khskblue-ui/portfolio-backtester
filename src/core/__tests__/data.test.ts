@@ -344,3 +344,12 @@ describe('현금 100% 번들 (시장 티커 없음 — 주중 달력 합성)', a
     await expect(loadDataBundle([], { startDate: '2021-01-01', endDate: '2020-01-01' })).rejects.toThrow('기간')
   })
 })
+
+describe('감사 회귀: 선두 결측 forward-fill', () => {
+  it('캘린더 선두에 자산 데이터가 없으면 시리즈 최초가가 아니라 직전 관측치로 채운다', () => {
+    const eq = series('VOO', EQUITY_DATES, 100)
+    const btc: DailySeries = { ticker: 'BTC-USD', dates: ['2019-01-02', '2022-12-30', '2023-01-04'], open: [400, 7200, 9000], close: [400, 7200, 9000], adjClose: [400, 7200, 9000], dividends: {} }
+    const b = alignToCommonCalendar([eq, btc], { startDate: '2023-01-02' })
+    expect(b.series['BTC-USD'].close[0]).toBe(7200) // 직전 관측치 (400이면 유령 수익)
+  })
+})

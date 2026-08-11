@@ -262,7 +262,21 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
         cash -= taxDue
         cashLedger -= taxDue
         totalTaxesUsd += taxDue
+        const valueBeforeTax = value
         value -= taxDue
+        // 낙폭 관측(5.5)은 세전 값으로 이미 갱신됐으므로 세후 값으로 소급 보정 —
+        // metrics의 growth-of-$1(세후 daily.value 기준)과 같은 자를 유지해,
+        // 세금발 낙폭 규칙 발동이 다음 달(1월) 유입에서 누락되는 1스텝 지연 방지
+        if (valueBeforeTax > 0) {
+          growth *= Math.max(0, value / valueBeforeTax)
+          prevCloseValue = value
+          if (ddRules.length > 0) {
+            const ddPct = (1 - growth / growthPeak) * 100
+            let next: DrawdownRule | null = null
+            for (const r of ddRules) if (ddPct >= r.drawdownPct) next = r
+            activeRule = next
+          }
+        }
         if (cash < 0 && i < N - 1) {
           // 현금 부족 → 다음날 시가에 슬리브 비례 강제 매도 (다음 연도 손익으로 실현)
           warnings.push({
@@ -276,7 +290,8 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
             for (const s of marketSleeves) {
               const sleeveVal = state[s.ticker].shares * closeAt(s.ticker, i)
               if (sleeveVal <= 0) continue
-              const sellShares = ((needed * sleeveVal) / mv) / closeAt(s.ticker, i)
+              let sellShares = ((needed * sleeveVal) / mv) / closeAt(s.ticker, i)
+            if (!config.execution.fractionalShares) sellShares = Math.ceil(sellShares)
               pendingOrders.push({ ticker: s.ticker, side: 'SELL', amount: Math.min(sellShares, state[s.ticker].shares), reason: 'forced_tax_sale' })
             }
           }
@@ -301,7 +316,8 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
         for (const s of marketSleeves) {
           const sleeveVal = state[s.ticker].shares * closeAt(s.ticker, i)
           if (sleeveVal <= 0) continue
-          const sellShares = ((neededR * sleeveVal) / mvR) / closeAt(s.ticker, i)
+          let sellShares = ((neededR * sleeveVal) / mvR) / closeAt(s.ticker, i)
+          if (!config.execution.fractionalShares) sellShares = Math.ceil(sellShares)
           pendingOrders.push({ ticker: s.ticker, side: 'SELL', amount: Math.min(sellShares, state[s.ticker].shares), reason: 'forced_tax_sale' })
         }
       }
@@ -546,6 +562,9 @@ export function validateStrategy(config: StrategyConfig, bundle?: AlignedDataBun
     else {
       const sum = Object.values(split).reduce((a, b) => a + b, 0)
       if (Math.abs(sum - 1) > 1e-6) errors.push(`fixed_split 합이 1이 아님 (${sum.toFixed(4)})`)
+      const mkt = new Set(config.sleeves.filter((x) => x.ticker !== CASH_TICKER).map((x) => x.ticker))
+      const stray = Object.keys(split).filter((k) => !mkt.has(k) && (split[k] ?? 0) > 0)
+      if (stray.length > 0) errors.push(`고정 분할의 자산(${stray.join(', ')})이 자산 배분에 없습니다 — 티커를 맞춰 주세요`)
     }
   }
 

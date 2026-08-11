@@ -204,10 +204,14 @@ export function parseYahooChart(json: unknown, ticker: string): DailySeries {
   const adjClose: number[] = []
 
   for (let i = 0; i < timestamps.length; i++) {
-    const o = opens[i]
+    let o = opens[i]
     const c = closes[i]
-    // 결측/이상치 행은 제외 (PRD 3.4) — open·close 둘 다 유효해야 체결·평가 가능
-    if (o == null || c == null || !(o > 0) || !(c > 0)) continue
+    // 결측/이상치 행은 제외 (PRD 3.4) — open·close 둘 다 유효해야 체결·평가 가능.
+    // 단 금리 시계열(^IRX)은 0·음수가 유효한 관측치이므로 결측만 거른다
+    if (ticker === RATE_TICKER) {
+      if (c == null) continue
+      if (o == null) o = c
+    } else if (o == null || c == null || !(o > 0) || !(c > 0)) continue
     const d = toLocalDate(timestamps[i], gmtoffset)
     // 동일 날짜 중복 행이면 마지막 값으로 덮어씀
     if (dates.length > 0 && dates[dates.length - 1] === d) {
@@ -349,7 +353,9 @@ export function alignToCommonCalendar(
     const adjClose: number[] = []
     const divPerShare: number[] = new Array<number>(dates.length).fill(0)
 
-    let lastI = -1
+    // 캘린더 시작 직전의 마지막 관측치에서 출발 — 선두 결측이 시리즈 최초가(수년 전)로
+    // 채워지는 왜곡 방지 (latestStart 클립으로 s.dates[0] ≤ dates[0]이 보장됨)
+    let lastI = lowerBound(s.dates, dates[0]) - 1
     for (let k = 0; k < dates.length; k++) {
       const i = idx.get(dates[k])
       if (i != null) {
@@ -481,7 +487,7 @@ export async function loadDataBundle(
   // 역사 월간(-HIST) 자산은 일별 자산과 혼합 불가 — 캘린더 교집합(월초 vs 거래일)이
   // 사실상 공집합이 되어 조용히 왜곡되므로 명시적으로 차단하고 대체 티커를 안내
   const bundleTickers = unique.filter((t) => isBundleTicker(t))
-  const dailyTickers = unique.filter((t) => !isBundleTicker(t) && !isCryptoTicker(t))
+  const dailyTickers = unique.filter((t) => !isBundleTicker(t))
   if (bundleTickers.length > 0 && dailyTickers.length > 0) {
     throw new Error(
       `역사 월간 자산(${bundleTickers.join(', ')})은 일별 자산(${dailyTickers.join(', ')})과 함께 실행할 수 없습니다 ` +

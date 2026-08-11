@@ -514,3 +514,13 @@ describe('낙폭 대응 규칙 + 기간별 적립 조정 (전일 관측 — 룩�
     expect(errors.some((e) => e.includes('기간별 적립'))).toBe(true)
   })
 })
+
+describe('감사 회귀: fixed_split 키 검증', () => {
+  it('자산 배분에 없는 티커가 고정 분할에 있으면 검증 에러 (무투자 방지)', () => {
+    const errors = validateStrategy(cleanStrategy({
+      sleeves: [{ ticker: 'AAA', targetWeight: 1 }],
+      contribution: { initialUsd: 1_000, monthlyUsd: 1_000, allocation: 'fixed_split', fixedSplit: { BBB: 1 } },
+    }))
+    expect(errors.some((e) => e.includes('고정 분할'))).toBe(true)
+  })
+})
