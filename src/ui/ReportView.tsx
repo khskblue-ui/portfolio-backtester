@@ -106,6 +106,12 @@ export function ReportView({
             <span>한국 세금 {shared.taxEnabled ? '반영' : '미반영'}</span>
             <span>분수주 {shared.fractionalShares ? '허용' : '불가(정수주)'}</span>
           </div>
+          {(shared.contributionOverrides ?? []).length > 0 && (
+            <div className="mt-2 pt-2 border-t border-gray-200 text-gray-700">
+              <b>기간별 월 적립 조정</b>:{' '}
+              {(shared.contributionOverrides ?? []).map((o) => `${o.from}~${o.to} ${fmtUsd(o.monthlyUsd)}`).join(' · ')}
+            </div>
+          )}
         </div>
 
         {/* 에피스테믹 고지 (§11 — 보고서에도 필수) */}
@@ -262,6 +268,17 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
               {cfg.rebalance.bandAbsPct != null && (
                 <tr><td className={tdCls}>밴드 폭</td><td className={`${tdCls} text-right`}>{cfg.rebalance.bandAbsPct}%p</td></tr>
               )}
+              {(cfg.contribution.rules ?? []).map((r) => (
+                <tr key={r.drawdownPct}>
+                  <td className={tdCls}>낙폭 규칙 −{r.drawdownPct}%</td>
+                  <td className={`${tdCls} text-right`}>
+                    {[
+                      r.contributionMultiplier != null ? `적립 ×${r.contributionMultiplier}` : null,
+                      r.cashTargetOverride != null ? `현금 목표 ${Math.round(r.cashTargetOverride * 100)}%` : null,
+                    ].filter(Boolean).join(' · ')}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
