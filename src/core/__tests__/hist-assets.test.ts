@@ -137,7 +137,7 @@ describe('데이터 — 번들 자산 로드·혼합 차단', () => {
     }
     const result = runBacktest(config, bundle)
     // 매 스텝이 월초 → 첫 달 초기+적립, 이후 매월 적립
-    expect(result.totalContributions).toBe(10_000 + 1_000 * 12)
+    expect(result.totalContributions).toBe(10_000 + 1_000 * 13) // 시작월 포함 13회
     // 정합성 위반(reconciliation) 경고 없음
     expect(result.warnings.filter((w) => w.code === 'reconciliation')).toHaveLength(0)
     expect(result.finalValue).toBeGreaterThan(20_000)

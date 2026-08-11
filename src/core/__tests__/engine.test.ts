@@ -30,15 +30,15 @@ describe('골든마스터: 상수 가격 60/40 (현금 보존·배분 정확성)
 
   it('최종 가치 = 총 납입 (수익 0, 비용 0)', () => {
     const monthStarts = dates.filter((d, i) => i > 0 && dates[i - 1].slice(0, 7) !== d.slice(0, 7)).length
-    expect(result.totalContributions).toBeCloseTo(10_000 + 1_000 * monthStarts, 6)
+    expect(result.totalContributions).toBeCloseTo(10_000 + 1_000 * (monthStarts + 1), 6) // 시작월 적립 포함
     expect(result.finalValue).toBeCloseTo(result.totalContributions, 6)
   })
 
-  it('초기 매수: A 60주@100, B 80주@50 (t+1 시가 체결)', () => {
+  it('초기 매수: A 66주@100, B 88주@50 — 초기금+시작월 적립 11,000 (t+1 시가 체결)', () => {
     const [buyA, buyB] = result.trades.slice(0, 2).sort((a, b) => a.ticker.localeCompare(b.ticker))
     expect(buyA.date).toBe(dates[1]) // t=0 결정 → t=1 체결 (룩어헤드 가드)
-    expect(buyA.shares).toBeCloseTo(60, 6)
-    expect(buyB.shares).toBeCloseTo(80, 6)
+    expect(buyA.shares).toBeCloseTo(66, 6)
+    expect(buyB.shares).toBeCloseTo(88, 6)
   })
 
   it('월 적립도 60/40으로 배분 (to_underweight → 부족분 비례)', () => {
@@ -458,9 +458,9 @@ describe('낙폭 대응 규칙 + 기간별 적립 조정 (전일 관측 — 룩�
       bundle
     )
     const flows = r.daily.filter((d) => d.externalFlow > 0)
-    expect(flows[0].externalFlow).toBe(10_000) // 초기 일시금 (규칙 무관)
+    expect(flows[0].externalFlow).toBe(11_000) // 초기 일시금 + 시작월 적립 (규칙 미발동이라 ×1)
     for (const f of flows.slice(1)) expect(f.externalFlow, f.date).toBe(2_000) // 2~4월: 급락(1/30) 관측 후
-    expect(r.totalContributions).toBe(10_000 + 2_000 * (flows.length - 1))
+    expect(r.totalContributions).toBe(11_000 + 2_000 * (flows.length - 1))
     expect(r.warnings.some((w) => w.code === 'dd_rule' && w.message.includes('발동'))).toBe(true)
   })
 

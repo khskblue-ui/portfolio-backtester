@@ -199,7 +199,8 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     // ── 4) 외부 현금 유입 ──
     let externalFlow = 0
     if (i === 0 && config.contribution.initialUsd > 0) externalFlow += config.contribution.initialUsd
-    if (isMonthStart) {
+    // 월 적립은 시작월 포함 매월 유입 (스펙: 매월 첫 거래일 — 시작일이 곧 그 달의 첫 유입일)
+    if (i === 0 || isMonthStart) {
       const ym = monthOf(date)
       const ov = overrides.find((o) => o.from <= ym && ym <= o.to)
       let monthly = ov ? ov.monthlyUsd : config.contribution.monthlyUsd
