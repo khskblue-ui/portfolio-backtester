@@ -78,7 +78,15 @@ export type AllocationPolicy = 'to_underweight' | 'pro_rata' | 'fixed_split'
  * 낙폭이 임계 미만으로 회복되면 자동 해제.
  */
 export interface DrawdownRule {
-  /** 발동 낙폭 (%, 양수 — 10이면 전고점 대비 −10% 이하에서 발동) */
+  /**
+   * 낙폭 기준 (기본 'peak'):
+   * - 'peak': 적립 효과를 제거한 전략 수익률 곡선(growth-of-$1)이 백테스트 구간에서
+   *   기록한 역대 최고점 대비 −X% (최고점은 계속 갱신됨 — 결과 차트의 누적 수익률과 같은 선)
+   * - 'invested': 평가액이 지금까지 넣은 돈의 합계(누적 투입원금) 대비 −X%
+   *   (계좌가 원금 대비 물린 정도)
+   */
+  basis?: 'peak' | 'invested'
+  /** 발동 낙폭 (%, 양수 — 10이면 기준 대비 −10% 이하에서 발동) */
   drawdownPct: number
   /** 발동 중 월 적립 배수 (기본 1 — 2면 두 배) */
   contributionMultiplier?: number

@@ -524,3 +524,38 @@ describe('감사 회귀: fixed_split 키 검증', () => {
     expect(errors.some((e) => e.includes('고정 분할'))).toBe(true)
   })
 })
+
+describe('낙폭 기준 2종: 전고점 대비 vs 투입원금 대비', () => {
+  // A: 100 → 30일째 200(2배) → 50일째 150 (전고점 대비 −25%, 투입원금 대비로는 +50% 수익)
+  const n = 90
+  const dates = makeDates('2023-01-02', n)
+  const close = constSeries(100, n).map((v, i) => (i >= 50 ? 150 : i >= 30 ? 200 : v))
+  const bundle = makeBundle(dates, { A: { close } })
+  const mk = (basis: 'peak' | 'invested') =>
+    cleanStrategy({
+      sleeves: [{ ticker: 'A', targetWeight: 1 }],
+      contribution: { initialUsd: 10_000, monthlyUsd: 1_000, allocation: 'pro_rata', rules: [{ basis, drawdownPct: 20, contributionMultiplier: 2 }] },
+    })
+
+  it('전고점 기준: 고점(200)에서 −25% 하락(150)에 발동 — 원금 대비 흑자여도', () => {
+    const r = runBacktest(mk('peak'), bundle)
+    const apr = r.daily.find((d) => d.date.startsWith('2023-04') && d.externalFlow > 0)!
+    expect(apr.externalFlow).toBe(2_000) // 3/14 급락 관측 후의 월초
+    expect(r.warnings.some((w) => w.code === 'dd_rule' && w.message.includes('전고점 대비'))).toBe(true)
+  })
+
+  it('투입원금 기준: 같은 시나리오에서 평가액이 원금보다 위라 미발동', () => {
+    const r = runBacktest(mk('invested'), bundle)
+    for (const f of r.daily.filter((d) => d.externalFlow > 0).slice(1)) expect(f.externalFlow, f.date).toBe(1_000)
+    expect(r.warnings.some((w) => w.code === 'dd_rule')).toBe(false)
+  })
+
+  it('투입원금 기준: 원금 대비 −25% 물리면 발동', () => {
+    const close2 = constSeries(100, n).map((v, i) => (i >= 30 ? 70 : v)) // 100 → 70
+    const b2 = makeBundle(dates, { A: { close: close2 } })
+    const r = runBacktest(mk('invested'), b2)
+    const apr = r.daily.find((d) => d.date.startsWith('2023-04') && d.externalFlow > 0)!
+    expect(apr.externalFlow).toBe(2_000)
+    expect(r.warnings.some((w) => w.code === 'dd_rule' && w.message.includes('투입원금 대비'))).toBe(true)
+  })
+})

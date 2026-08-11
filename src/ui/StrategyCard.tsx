@@ -227,10 +227,15 @@ export function StrategyCard({
         <label className={labelCls}>
           낙폭 대응 규칙
           <HelpTip title="낙폭 대응 규칙">
-            이 전략 자체의 누적 수익률(납입 효과 제거)이 전고점 대비 지정한 낙폭
-            이하로 떨어져 있는 동안 적용되는 규칙입니다. 전일 종가에서 관측한
-            낙폭이 다음 결정부터 반영되고(미래 정보 사용 없음), 회복하면 자동
-            해제됩니다. 여러 규칙이 겹치면 가장 깊은 규칙 하나만 적용됩니다.
+            지정한 낙폭 이하로 떨어져 있는 동안 적용되는 규칙입니다. 기준은 규칙마다 선택합니다:
+            <br />· <b>전고점 대비</b>: 결과 차트의 "누적 수익률" 곡선(적립 타이밍 효과를
+            제거한 전략 자체 성과)이 백테스트 구간에서 기록한 역대 최고점에서 −X%.
+            최고점은 새 고점이 나올 때마다 갱신됩니다
+            <br />· <b>투입원금 대비</b>: 평가액이 지금까지 넣은 돈의 합계(초기+적립 누적)보다
+            −X% 아래, 즉 계좌가 원금 대비 물린 정도
+            <br />전일 종가에서 관측한 낙폭이 다음 결정부터 반영되고(미래 정보 사용
+            없음), 회복하면 자동 해제됩니다. 여러 규칙이 겹치면 가장 깊은 규칙
+            하나만 적용됩니다.
             <br />· <b>적립 배수</b>: 발동 중 월 적립금에 곱할 배수 (예: 2 = 두 배)
             <br />· <b>현금 목표 %</b>: 발동 중 현금 목표 비중을 이 값으로 대체
             (빈칸 = 유지). 0이면 현금을 전량 투입하고, 시장 자산 목표는 비례
@@ -239,6 +244,20 @@ export function StrategyCard({
         </label>
         {(strategy.contribution.rules ?? []).map((r, i) => (
           <div key={i} className="flex items-center gap-1.5 flex-wrap text-xs text-zinc-500 dark:text-zinc-400">
+            <select
+              value={r.basis ?? 'peak'}
+              onChange={(e) =>
+                onChange((s) => ({
+                  ...s,
+                  contribution: { ...s.contribution, rules: (s.contribution.rules ?? []).map((x, j) => (j === i ? { ...x, basis: e.target.value as 'peak' | 'invested' } : x)) },
+                }))
+              }
+              className={selectCls}
+              aria-label="낙폭 기준"
+            >
+              <option value="peak">전고점 대비</option>
+              <option value="invested">투입원금 대비</option>
+            </select>
             <span>낙폭</span>
             <NumberInput
               value={r.drawdownPct}

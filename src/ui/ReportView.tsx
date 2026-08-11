@@ -270,7 +270,7 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
               )}
               {(cfg.contribution.rules ?? []).map((r) => (
                 <tr key={r.drawdownPct}>
-                  <td className={tdCls}>낙폭 규칙 −{r.drawdownPct}%</td>
+                  <td className={tdCls}>낙폭 규칙 {(r.basis ?? 'peak') === 'invested' ? '투입원금' : '전고점'} 대비 −{r.drawdownPct}%</td>
                   <td className={`${tdCls} text-right`}>
                     {[
                       r.contributionMultiplier != null ? `적립 ×${r.contributionMultiplier}` : null,

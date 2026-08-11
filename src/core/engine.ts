@@ -223,20 +223,24 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     if (growth > growthPeak) growthPeak = growth
     prevCloseValue = value
     if (ddRules.length > 0) {
-      const ddPct = (1 - growth / growthPeak) * 100
+      const ddPeak = (1 - growth / growthPeak) * 100
+      const ddInvested = cumContributions > 0 ? Math.max(0, (1 - value / cumContributions) * 100) : 0
+      const ddOf = (r: DrawdownRule) => ((r.basis ?? 'peak') === 'invested' ? ddInvested : ddPeak)
       let next: DrawdownRule | null = null
-      for (const r of ddRules) if (ddPct >= r.drawdownPct) next = r
+      for (const r of ddRules) if (ddOf(r) >= r.drawdownPct) next = r
+      const ddPct = next ? ddOf(next) : Math.max(ddPeak, ddInvested)
+      const basisLabel = next && (next.basis ?? 'peak') === 'invested' ? '투입원금 대비' : '전고점 대비'
       if ((next?.drawdownPct ?? -1) !== (activeRule?.drawdownPct ?? -1)) {
         warnings.push({
           date,
           code: 'dd_rule',
           message: next
-            ? `낙폭 규칙 발동 (전고점 대비 −${ddPct.toFixed(1)}%): ` +
+            ? `낙폭 규칙 발동 (${basisLabel} −${ddPct.toFixed(1)}%): ` +
               [
                 next.contributionMultiplier != null ? `적립 ×${next.contributionMultiplier}` : null,
                 next.cashTargetOverride != null ? `현금 목표 ${(next.cashTargetOverride * 100).toFixed(0)}%` : null,
               ].filter(Boolean).join(' · ')
-            : `낙폭 규칙 해제 (전고점 대비 −${ddPct.toFixed(1)}%로 회복)`,
+            : `낙폭 규칙 해제 (기준 낙폭 −${ddPct.toFixed(1)}%로 회복)`,
         })
       }
       activeRule = next
@@ -272,9 +276,10 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
           growth *= Math.max(0, value / valueBeforeTax)
           prevCloseValue = value
           if (ddRules.length > 0) {
-            const ddPct = (1 - growth / growthPeak) * 100
+            const ddPeakT = (1 - growth / growthPeak) * 100
+            const ddInvT = cumContributions > 0 ? Math.max(0, (1 - value / cumContributions) * 100) : 0
             let next: DrawdownRule | null = null
-            for (const r of ddRules) if (ddPct >= r.drawdownPct) next = r
+            for (const r of ddRules) if (((r.basis ?? 'peak') === 'invested' ? ddInvT : ddPeakT) >= r.drawdownPct) next = r
             activeRule = next
           }
         }
