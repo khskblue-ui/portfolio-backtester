@@ -249,9 +249,20 @@ export interface EngineWarning {
   message: string
 }
 
+/** 낙폭 규칙 발동 구간 (결과 차트 음영·로그용) */
+export interface RuleEpisode {
+  from: string
+  /** null = 백테스트 종료까지 발동 중 */
+  to: string | null
+  /** 예: "−20%" / "−20% 원금 기준" */
+  label: string
+}
+
 export interface BacktestResult {
   strategyId: string
   daily: DailyPoint[]
+  /** 낙폭 규칙 발동 구간 (규칙 없으면 빈 배열) */
+  ruleEpisodes: RuleEpisode[]
   trades: TradeLogEntry[]
   taxes: TaxLogEntry[]
   dividendsGrossUsd: number

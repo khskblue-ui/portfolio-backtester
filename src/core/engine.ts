@@ -71,6 +71,17 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
   let prevCloseValue = 0
   /** 전일 종가 관측으로 확정된 발동 규칙 (오늘의 유입·오늘 저녁 결정에 적용) */
   let activeRule: DrawdownRule | null = null
+  /** 발동 구간 기록 — 차트 음영·보고서용 */
+  const ruleEpisodes: { from: string; to: string | null; label: string }[] = []
+  const ruleLabel = (r: DrawdownRule) => `−${r.drawdownPct}%` + ((r.basis ?? 'peak') === 'invested' ? ' 원금 기준' : '')
+  const trackEpisode = (next: DrawdownRule | null, date: string) => {
+    const open = ruleEpisodes[ruleEpisodes.length - 1]
+    if (open && open.to === null) {
+      if (next && ruleLabel(next) === open.label) return
+      open.to = date
+    }
+    if (next) ruleEpisodes.push({ from: date, to: null, label: ruleLabel(next) })
+  }
 
   // ── 상태 (4.1) ──
   const state: Record<string, SleeveState> = {}
@@ -231,6 +242,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
       const ddPct = next ? ddOf(next) : Math.max(ddPeak, ddInvested)
       const basisLabel = next && (next.basis ?? 'peak') === 'invested' ? '투입원금 대비' : '전고점 대비'
       if ((next?.drawdownPct ?? -1) !== (activeRule?.drawdownPct ?? -1)) {
+        trackEpisode(next, date)
         warnings.push({
           date,
           code: 'dd_rule',
@@ -280,6 +292,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
             const ddInvT = cumContributions > 0 ? Math.max(0, (1 - value / cumContributions) * 100) : 0
             let next: DrawdownRule | null = null
             for (const r of ddRules) if (((r.basis ?? 'peak') === 'invested' ? ddInvT : ddPeakT) >= r.drawdownPct) next = r
+            if ((next?.drawdownPct ?? -1) !== (activeRule?.drawdownPct ?? -1)) trackEpisode(next, date)
             activeRule = next
           }
         }
@@ -355,6 +368,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
   return {
     strategyId: config.id,
     daily,
+    ruleEpisodes,
     trades,
     taxes,
     dividendsGrossUsd,

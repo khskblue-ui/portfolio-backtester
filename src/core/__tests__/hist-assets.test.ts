@@ -22,6 +22,7 @@ function makeResult(points: { date: string; value: number; flow?: number }[]): B
   return {
     strategyId: 'test',
     daily,
+    ruleEpisodes: [],
     trades: [],
     taxes: [],
     dividendsGrossUsd: 0,

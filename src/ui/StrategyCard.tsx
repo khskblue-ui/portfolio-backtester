@@ -242,77 +242,69 @@ export function StrategyCard({
             확대됩니다. 규칙 발동·해제는 결과의 경고 로그에 기록됩니다.
           </HelpTip>
         </label>
-        {(strategy.contribution.rules ?? []).map((r, i) => (
-          <div key={i} className="flex items-center gap-1.5 flex-wrap text-xs text-zinc-500 dark:text-zinc-400">
-            <select
-              value={r.basis ?? 'peak'}
-              onChange={(e) =>
-                onChange((s) => ({
-                  ...s,
-                  contribution: { ...s.contribution, rules: (s.contribution.rules ?? []).map((x, j) => (j === i ? { ...x, basis: e.target.value as 'peak' | 'invested' } : x)) },
-                }))
-              }
-              className={selectCls}
-              aria-label="낙폭 기준"
-            >
-              <option value="peak">전고점 대비</option>
-              <option value="invested">투입원금 대비</option>
-            </select>
-            <span>낙폭</span>
-            <NumberInput
-              value={r.drawdownPct}
-              onChange={(v) =>
-                onChange((s) => ({
-                  ...s,
-                  contribution: { ...s.contribution, rules: (s.contribution.rules ?? []).map((x, j) => (j === i ? { ...x, drawdownPct: v } : x)) },
-                }))
-              }
-              allowDecimal
-              className={`${inputCls} !w-16 text-right`}
-            />
-            <span>% 이상이면: 적립 ×</span>
-            <NumberInput
-              value={r.contributionMultiplier ?? 1}
-              onChange={(v) =>
-                onChange((s) => ({
-                  ...s,
-                  contribution: { ...s.contribution, rules: (s.contribution.rules ?? []).map((x, j) => (j === i ? { ...x, contributionMultiplier: v } : x)) },
-                }))
-              }
-              allowDecimal
-              className={`${inputCls} !w-14 text-right`}
-            />
-            <span>· 현금 목표</span>
-            <input
-              type="number"
-              min={0}
-              max={100}
-              placeholder="유지"
-              value={r.cashTargetOverride != null ? Math.round(r.cashTargetOverride * 100) : ''}
-              onChange={(e) => {
-                const raw = e.target.value
-                onChange((s) => ({
-                  ...s,
-                  contribution: {
-                    ...s.contribution,
-                    rules: (s.contribution.rules ?? []).map((x, j) =>
-                      j === i ? { ...x, cashTargetOverride: raw === '' ? undefined : Number(raw) / 100 } : x,
-                    ),
-                  },
-                }))
-              }}
-              className={`${inputCls} !w-16 text-right`}
-            />
-            <span>%</span>
-            <button
-              onClick={() => onChange((s) => ({ ...s, contribution: { ...s.contribution, rules: (s.contribution.rules ?? []).filter((_, j) => j !== i) } }))}
-              className="p-1 text-gray-300 hover:text-red-500"
-              aria-label="규칙 삭제"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
-          </div>
-        ))}
+        {(strategy.contribution.rules ?? []).map((r, i) => {
+          const upd = (patch: Partial<typeof r>) =>
+            onChange((s) => ({
+              ...s,
+              contribution: { ...s.contribution, rules: (s.contribution.rules ?? []).map((x, j) => (j === i ? { ...x, ...patch } : x)) },
+            }))
+          return (
+            <div key={i} className="rounded-lg border border-[#e0e3eb] dark:border-[#2a2e39] bg-[#fafbfd] dark:bg-[#171c28] px-2.5 py-2 space-y-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <select
+                  value={r.basis ?? 'peak'}
+                  onChange={(e) => upd({ basis: e.target.value as 'peak' | 'invested' })}
+                  className={selectCls}
+                  aria-label="낙폭 기준"
+                >
+                  <option value="peak">전고점 대비</option>
+                  <option value="invested">투입원금 대비</option>
+                </select>
+                <span>−</span>
+                <NumberInput value={r.drawdownPct} onChange={(v) => upd({ drawdownPct: v })} allowDecimal className={`${inputCls} !w-14 text-right`} />
+                <span>% 도달하면 ↓</span>
+                <button
+                  onClick={() => onChange((s) => ({ ...s, contribution: { ...s.contribution, rules: (s.contribution.rules ?? []).filter((_, j) => j !== i) } }))}
+                  className="ml-auto p-1 text-gray-300 hover:text-red-500"
+                  aria-label="규칙 삭제"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap pl-1">
+                <span>월 적립 ×</span>
+                <NumberInput value={r.contributionMultiplier ?? 1} onChange={(v) => upd({ contributionMultiplier: v })} allowDecimal className={`${inputCls} !w-14 text-right`} />
+                <span className="text-zinc-300 dark:text-zinc-600">|</span>
+                <span>현금 목표를</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  placeholder="유지"
+                  value={r.cashTargetOverride != null ? Math.round(r.cashTargetOverride * 100) : ''}
+                  onChange={(e) => upd({ cashTargetOverride: e.target.value === '' ? undefined : Number(e.target.value) / 100 })}
+                  className={`${inputCls} !w-16 text-right`}
+                />
+                <span>%로 (기본 {Math.round((strategy.sleeves.find((x) => x.ticker === CASH_TICKER)?.targetWeight ?? 0) * 100)}%)</span>
+              </div>
+            </div>
+          )
+        })}
+        {(strategy.contribution.rules ?? []).length > 0 && (
+          <p className="text-[11px] leading-relaxed text-[#2962ff] dark:text-[#5b8aff] bg-[#f4f7ff] dark:bg-[#161d30] rounded-md px-2.5 py-1.5">
+            요약: {[...(strategy.contribution.rules ?? [])]
+              .sort((a, b) => a.drawdownPct - b.drawdownPct)
+              .map((r) => {
+                const eff = [
+                  r.contributionMultiplier != null && r.contributionMultiplier !== 1 ? `적립 ×${r.contributionMultiplier}` : null,
+                  r.cashTargetOverride != null ? `현금 ${Math.round(r.cashTargetOverride * 100)}%` : null,
+                ].filter(Boolean).join('·') || '변경 없음'
+                return `−${r.drawdownPct}%(${(r.basis ?? 'peak') === 'invested' ? '원금' : '전고점'})부터 ${eff}`
+              })
+              .join(' → ')}
+            {' '}— 겹치면 가장 깊은 단계 하나만 적용되고, 회복하면 기본 설정으로 돌아갑니다. 발동 구간은 결과 차트에 색 음영으로 표시됩니다.
+          </p>
+        )}
         <button
           onClick={() =>
             onChange((s) => ({

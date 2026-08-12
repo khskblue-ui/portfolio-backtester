@@ -8,6 +8,7 @@ import {
   Tooltip,
   Legend,
   Brush,
+  ReferenceArea,
   ResponsiveContainer,
 } from 'recharts'
 import { NumberInput } from './NumberInput'
@@ -197,6 +198,25 @@ export function ResultsSection({
             />
             <Tooltip content={<MoneyTooltip colorByName={colorByName} />} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
+            {runs.flatMap((r) => {
+              const eps = r[taxView].result.ruleEpisodes
+              if (!eps.length) return []
+              const snap = (d: string | null) => {
+                if (d == null) return String(chartData[chartData.length - 1].date)
+                const row = chartData.find((c) => String(c.date) >= d)
+                return String((row ?? chartData[chartData.length - 1]).date)
+              }
+              return eps.map((ep, k) => (
+                <ReferenceArea
+                  key={`${r.config.id}-ep${k}`}
+                  x1={snap(ep.from)}
+                  x2={snap(ep.to)}
+                  fill={colorOf.get(r.config.id)}
+                  fillOpacity={0.08}
+                  strokeOpacity={0}
+                />
+              ))
+            })}
             {runs.map((r) => (
               <Line
                 key={r.config.id}
@@ -225,6 +245,11 @@ export function ResultsSection({
             )}
           </LineChart>
         </ResponsiveContainer>
+        {runs.some((r) => r[taxView].result.ruleEpisodes.length > 0) && (
+          <p className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
+            색 음영 = 해당 전략의 낙폭 대응 규칙이 발동돼 있던 구간 (적립 배수·현금 목표 변경 적용 중)
+          </p>
+        )}
         {onAddOverride && (
           <p className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
             아래 손잡이를 끌어 구간을 고르면 그 기간의 월 적립금을 바꿀 수 있습니다 (고급)

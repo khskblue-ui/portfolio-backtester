@@ -559,3 +559,23 @@ describe('낙폭 기준 2종: 전고점 대비 vs 투입원금 대비', () => {
     expect(r.warnings.some((w) => w.code === 'dd_rule' && w.message.includes('투입원금 대비'))).toBe(true)
   })
 })
+
+describe('낙폭 규칙 발동 구간(ruleEpisodes) 기록', () => {
+  it('발동·해제가 구간으로 기록된다 (차트 음영용)', () => {
+    const n = 80
+    const dates = makeDates('2023-01-02', n)
+    const close = constSeries(100, n).map((v, i) => (i >= 20 && i < 45 ? 60 : v)) // 급락 후 회복
+    const bundle = makeBundle(dates, { A: { close } })
+    const r = runBacktest(
+      cleanStrategy({
+        sleeves: [{ ticker: 'A', targetWeight: 1 }],
+        contribution: { initialUsd: 10_000, monthlyUsd: 0, allocation: 'pro_rata', rules: [{ drawdownPct: 10, contributionMultiplier: 2 }] },
+      }),
+      bundle
+    )
+    expect(r.ruleEpisodes).toHaveLength(1)
+    expect(r.ruleEpisodes[0].from).toBe(dates[20]) // 급락 관측일
+    expect(r.ruleEpisodes[0].to).toBe(dates[45]) // 회복 관측일
+    expect(r.ruleEpisodes[0].label).toBe('−10%')
+  })
+})
