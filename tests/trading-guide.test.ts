@@ -25,9 +25,23 @@ describe('매매 지침서 인앱 이식본', () => {
         if (s.table) for (const row of s.table.rows) expect(row.length, `${c.id}/${s.id}`).toBe(s.table.header.length)
   })
 
+  it('도해(figure) 무결성 — 값 유한, quad는 4칸', () => {
+    let count = 0
+    for (const c of TRADING_GUIDE_CHAPTERS)
+      for (const s of c.sections) {
+        const f = s.figure
+        if (!f) continue
+        count++
+        if (f.kind === 'bars') for (const b of f.bars) expect(Number.isFinite(b.value), `${s.id}/${b.label}`).toBe(true)
+        else if (f.kind === 'flow') expect(f.steps.length).toBeGreaterThanOrEqual(3)
+        else if (f.kind === 'quad') expect(f.cells.length).toBe(4)
+      }
+    expect(count).toBeGreaterThanOrEqual(6)
+  })
+
   it('원문의 검증된 핵심 수치가 보존됨', () => {
     const all = JSON.stringify(TRADING_GUIDE_CHAPTERS)
-    for (const must of ['$146,614', '89.2%', '18.6%', '67.1%', '−13.2%p', '4,285배', '+4.10%', '10회', '31.2%', '−25%', '−50%로', '4,285배'])
+    for (const must of ['$146,614', '89.2%', '18.6%', '67.1%', '−13.2%p', '4,285배', '+4.10%', '10회', '31.2%', '−25%', '−50%로', '4,285배', '글라이드패스', '시퀀스 리스크', '행동 장치', '$36,000'])
       expect(all, must).toContain(must)
     // 서식 2종(IPS·매매일지)과 빨간 봉투 존재
     expect(all).toContain('투자정책서')

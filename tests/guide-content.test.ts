@@ -37,6 +37,29 @@ describe('가이드 구조', () => {
     )
     for (const t of texts) expect((t.match(/\*\*/g) ?? []).length % 2, t.slice(0, 40)).toBe(0)
   })
+
+  it('도해(figure) 무결성 — 값 유한, quad는 4칸, 라벨·제목 존재', () => {
+    let count = 0
+    for (const c of GUIDE_CHAPTERS)
+      for (const s of c.sections) {
+        const f = s.figure
+        if (!f) continue
+        count++
+        expect(f.title.length, `${s.id} 제목`).toBeGreaterThan(4)
+        if (f.kind === 'bars') {
+          expect(f.bars.length).toBeGreaterThanOrEqual(2)
+          for (const b of f.bars) {
+            expect(Number.isFinite(b.value), `${s.id}/${b.label}`).toBe(true)
+            expect(b.label.length).toBeGreaterThan(0)
+          }
+        } else if (f.kind === 'flow') {
+          expect(f.steps.length).toBeGreaterThanOrEqual(3)
+        } else if (f.kind === 'quad') {
+          expect(f.cells.length).toBe(4)
+        }
+      }
+    expect(count).toBeGreaterThanOrEqual(8) // 2부에 도해가 실제로 배치되어 있는지
+  })
 })
 
 describe('용어 사전', () => {
@@ -47,7 +70,7 @@ describe('용어 사전', () => {
 
   it('두 탭의 핵심 용어를 모두 커버한다', () => {
     const all = GUIDE_GLOSSARY.map((g) => g.term).join(' ')
-    for (const must of ['사전적', '사후적', 'CAPE', '스태그플레이션', '실질 수익률', '명목', '장단기', '채권', 'TIPS', '금융억압', '할인율', '화폐 착시', '기준금리', '금통위', 'FOMC', '유동성', 'QE', 'QT', '달러인덱스', '환헤지', '신용 스프레드', '재정정책', '어닝일드', '부채한도', '지급준비금', '공개시장운영', '스티프닝'])
+    for (const must of ['사전적', '사후적', 'CAPE', '스태그플레이션', '실질 수익률', '명목', '장단기', '채권', 'TIPS', '금융억압', '할인율', '화폐 착시', '기준금리', '금통위', 'FOMC', '유동성', 'QE', 'QT', '달러인덱스', '환헤지', '신용 스프레드', '재정정책', '어닝일드', '부채한도', '지급준비금', '공개시장운영', '스티프닝', '기대인플레이션', '기축통화'])
       expect(all, must).toContain(must)
   })
 

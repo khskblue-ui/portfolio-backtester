@@ -3,6 +3,7 @@ import { GraduationCap, Landmark, Activity, Lightbulb, AlertTriangle, Quote, Arr
 import { cardCls, btnGhostCls } from './common'
 import { GUIDE_INTRO, GUIDE_CHAPTERS, GUIDE_GLOSSARY, type GuideChapter, type GuideSection } from './guideContent'
 import { TRADING_GUIDE_CHAPTERS } from './tradingGuide'
+import { GuideFigureBlock } from './GuideFigure'
 
 /** 탭의 2부 구성 — 1부 지침서(최상단), 2부 경제 공부 */
 const PARTS: { label: string; chapters: GuideChapter[] }[] = [
@@ -66,6 +67,8 @@ function Section({ s }: { s: GuideSection }) {
           </p>
         ),
       )}
+
+      {s.figure && <GuideFigureBlock f={s.figure} />}
 
       {s.analogy && (
         <div className="rounded-lg border-l-4 border-[#2962ff] bg-[#f4f7ff] dark:bg-[#161d30] px-3.5 py-2.5">
@@ -262,7 +265,8 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
             <div className={`${cardCls} p-4 sm:p-5`}>
               <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
                 <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
-                  GUIDE · 1부 80분 + 2부 45분
+                  GUIDE · 1부 {PARTS[0].chapters.reduce((a, c) => a + c.minutes, 0)}분 + 2부{' '}
+                  {PARTS[1].chapters.reduce((a, c) => a + c.minutes, 0)}분
                 </span>
                 <span className="flex items-center gap-1.5">
                   <GraduationCap className="w-4 h-4 text-[#2962ff]" />
