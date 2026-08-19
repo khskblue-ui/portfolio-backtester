@@ -5,7 +5,7 @@
  * 반드시 원문과 scripts/verify-timing-math.mjs를 함께 갱신할 것.
  */
 
-import type { GuideChapter } from './guideContent'
+import type { GuideChapter, GlossaryEntry } from './guideContent'
 
 export const TRADING_GUIDE_CHAPTERS: GuideChapter[] = [
   {
@@ -520,4 +520,31 @@ export const TRADING_GUIDE_CHAPTERS: GuideChapter[] = [
       },
     ],
   },
+]
+/** 1부 용어 사전 — 가나다순 (본문 앵커로 점프). 수치는 본문의 검증값과 일치시킬 것 */
+export const TRADING_GUIDE_GLOSSARY: GlossaryEntry[] = [
+  { term: '결과 편향', def: '확률적인 투자 결과로 판단의 좋고 나쁨을 채점하는 오류. 표본 1개의 왕복 손실은 판단력에 대해 거의 아무것도 말해주지 않는다', sectionId: 'tg-s0' },
+  { term: '공포매도', def: '폭락 한복판에 견디다 못해 팔고 "안정되면 재진입"하는 유형. 126년 가격표는 자산 약 27분의 1 (실증 ④)', sectionId: 'tg-m4' },
+  { term: '과잉매매', def: '매매 빈도와 수익률은 역의 관계. 가장 활발히 매매한 상위 20% 가구는 시장을 약 6.5%p 하회했다 (Barber & Odean)', sectionId: 'tg-t1' },
+  { term: '과잉확신', def: '몇 번의 성공(운)을 실력으로 귀속시켜 베팅을 키우는 설정. 확신의 강도(매매 빈도)와 성과는 역상관', sectionId: 'tg-b1' },
+  { term: '군집과 FOMO', def: '종목이 화제가 되는 시점은 정의상 이미 많이 오른 뒤. 처방은 "무시"가 아니라 격리된 배출구(STEP 5)', sectionId: 'tg-b1' },
+  { term: '글라이드패스', def: '목표 시점(은퇴 등)이 가까워질수록 위험자산 비중을 계단식으로 낮추는 배분 설계. 타깃데이트펀드의 원리', sectionId: 'tg-m5-limits' },
+  { term: '네 관문', def: '매크로 판단이 수익이 되기 위한 조건: 예측·매핑·선반영·타이밍. 하나만 어긋나도 판단은 그럴듯한데 돈은 잃는다', sectionId: 'tg-s0' },
+  { term: '리밸런싱', def: '이탈한 배분을 목표로 되돌리는 정비 작업. 수익 마법이 아니라 견디기로 한 위험을 그 크기로 유지하는 일 (60/40 예시: 최대 낙폭 −77% → −50%)', sectionId: 'tg-s1' },
+  { term: '매매일지', def: '진입 전에 가설·반증 조건·청산 규칙을 적는 기록. 결과 편향을 뚫고 판단력을 채점할 수 있는 유일한 수단', sectionId: 'tg-sat1' },
+  { term: '빨간 봉투', def: '조용한 날 만들어 두고 시장이 −20%를 넘는 날에만 여는 위기 프로토콜. 허용 행동은 납입 계속과 리밸런싱뿐', sectionId: 'tg-s3' },
+  { term: '생존편향', def: '살아남은 표본만 보고 일반화하는 오류. 126년 실증이 20세기 승자였던 미국 시장의 기록이라는 주의 사항', sectionId: 'tg-m6' },
+  { term: '선반영', def: '모두가 아는 정보는 이미 가격에 들어 있다는 성질. "역사상 가장 예고된 침체"가 오지 않자 시장이 급등한 이유', sectionId: 'tg-s0' },
+  { term: '손실회피', def: '손실의 고통은 이익의 기쁨보다 약 2배 크다 (카너먼·트버스키). 공포매도와 손절불능의 공통 뿌리', sectionId: 'tg-b1' },
+  { term: '손절불능', def: '"본전 오면 판다"로 손실 종목을 쥐고 물타기까지 하는 유형. 처분효과가 만드는 결과', sectionId: 'tg-d1' },
+  { term: '시퀀스 리스크', def: '평균 수익률이 같아도 나쁜 해가 언제 오느냐에 따라 결과가 갈리는 위험. 계좌가 크고 인출이 시작되는 은퇴 전후에 가장 치명적', sectionId: 'tg-m5-limits' },
+  { term: '실질 총수익', def: '배당 재투자에 물가 조정까지 한 구매력 기준 수익. 이 지침서의 모든 수치가 이 기준 (자세한 풀이는 2부 경제 공부 1단계)', sectionId: 'tg-d1' },
+  { term: '처분효과', def: '이익 난 종목은 빨리 팔고 손실 종목은 쥐고 있는 성향 (Odean 1998). 팔아버린 승자가 이후 더 올랐다', sectionId: 'tg-b1' },
+  { term: '총보수 (TER)', def: '상품의 연간 총비용. 연 1% 비용은 30년 뒤 최종 자산의 25%를 가져간다 (실증 ⑦)', sectionId: 'tg-m7' },
+  { term: '최신편향', def: '최근 흐름이 계속될 것으로 믿는 설정. "한참 오른 다음에만 사는" 습관의 직접 원인', sectionId: 'tg-b1' },
+  { term: '추격매수', def: '화제가 된 뒤 "더 늦기 전에" 사는 유형. 군집·FOMO와 최신편향이 만드는 결과', sectionId: 'tg-d1' },
+  { term: '코어-새틀라이트', def: '자산의 90% 이상은 규칙대로 굴리고(코어), 매매 욕구는 10% 이하의 별도 계좌(새틀라이트)로 격리하는 구조', sectionId: 'tg-sat1' },
+  { term: '투자정책서 (IPS)', def: '차분한 날의 내가 공황의 날의 나를 구속하는 문서. 목적·납입·배분·리밸런싱·금지 서약을 명문화한다', sectionId: 'tg-s1' },
+  { term: '행동 갭 (Mind the Gap)', def: '투자자가 자신이 산 펀드보다 연 약 1%p 덜 가져가는 격차. 오르면 들어가고 떨어지면 나오는 행동 때문', sectionId: 'tg-t1' },
+  { term: 'DCA (적립식 투자)', def: '소득이 생기는 대로 기계적으로 넣는 방식. 수익 우위 도구가 아니라 타이밍 판단을 제거하는 행동 장치', sectionId: 'tg-m5-limits' },
 ]

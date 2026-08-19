@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react'
 import { GraduationCap, Landmark, Activity, Lightbulb, AlertTriangle, Quote, ArrowUpRight } from 'lucide-react'
 import { cardCls, btnGhostCls } from './common'
 import { GUIDE_INTRO, GUIDE_CHAPTERS, GUIDE_GLOSSARY, type GuideChapter, type GuideSection } from './guideContent'
-import { TRADING_GUIDE_CHAPTERS } from './tradingGuide'
+import { TRADING_GUIDE_CHAPTERS, TRADING_GUIDE_GLOSSARY } from './tradingGuide'
 import { GuideFigureBlock } from './GuideFigure'
 
-/** 탭의 2부 구성 — 1부 지침서(최상단), 2부 경제 공부 */
-const PARTS: { label: string; chapters: GuideChapter[] }[] = [
-  { label: '1부 · 매매 습관 교정 지침서', chapters: TRADING_GUIDE_CHAPTERS },
-  { label: '2부 · 경제 공부', chapters: GUIDE_CHAPTERS },
+/** 탭의 2부 구성 — 1부 지침서(최상단), 2부 경제 공부. 파트마다 자체 용어 사전 */
+const PARTS: { label: string; chapters: GuideChapter[]; glossary: typeof GUIDE_GLOSSARY }[] = [
+  { label: '1부 · 매매 습관 교정 지침서', chapters: TRADING_GUIDE_CHAPTERS, glossary: TRADING_GUIDE_GLOSSARY },
+  { label: '2부 · 경제 공부', chapters: GUIDE_CHAPTERS, glossary: GUIDE_GLOSSARY },
 ]
 
 /**
@@ -144,10 +144,11 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
   const [part, setPart] = useState(0)
   const [activeId, setActiveId] = useState<string>('')
   const chapters = PARTS[part].chapters
+  const glossary = PARTS[part].glossary
 
   // 스크롤 위치에 따라 목차 현재 위치 하이라이트 (파트 전환 시 재구독)
   useEffect(() => {
-    const ids = chapters.flatMap((c) => [c.id, ...c.sections.map((s) => s.id)]).concat(part === 1 ? ['glossary'] : [])
+    const ids = chapters.flatMap((c) => [c.id, ...c.sections.map((s) => s.id)]).concat(['glossary'])
     const els = ids.map((id) => document.getElementById(id)).filter(Boolean) as HTMLElement[]
     const io = new IntersectionObserver(
       (entries) => {
@@ -237,18 +238,16 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
                 </li>
               )
             })}
-            {part === 1 && (
-              <li>
-                <button
-                  onClick={() => jump('glossary')}
+            <li>
+              <button
+                onClick={() => jump('glossary')}
                   className={`text-left w-full font-semibold py-1 ${
                     activeId === 'glossary' ? 'text-[#2962ff] dark:text-[#5b8aff]' : 'text-zinc-700 dark:text-zinc-300 hover:text-[#2962ff]'
                   }`}
                 >
-                  부록. 용어 사전
-                </button>
-              </li>
-            )}
+                부록. 용어 사전
+              </button>
+            </li>
           </ul>
           {/* 다른 파트로 가는 상시 진입점 — "2부가 안 보인다" 방지 */}
           <button
@@ -294,14 +293,12 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
                 {(c.toc ?? `${c.step}. ${c.title.split(' — ')[0]}`).split(' — ')[0]} · {c.minutes}분
               </button>
             ))}
-            {part === 1 && (
-              <button
-                onClick={() => jump('glossary')}
-                className="text-[11.5px] px-2.5 py-1.5 rounded-full border border-[#e0e3eb] dark:border-[#2a2e39] bg-white dark:bg-[#171c28] text-zinc-600 dark:text-zinc-300 hover:border-[#2962ff] hover:text-[#2962ff]"
-              >
-                용어 사전
-              </button>
-            )}
+            <button
+              onClick={() => jump('glossary')}
+              className="text-[11.5px] px-2.5 py-1.5 rounded-full border border-[#e0e3eb] dark:border-[#2a2e39] bg-white dark:bg-[#171c28] text-zinc-600 dark:text-zinc-300 hover:border-[#2962ff] hover:text-[#2962ff]"
+            >
+              용어 사전
+            </button>
           </div>
 
           {/* 챕터 본문 */}
@@ -322,30 +319,28 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
             </div>
           ))}
 
-          {/* 용어 사전 — 개념 파트에서만 */}
-          {part === 1 && (
-            <div id="glossary" className={`${cardCls} p-4 sm:p-5 scroll-mt-32`}>
-              <h3 className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100">
-                <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">APPENDIX · GLOSSARY</span>
-                용어 사전 — 막힐 때 찾아보기
-              </h3>
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
-                {GUIDE_GLOSSARY.map((g) => (
-                  <button
-                    key={g.term}
-                    onClick={() => jump(g.sectionId)}
-                    className="text-left rounded-lg border border-[#e0e3eb] dark:border-[#2a2e39] bg-[#fafbfd] dark:bg-[#171c28] p-3 hover:border-[#2962ff] group"
-                  >
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-[12.5px] font-semibold text-zinc-800 dark:text-zinc-100">{g.term}</span>
-                      <ArrowUpRight className="w-3.5 h-3.5 text-zinc-300 dark:text-zinc-600 group-hover:text-[#2962ff] flex-shrink-0" />
-                    </div>
-                    <p className="mt-1 text-[11.5px] leading-relaxed text-zinc-500 dark:text-zinc-400">{g.def}</p>
-                  </button>
-                ))}
-              </div>
+          {/* 용어 사전 — 파트별 데이터 */}
+          <div id="glossary" className={`${cardCls} p-4 sm:p-5 scroll-mt-32`}>
+            <h3 className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100">
+              <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">APPENDIX · GLOSSARY</span>
+              용어 사전 — 막힐 때 찾아보기
+            </h3>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
+              {glossary.map((g) => (
+                <button
+                  key={g.term}
+                  onClick={() => jump(g.sectionId)}
+                  className="text-left rounded-lg border border-[#e0e3eb] dark:border-[#2a2e39] bg-[#fafbfd] dark:bg-[#171c28] p-3 hover:border-[#2962ff] group"
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-[12.5px] font-semibold text-zinc-800 dark:text-zinc-100">{g.term}</span>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-zinc-300 dark:text-zinc-600 group-hover:text-[#2962ff] flex-shrink-0" />
+                  </div>
+                  <p className="mt-1 text-[11.5px] leading-relaxed text-zinc-500 dark:text-zinc-400">{g.def}</p>
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
           {/* 파트 말미 — 다음 동선 */}
           <div className={`${cardCls} p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3`}>
