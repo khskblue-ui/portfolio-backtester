@@ -148,8 +148,12 @@ function Quad({ f }: { f: Extract<GuideFigureData, { kind: 'quad' }> }) {
       {[0, 1].map((row) => (
         <div key={row} className="contents">
           {f.yLabels && (
-            <div className="flex items-center pr-1 text-[10.5px] font-semibold text-zinc-500 dark:text-zinc-400 leading-tight max-w-[64px]">
-              {f.yLabels[row]}
+            <div className="flex flex-col justify-center pr-1.5 text-[10.5px] font-semibold text-zinc-500 dark:text-zinc-400 leading-tight">
+              {f.yLabels[row].split(/ (?=\()/).map((piece, i) => (
+                <span key={i} className="whitespace-nowrap">
+                  {piece}
+                </span>
+              ))}
             </div>
           )}
           {[0, 1].map((col) => {

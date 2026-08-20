@@ -28,6 +28,15 @@ interface HistoryData {
   }
 }
 
+/** 카드 키커용 짧은 라벨 — 원문 라벨은 좁은 카드에서 잘려 보기 흉함 */
+const SHORT_LABEL: Record<Signal['key'], string> = {
+  market: '시장 상태',
+  valuation: '밸류에이션 (CAPE)',
+  inflation: 'CPI 인플레이션',
+  realRate: '실질금리 (TIPS)',
+  curve: '장단기 금리차',
+}
+
 const LEVEL_META: Record<Signal['level'], { label: string; text: string; chip: string; dot: string }> = {
   ok: { label: '양호', text: 'text-[#0f9d67] dark:text-[#1baf7a]', chip: 'bg-[#1baf7a]/10', dot: 'bg-[#1baf7a]' },
   watch: { label: '주의', text: 'text-[#c98500] dark:text-[#e3a008]', chip: 'bg-[#c98500]/10', dot: 'bg-[#c98500]' },
@@ -135,7 +144,9 @@ export function HomeView({
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[9px] font-mono tracking-[0.18em] text-zinc-400 dark:text-zinc-500 truncate">{s.label}</span>
+                <span className="text-[9px] font-mono tracking-[0.18em] text-zinc-400 dark:text-zinc-500 whitespace-nowrap">
+                  {SHORT_LABEL[s.key] ?? s.label}
+                </span>
                 <span className={`text-[10.5px] font-medium rounded-full px-2 py-0.5 ${LEVEL_META[s.level].text} ${LEVEL_META[s.level].chip}`}>
                   {LEVEL_META[s.level].label}
                 </span>

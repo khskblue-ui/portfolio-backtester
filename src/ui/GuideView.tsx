@@ -313,19 +313,19 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
                 transform="rotate(-90 27 27)"
               />
             </svg>
-            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-              <span className="text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
-                COURSE · {PARTS[part].label}
+            <div className="flex flex-col gap-0.5 min-w-[200px] flex-1">
+              <span className="text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500 whitespace-nowrap">
+                COURSE · {PARTS[part].label.split(' · ')[0]}
               </span>
               <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
                 {partProgress.pct}% · {partProgress.doneChapters}/{partProgress.totalChapters}강 완료
                 {partProgress.remainMinutes > 0 && ` · 남은 약 ${partProgress.remainMinutes}분`}
               </span>
-              <span className="text-[12px] text-zinc-500 dark:text-zinc-400 truncate">
+              <span className="text-[12px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">
                 {lastRead ? `마지막 위치: ${lastRead.section.title}` : '아직 시작 전입니다. 스크롤만 해도 진도가 기록됩니다'}
               </span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 basis-full sm:basis-auto">
               <button
                 onClick={() => jump(lastRead ? lastRead.section.id : chapters[0].id)}
                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold ${btnPrimaryCls}`}

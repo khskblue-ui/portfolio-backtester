@@ -234,10 +234,6 @@ export default function App() {
               </div>
               <h1 className="text-[15px] sm:text-base font-bold tracking-tight whitespace-nowrap">투자의 정석</h1>
             </button>
-            {/* 현재 위치 라벨 — 내비 자체는 좌측 레일(lg+)/하단 탭바(모바일)로 이동 (A안) */}
-            <span className="hidden sm:block text-[13px] text-zinc-400 dark:text-zinc-500">
-              {NAV_ITEMS.find((n) => n.key === view)?.label}
-            </span>
           </div>
           <div className="flex items-center gap-0.5 sm:gap-1">
             <button
@@ -560,8 +556,12 @@ export default function App() {
           ))}
         </datalist>
 
-        <footer className="text-center text-[11px] font-mono tracking-wide text-zinc-400 dark:text-zinc-600 border-t border-[#e0e3eb] dark:border-[#2a2e39] pt-5 pb-8">
-          데이터: 야후 파이낸스 일별 종가 · 모든 금액은 미국 달러(USD) 기준이며, 원화 손익과는 다릅니다
+        <footer className="text-center text-[11px] font-mono tracking-wide text-zinc-400 dark:text-zinc-600 border-t border-[#e0e3eb] dark:border-[#2a2e39] pt-5 pb-8 space-y-1.5">
+          <p>데이터: 야후 파이낸스 일별 종가 · 모든 금액은 미국 달러(USD) 기준이며, 원화 손익과는 다릅니다</p>
+          <p>
+            © {new Date().getFullYear()} 김현성 (lifescienkhs@naver.com) · All rights reserved — 콘텐츠·코드의 저작권은
+            저작자에게 있으며 무단 전재·재배포를 금합니다
+          </p>
         </footer>
       </div>
       </div>
