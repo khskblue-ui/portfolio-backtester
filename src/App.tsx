@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, X, FileText, BarChart3, Landmark, Activity, GraduationCap } from 'lucide-react'
+import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, X, FileText, BarChart3, Landmark, Activity, GraduationCap, Check } from 'lucide-react'
 import {
   loadDataBundle,
   runComparison,
@@ -41,6 +41,38 @@ interface ConfigFile {
   strategies: StrategyConfig[]
 }
 
+/** 기간 프리셋 — 역사적 스트레스 구간을 원클릭으로 (워크벤치 상단 칩) */
+const PERIOD_PRESETS = [
+  { label: '전체', start: '', end: '' },
+  { label: '닷컴 1998~03', start: '1998-01-01', end: '2003-12-31' },
+  { label: '금융위기 2007~13', start: '2007-10-01', end: '2013-03-31' },
+  { label: '2022 긴축', start: '2022-01-01', end: '2023-12-31' },
+] as const
+
+function PeriodPresetChips({ shared, onPick }: { shared: SharedSettings; onPick: (start: string, end: string) => void }) {
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <span className="text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500 mr-1">PERIOD</span>
+      {PERIOD_PRESETS.map((p) => {
+        const active = shared.startDate === p.start && shared.endDate === p.end
+        return (
+          <button
+            key={p.label}
+            onClick={() => onPick(p.start, p.end)}
+            className={`text-[11.5px] px-2.5 py-1 rounded-full border transition-colors ${
+              active
+                ? 'ink-chip border-transparent font-medium'
+                : 'border-[#d3d8e3] dark:border-[#363a45] text-zinc-500 dark:text-zinc-400 hover:border-[#2962ff] hover:text-[#2962ff]'
+            }`}
+          >
+            {p.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function App() {
   // ── 테마 (독립 앱 자체 다크모드) ──
   const [theme, setTheme] = useState<Theme>(() => {
@@ -72,6 +104,8 @@ export default function App() {
     setNoticeState(text == null ? null : { text, kind })
   const [showReport, setShowReport] = useState(false)
   const [view, setView] = useState<'backtest' | 'history' | 'now' | 'guide'>('backtest')
+  // 모바일 워크벤치 위저드 (① 전략 → ② 가정 → ③ 결과). 데스크톱(lg+) 분할 화면에서는 무시됨
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const updateStrategy = (id: string, updater: (s: StrategyConfig) => StrategyConfig) =>
@@ -112,6 +146,8 @@ export default function App() {
       setBundle(b)
       setRuns(runComparison(applied, b))
       setRanSignature(JSON.stringify({ shared, strategies }))
+      setWizardStep(3) // 모바일 위저드: 실행 성공 시 결과 단계로
+      window.scrollTo({ top: 0 })
     } catch (err) {
       setNotice(err instanceof Error ? err.message : '백테스트 실패')
     } finally {
@@ -332,72 +368,167 @@ export default function App() {
 
         {view === 'backtest' && (
           <>
-        <SettingsPanel shared={shared} onChange={setShared} />
+        {/* 모바일 워크벤치 위저드 스텝퍼 — lg 미만에서만. 데스크톱은 분할 화면 상시 표시 */}
+        <div className="lg:hidden flex items-center gap-2">
+          {(
+            [
+              { n: 1, label: '전략' },
+              { n: 2, label: '가정' },
+              { n: 3, label: '결과' },
+            ] as const
+          ).map(({ n, label }, i) => (
+            <div key={n} className="contents">
+              {i > 0 && <div className={`h-0.5 flex-1 rounded ${wizardStep >= n ? 'bg-[#2962ff]' : 'bg-[#d3d8e3] dark:bg-[#363a45]'}`} />}
+              <button onClick={() => setWizardStep(n)} className="flex items-center gap-1.5">
+                <span
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${
+                    wizardStep === n
+                      ? 'ink-chip'
+                      : wizardStep > n
+                        ? 'bg-[#1baf7a] text-white'
+                        : 'border-2 border-[#d3d8e3] dark:border-[#363a45] text-zinc-400'
+                  }`}
+                >
+                  {wizardStep > n ? <Check className="w-3.5 h-3.5" /> : n}
+                </span>
+                <span className={`text-[12px] ${wizardStep === n ? 'font-bold text-[#2962ff] dark:text-[#5b8aff]' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                  {label}
+                </span>
+              </button>
+            </div>
+          ))}
+        </div>
 
-        {/* 전략 목록 */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-              <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">STRATEGIES</span>
-              전략 ({strategies.length})
-            </h2>
-            <button
-              onClick={addStrategy}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium ${btnGhostCls}`}
-            >
-              <Plus className="w-4 h-4" /> 전략 추가
-            </button>
+        {/* 가정 — 데스크톱 상시(전폭), 모바일 ② 단계 */}
+        <div className={`${wizardStep === 2 ? 'block' : 'hidden'} lg:block space-y-3`}>
+          <div className="lg:hidden">
+            <PeriodPresetChips shared={shared} onPick={(start, end) => setShared((p) => ({ ...p, startDate: start, endDate: end }))} />
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-            {strategies.map((s, idx) => (
-              <StrategyCard
-                key={s.id}
-                strategy={s}
-                color={palette[idx % palette.length]}
-                onChange={(updater) => updateStrategy(s.id, updater)}
-                onDuplicate={() => {
-                  if (strategies.length >= MAX_STRATEGIES) {
-                    setNotice(`전략은 최대 ${MAX_STRATEGIES}개까지 비교할 수 있습니다`)
-                    return
-                  }
-                  setStrategies((prev) => {
-                    const i = prev.findIndex((x) => x.id === s.id)
-                    const copy: StrategyConfig = JSON.parse(JSON.stringify(s))
-                    copy.id = nextId() // 배열 길이 기반 id는 삭제 후 재복제 시 충돌 — UUID 사용
-                    copy.name = `${s.name} (복사)`
-                    return [...prev.slice(0, i + 1), copy, ...prev.slice(i + 1)]
-                  })
-                }}
-                onRemove={() => setStrategies((prev) => prev.filter((x) => x.id !== s.id))}
-              />
-            ))}
+          <SettingsPanel shared={shared} onChange={setShared} />
+        </div>
+
+        {/* 워크벤치 분할: 좌 전략 스택 | 우 결과 캔버스 (lg+). 모바일은 위저드 단계별 표시 */}
+        <div className="lg:grid lg:grid-cols-[400px_minmax(0,1fr)] lg:gap-5 lg:items-start space-y-5 lg:space-y-0">
+          {/* 전략 — 모바일 ① 단계 */}
+          <div className={`${wizardStep === 1 ? 'block' : 'hidden'} lg:block space-y-4`}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">STRATEGIES</span>
+                전략 ({strategies.length})
+              </h2>
+              <button
+                onClick={addStrategy}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium ${btnGhostCls}`}
+              >
+                <Plus className="w-4 h-4" /> 전략 추가
+              </button>
+            </div>
+            <div className="grid grid-cols-1 min-[560px]:grid-cols-2 lg:grid-cols-1 gap-4">
+              {strategies.map((s, idx) => (
+                <StrategyCard
+                  key={s.id}
+                  strategy={s}
+                  color={palette[idx % palette.length]}
+                  onChange={(updater) => updateStrategy(s.id, updater)}
+                  onDuplicate={() => {
+                    if (strategies.length >= MAX_STRATEGIES) {
+                      setNotice(`전략은 최대 ${MAX_STRATEGIES}개까지 비교할 수 있습니다`)
+                      return
+                    }
+                    setStrategies((prev) => {
+                      const i = prev.findIndex((x) => x.id === s.id)
+                      const copy: StrategyConfig = JSON.parse(JSON.stringify(s))
+                      copy.id = nextId() // 배열 길이 기반 id는 삭제 후 재복제 시 충돌 — UUID 사용
+                      copy.name = `${s.name} (복사)`
+                      return [...prev.slice(0, i + 1), copy, ...prev.slice(i + 1)]
+                    })
+                  }}
+                  onRemove={() => setStrategies((prev) => prev.filter((x) => x.id !== s.id))}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* 결과 캔버스 — 모바일 ③ 단계 */}
+          <div className={`${wizardStep === 3 ? 'block' : 'hidden'} lg:block space-y-4 min-w-0`}>
+            <div className="hidden lg:block">
+              <PeriodPresetChips shared={shared} onPick={(start, end) => setShared((p) => ({ ...p, startDate: start, endDate: end }))} />
+            </div>
+
+            {/* 에피스테믹 경고 — 결과 해석 주의는 결과 옆에 */}
+            <EpistemicsBanner />
+
+            {runs && bundle && runs.length > 0 ? (
+              <>
+                {resultsStale && (
+                  <div className="bg-[#faf4e0] dark:bg-[#1d1a10] border-l-4 border-amber-700 dark:border-amber-500 rounded-lg px-4 py-3 text-sm text-amber-900 dark:text-amber-200/90">
+                    설정이 변경되었습니다. 아래 결과(와 보고서)는 <b>이전 설정 기준</b>입니다. "백테스트 실행"을 눌러 갱신하세요.
+                  </div>
+                )}
+                <ResultsSection
+                  runs={runs}
+                  bundle={bundle}
+                  palette={palette}
+                  theme={theme}
+                  taxEnabled={shared.taxEnabled}
+                  onAddOverride={(from, to, monthlyUsd) => {
+                    setShared((p) => ({ ...p, contributionOverrides: [...(p.contributionOverrides ?? []), { from, to, monthlyUsd }] }))
+                    setNotice(`기간 조정 추가됨: ${from}~${to} 월 $${monthlyUsd.toLocaleString()} — "백테스트 실행"을 누르면 반영됩니다`, 'info')
+                  }}
+                />
+              </>
+            ) : (
+              <div className="bg-white dark:bg-[#1e222d] rounded-xl border border-dashed border-[#d3d8e3] dark:border-[#363a45] px-6 py-14 flex flex-col items-center gap-3 text-center">
+                <BarChart3 className="w-8 h-8 text-zinc-300 dark:text-zinc-600" />
+                <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                  아직 결과가 없습니다.
+                  <br />
+                  전략과 가정을 정한 뒤 실행하면 이 자리에 차트와 지표가 채워집니다.
+                </p>
+                <button
+                  onClick={() => run(false)}
+                  disabled={running}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold ${btnPrimaryCls} disabled:opacity-50`}
+                >
+                  <Play className="w-4 h-4" /> {running ? '실행 중…' : '백테스트 실행'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* 에피스테믹 경고 — 전략 설정 아래, 결과 위 */}
-        <EpistemicsBanner />
-
-        {/* 결과 */}
-        {runs && bundle && runs.length > 0 && (
-          <>
-            {resultsStale && (
-              <div className="bg-[#faf4e0] dark:bg-[#1d1a10] border-l-4 border-amber-700 dark:border-amber-500 rounded-lg px-4 py-3 text-sm text-amber-900 dark:text-amber-200/90">
-                설정이 변경되었습니다. 아래 결과(와 보고서)는 <b>이전 설정 기준</b>입니다. "백테스트 실행"을 눌러 갱신하세요.
-              </div>
-            )}
-            <ResultsSection
-              runs={runs}
-              bundle={bundle}
-              palette={palette}
-              theme={theme}
-              taxEnabled={shared.taxEnabled}
-              onAddOverride={(from, to, monthlyUsd) => {
-                setShared((p) => ({ ...p, contributionOverrides: [...(p.contributionOverrides ?? []), { from, to, monthlyUsd }] }))
-                setNotice(`기간 조정 추가됨: ${from}~${to} 월 $${monthlyUsd.toLocaleString()} — "백테스트 실행"을 누르면 반영됩니다`, 'info')
-              }}
-            />
-          </>
-        )}
+        {/* 모바일 위저드 하단 내비 */}
+        <div className="lg:hidden flex gap-2">
+          {wizardStep === 1 && (
+            <button onClick={() => setWizardStep(2)} className={`flex-1 py-2.5 rounded-lg text-sm font-semibold ${btnPrimaryCls}`}>
+              다음: 가정 확인
+            </button>
+          )}
+          {wizardStep === 2 && (
+            <>
+              <button onClick={() => setWizardStep(1)} className={`flex-1 py-2.5 rounded-lg text-sm font-medium ${btnGhostCls}`}>
+                이전: 전략
+              </button>
+              <button
+                onClick={() => run(false)}
+                disabled={running}
+                className={`flex-[2] py-2.5 rounded-lg text-sm font-semibold ${btnPrimaryCls} disabled:opacity-50`}
+              >
+                {running ? '실행 중…' : '백테스트 실행'}
+              </button>
+            </>
+          )}
+          {wizardStep === 3 && (
+            <>
+              <button onClick={() => setWizardStep(1)} className={`flex-1 py-2.5 rounded-lg text-sm font-medium ${btnGhostCls}`}>
+                전략 수정
+              </button>
+              <button onClick={() => setWizardStep(2)} className={`flex-1 py-2.5 rounded-lg text-sm font-medium ${btnGhostCls}`}>
+                가정 수정
+              </button>
+            </>
+          )}
+        </div>
           </>
         )}
 
