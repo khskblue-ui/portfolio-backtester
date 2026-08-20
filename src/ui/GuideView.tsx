@@ -1,6 +1,15 @@
-import { useEffect, useState } from 'react'
-import { GraduationCap, Landmark, Activity, Lightbulb, AlertTriangle, Quote, ArrowUpRight } from 'lucide-react'
-import { cardCls, btnGhostCls } from './common'
+import { useEffect, useMemo, useState } from 'react'
+import { GraduationCap, Landmark, Activity, Lightbulb, AlertTriangle, Quote, ArrowUpRight, Check, Play, ArrowRight } from 'lucide-react'
+import { usePersistentState } from '@/hooks/usePersistentState'
+import { cardCls, btnGhostCls, btnPrimaryCls } from './common'
+import {
+  GUIDE_PROGRESS_KEY,
+  emptyGuideProgress,
+  computePartProgress,
+  chapterDone,
+  findSection,
+  type GuideProgressState,
+} from './guideProgress'
 import { GUIDE_INTRO, GUIDE_CHAPTERS, GUIDE_GLOSSARY, type GuideChapter, type GuideSection } from './guideContent'
 import { TRADING_GUIDE_CHAPTERS, TRADING_GUIDE_GLOSSARY } from './tradingGuide'
 import { GuideFigureBlock } from './GuideFigure'
@@ -146,6 +155,12 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
   const chapters = PARTS[part].chapters
   const glossary = PARTS[part].glossary
 
+  // 학습 진도 — 절이 화면 상단에 오면 읽음으로 기록 (B안: 코스화)
+  const [progress, setProgress] = usePersistentState<GuideProgressState>(GUIDE_PROGRESS_KEY, emptyGuideProgress)
+  const sectionIds = useMemo(() => new Set(chapters.flatMap((c) => c.sections.map((s) => s.id))), [chapters])
+  const partProgress = useMemo(() => computePartProgress(chapters, progress.visited), [chapters, progress.visited])
+  const lastRead = findSection(chapters, progress.last[part])
+
   // 스크롤 위치에 따라 목차 현재 위치 하이라이트 (파트 전환 시 재구독)
   useEffect(() => {
     const ids = chapters.flatMap((c) => [c.id, ...c.sections.map((s) => s.id)]).concat(['glossary'])
@@ -153,13 +168,21 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
     const io = new IntersectionObserver(
       (entries) => {
         const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
-        if (visible[0]) setActiveId(visible[0].target.id)
+        if (visible[0]) {
+          const id = visible[0].target.id
+          setActiveId(id)
+          if (sectionIds.has(id))
+            setProgress((prev) => {
+              if (prev.visited[id] && prev.last[part] === id) return prev
+              return { visited: { ...prev.visited, [id]: true }, last: { ...prev.last, [part]: id } }
+            })
+        }
       },
       { rootMargin: '-72px 0px -60% 0px' },
     )
     els.forEach((el) => io.observe(el))
     return () => io.disconnect()
-  }, [part, chapters])
+  }, [part, chapters, sectionIds, setProgress])
 
   const jump = (id: string) => {
     setActiveId(id) // 스무스 스크롤 중 중간 절들로 하이라이트가 튀는 것 방지
@@ -170,6 +193,16 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
     setPart(i)
     setActiveId('')
     window.scrollTo({ top: 0 })
+  }
+  const resetPartProgress = () => {
+    if (!window.confirm(`${PARTS[part].label}의 학습 진도를 초기화할까요?`)) return
+    setProgress((prev) => {
+      const visited = { ...prev.visited }
+      for (const id of sectionIds) delete visited[id]
+      const last = { ...prev.last }
+      delete last[part]
+      return { visited, last }
+    })
   }
 
   // 아코디언: 현재 읽는 챕터(스크롤 위치 기준)만 하위 절을 펼침
@@ -211,11 +244,14 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
                 <li key={c.id}>
                   <button
                     onClick={() => jump(c.id)}
-                    className={`text-left w-full font-semibold py-1 leading-snug ${
+                    className={`text-left w-full font-semibold py-1 leading-snug flex items-start gap-1.5 ${
                       chActive ? 'text-[#2962ff] dark:text-[#5b8aff]' : 'text-zinc-700 dark:text-zinc-300 hover:text-[#2962ff]'
                     }`}
                   >
-                    {c.toc ?? `${c.step}. ${c.title}`}
+                    {chapterDone(c, progress.visited) && (
+                      <Check className="w-3.5 h-3.5 mt-0.5 text-[#1baf7a] flex-shrink-0" aria-label="완료" />
+                    )}
+                    <span>{c.toc ?? `${c.step}. ${c.title}`}</span>
                   </button>
                   {open && c.sections.length > 1 && (
                     <ul className="mt-0.5 mb-1.5 space-y-0.5 border-l border-[#e0e3eb] dark:border-[#2a2e39] ml-1 pl-2.5">
@@ -282,6 +318,49 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
             </div>
           )}
 
+          {/* 학습 진도 히어로 — 코스형 UX: 링·이어 읽기·남은 분량 */}
+          <div className={`${cardCls} p-4 sm:p-5 flex flex-wrap items-center gap-4`}>
+            <svg width="54" height="54" viewBox="0 0 54 54" className="flex-shrink-0" aria-hidden="true">
+              <circle cx="27" cy="27" r="22" fill="none" strokeWidth="6" className="stroke-[#eef1f5] dark:stroke-[#2a2e39]" />
+              <circle
+                cx="27"
+                cy="27"
+                r="22"
+                fill="none"
+                strokeWidth="6"
+                strokeLinecap="round"
+                className="stroke-[#2962ff]"
+                strokeDasharray={`${(partProgress.pct / 100) * 138.2} 138.2`}
+                transform="rotate(-90 27 27)"
+              />
+            </svg>
+            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+              <span className="text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
+                COURSE · {PARTS[part].label}
+              </span>
+              <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                {partProgress.pct}% · {partProgress.doneChapters}/{partProgress.totalChapters}강 완료
+                {partProgress.remainMinutes > 0 && ` · 남은 약 ${partProgress.remainMinutes}분`}
+              </span>
+              <span className="text-[12px] text-zinc-500 dark:text-zinc-400 truncate">
+                {lastRead ? `마지막 위치: ${lastRead.section.title}` : '아직 시작 전입니다. 스크롤만 해도 진도가 기록됩니다'}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => jump(lastRead ? lastRead.section.id : chapters[0].id)}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold ${btnPrimaryCls}`}
+              >
+                <Play className="w-4 h-4" /> {lastRead ? '이어서 읽기' : '처음부터 읽기'}
+              </button>
+              {partProgress.pct > 0 && (
+                <button onClick={resetPartProgress} className="text-[11px] text-zinc-400 dark:text-zinc-500 hover:text-red-500">
+                  진도 초기화
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* 현재 파트 챕터 점프 칩 (모바일 목차 겸용) */}
           <div className="flex flex-wrap gap-2">
             {chapters.map((c) => (
@@ -302,7 +381,7 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
           </div>
 
           {/* 챕터 본문 */}
-          {chapters.map((c) => (
+          {chapters.map((c, ci) => (
             <div key={c.id} id={c.id} className={`${cardCls} p-4 sm:p-5 scroll-mt-32`}>
               <h3 className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100">
                 <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
@@ -316,6 +395,17 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
                   <Section key={s.id} s={s} />
                 ))}
               </div>
+              {ci < chapters.length - 1 && (
+                <div className="mt-5 pt-4 border-t border-[#e0e3eb] dark:border-[#2a2e39] flex justify-end">
+                  <button
+                    onClick={() => jump(chapters[ci + 1].id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[12.5px] font-medium ${btnGhostCls}`}
+                  >
+                    다음: {(chapters[ci + 1].toc ?? chapters[ci + 1].title).split(' — ')[0]}
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
           ))}
 
