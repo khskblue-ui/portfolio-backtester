@@ -1,4 +1,5 @@
 import { ArrowRight, ArrowDown, ChartNoAxesColumn } from 'lucide-react'
+import { nbspShortParens } from './common'
 
 /**
  * 가이드 도해(figure) — 텍스트 겹침이 없는 HTML/CSS 기반 도식 3종.
@@ -76,8 +77,8 @@ function Bars({ f }: { f: Extract<GuideFigureData, { kind: 'bars' }> }) {
         const pct = (Math.abs(b.value) / maxAbs) * 100
         const tone = b.tone ?? 'blue'
         return (
-          <div key={i} className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-center gap-2">
-            <div className="text-[11px] leading-tight text-right text-zinc-600 dark:text-zinc-300">{b.label}</div>
+          <div key={i} className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-center gap-x-2 gap-y-0.5">
+            <div className="text-[11px] leading-tight text-left sm:text-right text-zinc-600 dark:text-zinc-300">{nbspShortParens(b.label)}</div>
             <div className="flex items-center gap-1.5 min-w-0">
               {hasNeg ? (
                 <div className="relative h-4 flex-1 rounded bg-[#f3f5f9] dark:bg-[#1e222d] overflow-hidden">
@@ -119,8 +120,8 @@ function Flow({ f }: { f: Extract<GuideFigureData, { kind: 'flow' }> }) {
               </div>
             )}
             <div className={`rounded-lg border px-2.5 py-1.5 min-w-0 sm:flex-1 ${CHIP_TONE[tone]}`}>
-              <div className={`text-[11.5px] font-semibold leading-snug ${TITLE_TONE[tone]}`}>{s.label}</div>
-              {s.sub && <div className="text-[10.5px] leading-snug text-zinc-500 dark:text-zinc-400 mt-0.5">{s.sub}</div>}
+              <div className={`text-[11.5px] font-semibold leading-snug ${TITLE_TONE[tone]}`}>{nbspShortParens(s.label)}</div>
+              {s.sub && <div className="text-[10.5px] leading-snug text-zinc-500 dark:text-zinc-400 mt-0.5">{nbspShortParens(s.sub)}</div>}
             </div>
           </div>
         )
@@ -161,8 +162,8 @@ function Quad({ f }: { f: Extract<GuideFigureData, { kind: 'quad' }> }) {
             const tone = c.tone ?? 'gray'
             return (
               <div key={col} className={`rounded-lg border px-2.5 py-2 ${CHIP_TONE[tone]}`}>
-                <div className={`text-[11.5px] font-semibold leading-snug ${TITLE_TONE[tone]}`}>{c.title}</div>
-                {c.sub && <div className="text-[10.5px] leading-snug text-zinc-500 dark:text-zinc-400 mt-0.5">{c.sub}</div>}
+                <div className={`text-[11.5px] font-semibold leading-snug ${TITLE_TONE[tone]}`}>{nbspShortParens(c.title)}</div>
+                {c.sub && <div className="text-[10.5px] leading-snug text-zinc-500 dark:text-zinc-400 mt-0.5">{nbspShortParens(c.sub)}</div>}
               </div>
             )
           })}
@@ -176,13 +177,13 @@ function Quad({ f }: { f: Extract<GuideFigureData, { kind: 'quad' }> }) {
 export function GuideFigureBlock({ f }: { f: GuideFigureData }) {
   return (
     <figure className="rounded-lg border border-[#e0e3eb] dark:border-[#2a2e39] bg-white dark:bg-[#131722] px-3.5 py-3 space-y-2.5">
-      <figcaption className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
-        <ChartNoAxesColumn className="w-3.5 h-3.5 text-[#2962ff]" /> {f.title}
+      <figcaption className="flex items-start gap-1.5 text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 leading-snug">
+        <ChartNoAxesColumn className="w-3.5 h-3.5 text-[#2962ff] flex-shrink-0" /> <span>{nbspShortParens(f.title, 20)}</span>
       </figcaption>
       {f.kind === 'bars' && <Bars f={f} />}
       {f.kind === 'flow' && <Flow f={f} />}
       {f.kind === 'quad' && <Quad f={f} />}
-      {f.note && <p className="text-[10.5px] leading-relaxed text-zinc-400 dark:text-zinc-500">{f.note}</p>}
+      {f.note && <p className="text-[10.5px] leading-relaxed text-zinc-400 dark:text-zinc-500">{nbspShortParens(f.note)}</p>}
     </figure>
   )
 }

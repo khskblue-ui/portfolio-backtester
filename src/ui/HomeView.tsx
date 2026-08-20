@@ -215,7 +215,7 @@ export function HomeView({
         <div className={`${cardCls} p-4 flex flex-col gap-2.5`}>
           <span className="text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">READ · 닮은 역사</span>
           <div className="text-[13.5px] font-semibold text-zinc-800 dark:text-zinc-100 leading-snug flex-1">
-            {assessment?.analog ?? '1900년 이후 7개 대형 하락 구간의 연대기를 읽어보세요'}
+            {assessment?.analog ? assessment.analog.replace(/ \(단,[^)]*\)/, '') : '1900년 이후 7개 대형 하락 구간의 연대기를 읽어보세요'}
           </div>
           <div className="flex gap-2">
             <button

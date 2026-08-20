@@ -73,6 +73,17 @@ export const fmtUsd = (v: number) => '$' + v.toLocaleString('en-US', { maximumFr
 /** 손익용 부호 표기: +$1,234 / −$1,234 */
 export const fmtSignedUsd = (v: number) =>
   `${v < 0 ? '−' : '+'}$${Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+/**
+ * 표 셀·라벨용 줄바꿈 정리: 짧은 괄호 묶음 "(1차대전 인플레)" 안의 공백을
+ * NBSP로 바꿔 괄호가 줄에 걸쳐 갈라지지 않게 한다. 긴 괄호(13자 이상)는
+ * 통째로 묶으면 오히려 넘치므로 그대로 둔다. 본문 문단이 아닌 컴팩트한
+ * 라벨/셀에만 쓸 것.
+ */
+export const nbspShortParens = (text: string, maxLen = 12) =>
+  text.replace(/\(([^()]+)\)/g, (m, inner: string) =>
+    inner.length <= maxLen ? `(${inner.replace(/ /g, '\u00A0')})` : m,
+  )
+
 export const fmtPct = (v: number) => (Number.isFinite(v) ? `${v.toFixed(1)}%` : '—')
 export const fmtSignedPct = (v: number) =>
   Number.isFinite(v) ? `${v < 0 ? '−' : '+'}${Math.abs(v).toFixed(1)}%` : '—'

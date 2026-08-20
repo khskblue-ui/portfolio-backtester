@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { GraduationCap, Landmark, Activity, Lightbulb, AlertTriangle, Quote, ArrowUpRight, Check, Play, ArrowRight } from 'lucide-react'
 import { usePersistentState } from '@/hooks/usePersistentState'
-import { cardCls, btnGhostCls, btnPrimaryCls } from './common'
+import { cardCls, btnGhostCls, btnPrimaryCls, nbspShortParens } from './common'
 import {
   GUIDE_PROGRESS_KEY,
   emptyGuideProgress,
@@ -27,7 +27,7 @@ const PARTS: { label: string; chapters: GuideChapter[]; glossary: typeof GUIDE_G
 
 /** **굵게** 미니 렌더러 — 콘텐츠 파일을 데이터로 유지하기 위한 최소 마크업 */
 function rich(text: string) {
-  return text.split(/\*\*(.+?)\*\*/g).map((part, i) =>
+  return nbspShortParens(text, 18).split(/\*\*(.+?)\*\*/g).map((part, i) =>
     i % 2 === 1 ? (
       <b key={i} className="font-semibold text-zinc-800 dark:text-zinc-100">
         {part}
@@ -59,7 +59,7 @@ function groupParas(paras: string[]): (string | string[])[] {
 function Section({ s }: { s: GuideSection }) {
   return (
     <section id={s.id} className="scroll-mt-24 space-y-2.5">
-      <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{s.title}</h4>
+      <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{nbspShortParens(s.title)}</h4>
       {groupParas(s.paras).map((p, i) =>
         Array.isArray(p) ? (
           <ul key={i} className="space-y-1.5 pl-1">
@@ -113,7 +113,7 @@ function Section({ s }: { s: GuideSection }) {
             <thead>
               <tr className="bg-[#f3f5f9] dark:bg-[#171c28]">
                 {s.table.header.map((h) => (
-                  <th key={h} className="text-left px-3 py-2 font-semibold text-zinc-600 dark:text-zinc-300 whitespace-nowrap">{h}</th>
+                  <th key={h} className="text-left px-2.5 sm:px-3 py-2 font-semibold text-zinc-600 dark:text-zinc-300 leading-snug">{nbspShortParens(h)}</th>
                 ))}
               </tr>
             </thead>
@@ -121,7 +121,7 @@ function Section({ s }: { s: GuideSection }) {
               {s.table.rows.map((row, i) => (
                 <tr key={i} className="border-t border-[#e0e3eb] dark:border-[#2a2e39]">
                   {row.map((cell, j) => (
-                    <td key={j} className={`px-3 py-1.5 text-zinc-600 dark:text-zinc-300 ${j > 0 ? 'font-mono' : ''}`}>{cell}</td>
+                    <td key={j} className={`px-2.5 sm:px-3 py-1.5 text-zinc-600 dark:text-zinc-300 ${j > 0 ? 'font-mono' : ''}`}>{nbspShortParens(cell, 20)}</td>
                   ))}
                 </tr>
               ))}
@@ -253,7 +253,7 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
                     {chapterDone(c, progress.visited) && (
                       <Check className="w-3.5 h-3.5 mt-0.5 text-[#1baf7a] flex-shrink-0" aria-label="완료" />
                     )}
-                    <span>{c.toc ?? `${c.step}. ${c.title}`}</span>
+                    <span>{nbspShortParens(c.toc ?? `${c.step}. ${c.title}`)}</span>
                   </button>
                   {open && c.sections.length > 1 && (
                     <ul className="mt-0.5 mb-1.5 space-y-0.5 border-l border-[#e0e3eb] dark:border-[#2a2e39] ml-1 pl-2.5">
@@ -389,7 +389,7 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
                 <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
                   {c.kicker ?? `STEP ${c.step}`} · 약 {c.minutes}분
                 </span>
-                {c.title}
+                {nbspShortParens(c.title)}
               </h3>
               <p className="mt-1 text-[12px] text-[#2962ff] dark:text-[#5b8aff]">{c.goal}</p>
               <div className="mt-4 space-y-6">
@@ -428,7 +428,7 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
                     <span className="text-[12.5px] font-semibold text-zinc-800 dark:text-zinc-100">{g.term}</span>
                     <ArrowUpRight className="w-3.5 h-3.5 text-zinc-300 dark:text-zinc-600 group-hover:text-[#2962ff] flex-shrink-0" />
                   </div>
-                  <p className="mt-1 text-[11.5px] leading-relaxed text-zinc-500 dark:text-zinc-400">{g.def}</p>
+                  <p className="mt-1 text-[11.5px] leading-relaxed text-zinc-500 dark:text-zinc-400">{nbspShortParens(g.def, 22)}</p>
                 </button>
               ))}
             </div>

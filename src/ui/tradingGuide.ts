@@ -181,7 +181,7 @@ export const TRADING_GUIDE_CHAPTERS: GuideChapter[] = [
         ],
         "figure": {
           "kind": "bars",
-          "title": "1,516개월 중 몇 달을 놓쳤을 뿐인데 (126년 최종 자산, 계속 보유 = 100%)",
+          "title": "최고의 달을 놓친 대가, 126년 최종 자산 (계속 보유 = 100%)",
           "note": "최고의 달들은 폭락의 한복판에 있으므로, \"나쁜 구간 회피\"는 곧 이 달들을 놓치는 일이 됩니다.",
           "bars": [
             { "label": "계속 보유", "value": 100, "text": "100%", "tone": "blue" },
