@@ -168,15 +168,17 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
     const io = new IntersectionObserver(
       (entries) => {
         const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
-        if (visible[0]) {
-          const id = visible[0].target.id
-          setActiveId(id)
-          if (sectionIds.has(id))
-            setProgress((prev) => {
-              if (prev.visited[id] && prev.last[part] === id) return prev
-              return { visited: { ...prev.visited, [id]: true }, last: { ...prev.last, [part]: id } }
-            })
-        }
+        if (visible[0]) setActiveId(visible[0].target.id)
+        // 화면 상단 판독 밴드에 들어온 절은 전부 읽음 기록 (챕터 컨테이너가 최상단이어도 절이 기록되게)
+        const seen = visible.map((e) => e.target.id).filter((id) => sectionIds.has(id))
+        if (seen.length > 0)
+          setProgress((prev) => {
+            const lastId = seen[0]
+            if (prev.last[part] === lastId && seen.every((id) => prev.visited[id])) return prev
+            const visited = { ...prev.visited }
+            for (const id of seen) visited[id] = true
+            return { visited, last: { ...prev.last, [part]: lastId } }
+          })
       },
       { rootMargin: '-72px 0px -60% 0px' },
     )
@@ -295,29 +297,6 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
         </nav>
 
         <div className="space-y-5 min-w-0">
-          {/* 인트로 — 첫 파트에서만 (두 파트 공통 안내) */}
-          {part === 0 && (
-            <div className={`${cardCls} p-4 sm:p-5`}>
-              <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-                <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
-                  GUIDE · 1부 {PARTS[0].chapters.reduce((a, c) => a + c.minutes, 0)}분 + 2부{' '}
-                  {PARTS[1].chapters.reduce((a, c) => a + c.minutes, 0)}분
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <GraduationCap className="w-4 h-4 text-[#2962ff]" />
-                  {GUIDE_INTRO.title}
-                </span>
-              </h2>
-              <div className="mt-2.5 space-y-2">
-                {GUIDE_INTRO.paras.map((p, i) => (
-                  <p key={i} className="text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-300">
-                    {rich(p)}
-                  </p>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* 학습 진도 히어로 — 코스형 UX: 링·이어 읽기·남은 분량 */}
           <div className={`${cardCls} p-4 sm:p-5 flex flex-wrap items-center gap-4`}>
             <svg width="54" height="54" viewBox="0 0 54 54" className="flex-shrink-0" aria-hidden="true">
@@ -360,6 +339,29 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
               )}
             </div>
           </div>
+
+          {/* 인트로 — 첫 파트에서만 (두 파트 공통 안내) */}
+          {part === 0 && (
+            <div className={`${cardCls} p-4 sm:p-5`}>
+              <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
+                  GUIDE · 1부 {PARTS[0].chapters.reduce((a, c) => a + c.minutes, 0)}분 + 2부{' '}
+                  {PARTS[1].chapters.reduce((a, c) => a + c.minutes, 0)}분
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <GraduationCap className="w-4 h-4 text-[#2962ff]" />
+                  {GUIDE_INTRO.title}
+                </span>
+              </h2>
+              <div className="mt-2.5 space-y-2">
+                {GUIDE_INTRO.paras.map((p, i) => (
+                  <p key={i} className="text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-300">
+                    {rich(p)}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* 현재 파트 챕터 점프 칩 (모바일 목차 겸용) */}
           <div className="flex flex-wrap gap-2">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, X, FileText, BarChart3, Landmark, Activity, GraduationCap, Check } from 'lucide-react'
+import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, X, FileText, BarChart3, Landmark, Activity, GraduationCap, Check, Home } from 'lucide-react'
 import {
   loadDataBundle,
   runComparison,
@@ -31,8 +31,19 @@ import { ReportView } from '@/ui/ReportView'
 import { HistoryView } from '@/ui/HistoryView'
 import { NowView } from '@/ui/NowView'
 import { GuideView } from '@/ui/GuideView'
+import { HomeView } from '@/ui/HomeView'
 
 type Theme = 'light' | 'dark'
+type View = 'home' | 'guide' | 'history' | 'now' | 'backtest'
+
+/** 전역 내비 항목 — 데스크톱 좌측 레일 + 모바일 하단 탭바 공용 (A안) */
+const NAV_ITEMS = [
+  { key: 'home', label: '홈', Icon: Home },
+  { key: 'guide', label: '가이드북', Icon: GraduationCap },
+  { key: 'history', label: '역사', Icon: Landmark },
+  { key: 'now', label: '신호', Icon: Activity },
+  { key: 'backtest', label: '백테스트', Icon: BarChart3 },
+] as const
 
 /** 내보내기/가져오기 파일 스키마 */
 interface ConfigFile {
@@ -103,7 +114,7 @@ export default function App() {
   const setNotice = (text: string | null, kind: 'error' | 'info' = 'error') =>
     setNoticeState(text == null ? null : { text, kind })
   const [showReport, setShowReport] = useState(false)
-  const [view, setView] = useState<'backtest' | 'history' | 'now' | 'guide'>('backtest')
+  const [view, setView] = useState<View>('home')
   // 모바일 워크벤치 위저드 (① 전략 → ② 가정 → ③ 결과). 데스크톱(lg+) 분할 화면에서는 무시됨
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -216,37 +227,17 @@ export default function App() {
       <header className="sticky top-0 z-40 bg-white dark:bg-[#1e222d] border-b border-[#e0e3eb] dark:border-[#2a2e39]">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 flex items-center justify-between flex-wrap gap-x-4 gap-y-1 min-h-14 py-1.5">
           <div className="flex items-center gap-3 sm:gap-7 min-w-0">
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <button onClick={() => setView('home')} className="flex items-center gap-2 flex-shrink-0" title="홈으로">
               {/* 로고: 파비콘(favicon.svg)과 동일한 正 마크 */}
               <div className="w-7 h-7 ink-chip rounded-lg flex items-center justify-center text-[16px] font-black leading-none select-none" aria-hidden="true">
                 正
               </div>
-              {/* 좁은 화면에선 내비 공간 확보를 위해 로고 텍스트 생략 */}
-              <h1 className="max-[479px]:hidden text-[15px] sm:text-base font-bold tracking-tight whitespace-nowrap">투자의 정석</h1>
-            </div>
-            <nav className="flex items-center gap-3 sm:gap-6 overflow-x-auto">
-              {(
-                [
-                  { key: 'guide', label: '가이드북', Icon: GraduationCap },
-                  { key: 'history', label: '역사 연구', Icon: Landmark },
-                  { key: 'now', label: '현재 신호', Icon: Activity },
-                  { key: 'backtest', label: '백테스트', Icon: BarChart3 },
-                ] as const
-              ).map(({ key, label, Icon }) => (
-                <button
-                  key={key}
-                  onClick={() => setView(key)}
-                  className={`flex items-center gap-1.5 py-2 text-[13.5px] min-[480px]:text-[15px] whitespace-nowrap transition-colors ${
-                    view === key
-                      ? 'font-bold text-zinc-900 dark:text-white'
-                      : 'font-medium text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
-                  }`}
-                >
-                  <Icon className={`hidden min-[480px]:block w-4 h-4 ${view === key ? 'text-[#2962ff]' : ''}`} />
-                  {label}
-                </button>
-              ))}
-            </nav>
+              <h1 className="text-[15px] sm:text-base font-bold tracking-tight whitespace-nowrap">투자의 정석</h1>
+            </button>
+            {/* 현재 위치 라벨 — 내비 자체는 좌측 레일(lg+)/하단 탭바(모바일)로 이동 (A안) */}
+            <span className="hidden sm:block text-[13px] text-zinc-400 dark:text-zinc-500">
+              {NAV_ITEMS.find((n) => n.key === view)?.label}
+            </span>
           </div>
           <div className="flex items-center gap-0.5 sm:gap-1">
             <button
@@ -314,6 +305,27 @@ export default function App() {
         </div>
       </header>
 
+      {/* 데스크톱 좌측 아이콘 레일 (A안) — 헤더 아래 고정 */}
+      <aside className="hidden lg:flex fixed left-0 top-14 bottom-0 w-16 z-30 flex-col items-center gap-1 pt-3 bg-white dark:bg-[#1e222d] border-r border-[#e0e3eb] dark:border-[#2a2e39]">
+        {NAV_ITEMS.map(({ key, label, Icon }) => (
+          <button key={key} onClick={() => setView(key)} title={label} className="flex flex-col items-center gap-0.5 py-1.5 w-14 rounded-xl">
+            <span
+              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                view === key
+                  ? 'ink-chip'
+                  : 'text-zinc-500 dark:text-zinc-400 hover:bg-[#edf1f7] dark:hover:bg-[#2a2e39] hover:text-zinc-800 dark:hover:text-zinc-200'
+              }`}
+            >
+              <Icon className="w-5 h-5" />
+            </span>
+            <span className={`text-[9px] ${view === key ? 'font-bold text-[#2962ff] dark:text-[#5b8aff]' : 'text-zinc-400 dark:text-zinc-500'}`}>
+              {label}
+            </span>
+          </button>
+        ))}
+      </aside>
+
+      <div className="lg:pl-16 pb-20 lg:pb-0">
       <div className="max-w-7xl mx-auto px-3 py-4 sm:px-4 md:px-6 md:py-5 space-y-5">
         {/* 알림 배너 — 오류는 빨강, 안내는 파랑 */}
         {notice && (
@@ -342,6 +354,8 @@ export default function App() {
             </button>
           </div>
         )}
+
+        {view === 'home' && <HomeView strategies={strategies} onNavigate={setView} onRun={() => run(false)} />}
 
         {view === 'guide' && <GuideView onNavigate={setView} />}
 
@@ -550,6 +564,26 @@ export default function App() {
           데이터: 야후 파이낸스 일별 종가 · 모든 금액은 미국 달러(USD) 기준이며, 원화 손익과는 다릅니다
         </footer>
       </div>
+      </div>
+
+      {/* 모바일 하단 탭바 (A안) */}
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 grid grid-cols-5 bg-white dark:bg-[#1e222d] border-t border-[#e0e3eb] dark:border-[#2a2e39]">
+        {NAV_ITEMS.map(({ key, label, Icon }) => (
+          <button
+            key={key}
+            onClick={() => {
+              setView(key)
+              window.scrollTo({ top: 0 })
+            }}
+            className={`flex flex-col items-center justify-center gap-0.5 ${
+              view === key ? 'text-[#2962ff] dark:text-[#5b8aff]' : 'text-zinc-400 dark:text-zinc-500'
+            }`}
+          >
+            <Icon className={`w-5 h-5 ${view === key ? '' : ''}`} strokeWidth={view === key ? 2.2 : 1.8} />
+            <span className={`text-[9.5px] ${view === key ? 'font-bold' : ''}`}>{label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   )
 }
