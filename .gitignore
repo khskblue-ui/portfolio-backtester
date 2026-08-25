@@ -33,3 +33,6 @@ dist-ssr
 # E2E 검수 산출물
 audit/
 wrap-report.json
+
+# OMC 런타임 상태 (프로젝트 스킬을 커밋하려면 !.omc/skills/ 예외를 추가)
+.omc/
