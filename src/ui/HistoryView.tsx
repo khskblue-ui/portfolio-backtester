@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   LineChart,
   Line,
@@ -118,8 +118,39 @@ export function HistoryView({
   const [brushEpoch, setBrushEpoch] = useState(0)
   const resetZoom = () => {
     setZoomRange(null)
+    setPresetKey('전체')
     setBrushEpoch((k) => k + 1)
   }
+  // 시대 프리셋 칩 — 9px 브러시 손잡이의 터치 조작 한계 보완 (워크벤치 기간 칩 패턴 재사용).
+  // 비제어 브러시와의 동기화: zoomRange 변경 + epoch 재마운트 시 Brush에 start/endIndex를 넘겨 창을 맞춘다
+  const [presetKey, setPresetKey] = useState<string>('전체')
+  // 터치 기기(coarse pointer): 툴팁은 탭한 지점에서만 표시하고(hover 잔상 방지),
+  // 차트 간 툴팁 동기화도 끈다
+  const coarse = useMemo(() => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches, [])
+  const tooltipTrigger = coarse ? ('click' as const) : ('hover' as const)
+  const detailSyncId = coarse ? undefined : 'era-detail'
+  // 모바일 폭(<lg): 매크로 차트의 CAPE를 별도 스트립으로 분리해 이중 축의 폭 잠식을 줄임
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)')
+    const on = () => setNarrow(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  // 유령 툴팁 소거 — recharts v3는 창 좌표 기반으로 툴팁을 켜서 pointer-events 차단이
+  // 안 통함(실측). epoch을 올려 상세 차트를 재마운트하면 툴팁 상태가 초기화된다.
+  // 터치 기기에서 차트 밖을 탭했을 때 + 구간 선택 스크롤 정착 직후에 소거.
+  const [tooltipEpoch, setTooltipEpoch] = useState(0)
+  useEffect(() => {
+    if (!coarse) return
+    const onTouch = (ev: TouchEvent) => {
+      const t = ev.target as Element | null
+      if (t && t.closest('.recharts-responsive-container')) return
+      setTooltipEpoch((k) => k + 1)
+    }
+    document.addEventListener('touchstart', onTouch, { passive: true })
+    return () => document.removeEventListener('touchstart', onTouch)
+  }, [coarse])
   // 나스닥 비교 오버레이 — 종합(가격, 1971~, FRED) / 나스닥100 총수익(배당 포함, 1999~, 야후)
   // 선택 시 처음 한 번 조회. overlaySeries: undefined = 미조회(로딩), null = 실패
   const [overlay, setOverlay] = useState<'off' | 'comp' | 'ndx100'>('off')
@@ -150,6 +181,21 @@ export function HistoryView({
 
   // 구간 선택 시 상세 카드로 스크롤 — 상세가 카드 그리드 아래에 있어 선택해도
   // 화면 변화가 안 보이던 문제 (차트 밴드 클릭 안내 "클릭해 상세 보기"의 실효성)
+  // 유령 툴팁 가드 — 구간 선택의 자동 스크롤로 차트가 탭 좌표 아래로 들어올 때
+  // 툴팁이 저절로 뜨는 문제(모바일 실측). 스크롤 동안 차트 열의 포인터 이벤트를
+  // 차단하고, 정착 후 epoch 재마운트로 좌표 기반 툴팁 상태까지 소거한다
+  const [chartsInert, setChartsInert] = useState(false)
+  const inertTimer = useRef<number | null>(null)
+  const armChartsInertGuard = () => {
+    setChartsInert(true)
+    if (inertTimer.current != null) window.clearTimeout(inertTimer.current)
+    // 순서 주의: 재마운트(900ms)가 inert 해제(1200ms)보다 먼저 —
+    // 재마운트 직후 브라우저의 hover 재계산이 새 차트에 다시 발화하는 것을 막는다
+    inertTimer.current = window.setTimeout(() => {
+      if (coarse) setTooltipEpoch((k) => k + 1)
+      inertTimer.current = window.setTimeout(() => setChartsInert(false), 300)
+    }, 900)
+  }
   useEffect(() => {
     if (selected) {
       const t = window.setTimeout(() => document.getElementById('era-detail-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
@@ -232,6 +278,39 @@ export function HistoryView({
     const snapYm = (ym: string) => sampled.find((d) => d >= ym) ?? sampled[sampled.length - 1]
     return { fullRows: rows, snapYm }
   }, [data, pick, basis, overlayData, overlayOn])
+
+  // 시대 프리셋 적용 — fullRows(다운샘플) 인덱스로 변환해 zoomRange 설정
+  const applyPreset = (key: string, start: string | null, end: string | null) => {
+    if (!start || !end) {
+      resetZoom()
+      return
+    }
+    if (fullRows.length === 0) return
+    let s = fullRows.findIndex((r) => r.ym >= start)
+    if (s < 0) s = 0
+    let e = fullRows.length - 1
+    for (let i = fullRows.length - 1; i >= 0; i--) {
+      if (fullRows[i].ym <= end) {
+        e = i
+        break
+      }
+    }
+    if (e <= s) return
+    setZoomRange({ s, e })
+    setPresetKey(key)
+    setBrushEpoch((k) => k + 1)
+  }
+  const periodChips: { key: string; start: string | null; end: string | null }[] = [
+    { key: '전체', start: null, end: null },
+    { key: '대공황', start: '1928-01', end: '1937-12' },
+    { key: '스태그플레이션', start: '1968-01', end: '1985-12' },
+    { key: '닷컴·금융위기', start: '1999-01', end: '2013-12' },
+    {
+      key: '최근 20년',
+      start: data ? `${Number(data.meta.dataEnd.slice(0, 4)) - 20}${data.meta.dataEnd.slice(4)}` : null,
+      end: data?.meta.dataEnd ?? null,
+    },
+  ]
 
   // 보이는 창(확대) 데이터 — 비교 오버레이가 켜진 채 확대하면 "구간 시작 = 100"으로
   // 재정규화해 두 선이 같은 출발선에서 시작하게 한다 (나스닥은 구간 내 첫 겹침 달에
@@ -475,9 +554,28 @@ export function HistoryView({
             </div>
           </div>
         </div>
-        <p className="text-xs text-zinc-400 mb-3">
-          붉은 음영 = 실질 가치가 25% 이상 떨어지고 회복까지 3년 넘게 걸린 구간입니다. 음영이나 아래 카드를 클릭하면 상세가 열립니다.
+        <p className="text-xs text-zinc-400 mb-2">
+          붉은 음영 = 실질 가치가 25% 이상 떨어지고 회복까지 3년 넘게 걸린 구간입니다. 아래 카드(또는 음영)를 클릭하면 상세가 열립니다.
         </p>
+        {/* 시대 프리셋 칩 — 브러시 손잡이가 어려운 터치 환경의 기간 확대 대안 */}
+        <div className="flex items-center gap-1.5 flex-wrap mb-3">
+          {periodChips.map((p) => {
+            const active = p.start == null ? zoomRange == null : presetKey === p.key && zoomRange != null
+            return (
+              <button
+                key={p.key}
+                onClick={() => applyPreset(p.key, p.start, p.end)}
+                className={`px-3 py-2 rounded-full text-[11px] font-medium border transition-colors ${
+                  active
+                    ? 'bg-[#2962ff] border-[#2962ff] text-white'
+                    : 'border-[#d3d8e3] dark:border-[#363a45] text-zinc-600 dark:text-zinc-300 hover:border-[#2962ff] hover:text-[#2962ff]'
+                }`}
+              >
+                {p.key}
+              </button>
+            )
+          })}
+        </div>
         {(() => {
           // 본 차트 — 확대 시 viewRows(슬라이스·재정규화)를 그림. 밴드는 창과 겹치는
           // 부분만 클램프해 표시(카테고리 축은 창 밖 좌표를 그릴 수 없음), 축 라벨은
@@ -507,7 +605,9 @@ export function HistoryView({
                   tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(Math.round(v)))}
                 />
                 <Tooltip
-                  formatter={(v, name) => [`${Number(v).toFixed(0)} (${unit})`, name]}
+                  trigger={tooltipTrigger}
+                  formatter={(v, name) => [Number(v).toFixed(0), name]}
+                  labelFormatter={(l) => `${l} · ${unit}`}
                   labelStyle={tooltipLabelStyle}
                   contentStyle={tooltipContentStyle}
                 />
@@ -525,7 +625,7 @@ export function HistoryView({
                       x2={cx2}
                       fill={selected === e.peak ? 'rgba(227,73,72,0.28)' : 'rgba(227,73,72,0.12)'}
                       stroke="none"
-                      onClick={() => { setSelected(selected === e.peak ? null : e.peak); changePhase(null) }}
+                      onClick={() => { setSelected(selected === e.peak ? null : e.peak); changePhase(null); if (selected !== e.peak) armChartsInertGuard() }}
                       style={{ cursor: 'pointer' }}
                     />
                   )
@@ -549,14 +649,19 @@ export function HistoryView({
             <Brush
               key={brushEpoch}
               dataKey="ym"
-              height={36}
-              travellerWidth={9}
+              height={44}
+              travellerWidth={14}
+              startIndex={zoomRange?.s}
+              endIndex={zoomRange?.e}
               stroke={theme === 'dark' ? '#5b8aff' : '#2962ff'}
               fill={theme === 'dark' ? '#131722' : '#f8fafc'}
               tickFormatter={(d: string) => d.slice(0, 4)}
               onChange={(r) => {
                 const rr = r as { startIndex?: number; endIndex?: number }
                 if (rr?.startIndex == null || rr?.endIndex == null) return
+                // 재마운트 직후 동일 창 통지는 무시 (프리셋 칩 활성 표시 보존)
+                if (zoomRange && rr.startIndex === zoomRange.s && rr.endIndex === zoomRange.e) return
+                setPresetKey('')
                 if (rr.startIndex <= 0 && rr.endIndex >= fullRows.length - 1) setZoomRange(null)
                 else setZoomRange({ s: rr.startIndex, e: rr.endIndex })
               }}
@@ -614,7 +719,7 @@ export function HistoryView({
           return (
             <button
               key={e.peak}
-              onClick={() => setSelected(selected === e.peak ? null : e.peak)}
+              onClick={() => { setSelected(selected === e.peak ? null : e.peak); changePhase(null); if (selected !== e.peak) armChartsInertGuard() }}
               className={`${cardCls} p-4 text-left transition-colors ${selected === e.peak ? 'ring-2 ring-zinc-500 dark:ring-zinc-400' : 'hover:border-zinc-400 dark:hover:border-zinc-500'}`}
             >
               <div className="flex items-baseline justify-between gap-2">
@@ -672,7 +777,7 @@ export function HistoryView({
               {ERA_STORIES[selectedEp.peak] && (
                 <button
                   onClick={() => setStoryOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold bg-[#2962ff] text-white hover:bg-[#1e53e5]"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded text-xs font-semibold bg-[#2962ff] text-white hover:bg-[#1e53e5]"
                   title="이 구간에서 각 자산이 왜 그렇게 움직였는지 — 통념 vs 실제 스토리"
                 >
                   <BookOpen className="w-3.5 h-3.5" /> 왜 이렇게 움직였나
@@ -689,7 +794,7 @@ export function HistoryView({
                     histEraStrategies(),
                   )
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium ${btnGhostCls}`}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded text-xs font-medium ${btnGhostCls}`}
                 title="전략 목록을 역사 자산(SPX-HIST 등) 프리셋으로 교체하고 이 구간을 백테스트"
               >
                 <FlaskConical className="w-3.5 h-3.5" /> 이 구간을 백테스트
@@ -707,7 +812,7 @@ export function HistoryView({
                         : '이 시대는 일반 ETF 데이터가 없습니다. 자산을 "역사 월간" 그룹(SPX-HIST·UST10-HIST·GOLD-HIST)으로 바꾸면 실행됩니다.'),
                   )
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium ${btnGhostCls}`}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded text-xs font-medium ${btnGhostCls}`}
                 title="전략은 그대로 두고 시작/종료일만 이 구간으로"
               >
                 <CalendarRange className="w-3.5 h-3.5" /> 기간만 적용
@@ -717,7 +822,7 @@ export function HistoryView({
           <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">{EPISODE_INFO[selectedEp.peak]?.cause}</p>
 
           <div className="lg:grid lg:grid-cols-2 lg:gap-x-6 lg:items-start">
-          <div className="space-y-3 min-w-0 lg:order-2 lg:sticky lg:top-20">
+          <div id="era-charts" className="space-y-3 min-w-0 lg:order-2 lg:sticky lg:top-20 scroll-mt-20" style={{ pointerEvents: chartsInert ? 'none' : undefined }}>
           {phaseIdx != null && timeline[phaseIdx] && (
             <div className="flex items-center justify-between gap-2 flex-wrap rounded-lg bg-[#eef4ff] dark:bg-[#16223c] px-3 py-1.5">
               <span className="text-[11px] font-mono text-[#2962ff] dark:text-[#5b8aff]">
@@ -725,14 +830,20 @@ export function HistoryView({
                   ? `국면 확대 ${timeline[phaseIdx].from} ~ ${timeline[phaseIdx].to} · ±6개월 · 국면 시작=100`
                   : '전체 구간 눈금 표시 중'}
               </span>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {zoomed && dailyAvailable && (
-                  <button onClick={toggleDaily} className={`px-2.5 py-1 rounded text-[11px] font-medium ${btnGhostCls}`}>
+                  <button onClick={toggleDaily} className={`px-2.5 py-2 rounded text-[11px] font-medium ${btnGhostCls}`}>
                     {daily.status === 'on' ? '일별 확대 끄기' : daily.status === 'loading' ? '일별 조회 중…' : '일별 확대 보기'}
                   </button>
                 )}
-                <button onClick={() => setPhaseZoom((z) => !z)} className={`px-2.5 py-1 rounded text-[11px] font-medium ${btnGhostCls}`}>
+                <button onClick={() => setPhaseZoom((z) => !z)} className={`px-2.5 py-2 rounded text-[11px] font-medium ${btnGhostCls}`}>
                   {zoomed ? '전체 구간 보기' : '국면 확대'}
+                </button>
+                <button
+                  onClick={() => document.getElementById('era-timeline')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  className={`px-2.5 py-2 rounded text-[11px] font-medium ${btnGhostCls} lg:hidden`}
+                >
+                  연대기로 ↓
                 </button>
               </div>
             </div>
@@ -752,15 +863,35 @@ export function HistoryView({
             </HelpTip>
           </h4>
           <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }} syncId="era-detail">
+            <LineChart key={`assets-${selected}-${tooltipEpoch}-${zoomed ? phaseIdx : 'full'}`} data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }} syncId={detailSyncId}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" vertical={false} />
               <XAxis dataKey="ym" tick={{ fontSize: 11, fill: axisTickColor }} stroke={axisTickColor} minTickGap={50} />
-              <YAxis tick={{ fontSize: 11, fill: axisTickColor }} stroke={axisTickColor} width={44} domain={['auto', 'auto']} tickFormatter={(v: number) => String(Math.round(v))} />
+              {/* 전체 구간은 로그 눈금 — 금 급등이 축을 지배해 주식·채권이 눌리는 왜곡 방지
+                  (개요 차트와 같은 관례). 국면 확대는 짧은 창이라 선형 유지 */}
+              <YAxis
+                scale={zoomed ? 'auto' : 'log'}
+                tick={{ fontSize: 11, fill: axisTickColor }}
+                stroke={axisTickColor}
+                width={44}
+                domain={['auto', 'auto']}
+                tickFormatter={(v: number) => String(Math.round(v))}
+              />
               <Tooltip
-                formatter={(v) => `${Number(v).toFixed(1)} (${zoomed ? '국면 시작' : '고점'}=100)`}
+                trigger={tooltipTrigger}
+                formatter={(v) => Number(v).toFixed(1)}
+                labelFormatter={(l) => `${l} · ${zoomed ? '국면 시작' : '고점'}=100`}
                 labelStyle={tooltipLabelStyle}
                 contentStyle={tooltipContentStyle}
               />
+              {!zoomed && (
+                <ReferenceLine
+                  y={100}
+                  stroke={axisTickColor}
+                  strokeDasharray="4 3"
+                  strokeOpacity={0.55}
+                  label={{ value: '고점=100', fontSize: 9.5, fill: axisTickColor, position: 'insideBottomLeft' }}
+                />
+              )}
               <Legend wrapperStyle={{ fontSize: 12 }} />
               {phaseBand && <ReferenceArea x1={phaseBand.x1} x2={phaseBand.x2} fill="rgba(41,98,255,0.12)" stroke="rgba(41,98,255,0.35)" strokeDasharray="4 3" />}
               {markersInView.map((m) => (
@@ -779,6 +910,11 @@ export function HistoryView({
               <Line type="monotone" dataKey="현금(3개월물)" stroke={c('bill')} strokeWidth={1.6} strokeDasharray="5 3" dot={false} />
             </LineChart>
           </ResponsiveContainer>
+          {!zoomed && (
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              세로축은 로그 눈금이라 같은 간격이 같은 비율 변화를 뜻합니다. 점선 100 아래가 고점 대비 손실 구간입니다. 국면을 확대하면 선형 눈금으로 바뀝니다.
+            </p>
+          )}
           {selectedEp.peak < '1950' && (
             <p className="text-[11px] text-zinc-400 leading-relaxed">
               이 시대의 금 가격은 연 단위 자료라 계단 모양으로 표시됩니다. 월별 움직임으로 읽지 마세요 (1949년의 하락 표시도 실제 시세가 아닌 자료상의 흔적입니다).
@@ -796,7 +932,7 @@ export function HistoryView({
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.12)" vertical={false} />
                   <XAxis dataKey="d" tick={{ fontSize: 10, fill: axisTickColor }} stroke={axisTickColor} minTickGap={70} />
                   <YAxis tick={{ fontSize: 10, fill: axisTickColor }} stroke={axisTickColor} width={44} domain={['auto', 'auto']} tickFormatter={(v: number) => String(Math.round(v))} />
-                  <Tooltip formatter={(v) => `${Number(v).toFixed(1)} (창 시작=100)`} labelStyle={tooltipLabelStyle} contentStyle={tooltipContentStyle} />
+                  <Tooltip trigger={tooltipTrigger} formatter={(v) => Number(v).toFixed(1)} labelFormatter={(l) => `${l} · 창 시작=100`} labelStyle={tooltipLabelStyle} contentStyle={tooltipContentStyle} />
                   {dailyBand && <ReferenceArea x1={dailyBand.x1} x2={dailyBand.x2} fill="rgba(41,98,255,0.12)" stroke="none" />}
                   <Line type="monotone" dataKey="v" name="^GSPC 일별" stroke={c('stock')} strokeWidth={1.3} dot={false} />
                 </LineChart>
@@ -825,25 +961,29 @@ export function HistoryView({
             </HelpTip>
           </h4>
           <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }} syncId="era-detail">
+            <LineChart key={`macro-${selected}-${tooltipEpoch}-${zoomed ? phaseIdx : 'full'}`} data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }} syncId={detailSyncId}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" vertical={false} />
               <XAxis dataKey="ym" tick={{ fontSize: 11, fill: axisTickColor }} stroke={axisTickColor} minTickGap={50} />
               <YAxis
                 yAxisId="pct"
-                tick={{ fontSize: 11, fill: axisTickColor }}
+                tick={{ fontSize: 10, fill: axisTickColor }}
                 stroke={axisTickColor}
-                width={44}
+                width={36}
                 tickFormatter={(v: number) => `${v}%`}
               />
-              <YAxis
-                yAxisId="cape"
-                orientation="right"
-                tick={{ fontSize: 11, fill: c('cape') }}
-                stroke={c('cape')}
-                width={40}
-                domain={[0, 'auto']}
-              />
+              {!narrow && (
+                <YAxis
+                  yAxisId="cape"
+                  orientation="right"
+                  tick={{ fontSize: 10, fill: c('cape') }}
+                  stroke={c('cape')}
+                  width={30}
+                  domain={[0, 'auto']}
+                  label={{ value: 'CAPE', angle: 0, position: 'insideTopRight', fontSize: 9.5, fill: c('cape') }}
+                />
+              )}
               <Tooltip
+                trigger={tooltipTrigger}
                 formatter={(v, name) => [name === 'CAPE' ? Number(v).toFixed(1) : `${Number(v).toFixed(1)}%`, name]}
                 labelStyle={tooltipLabelStyle}
                 contentStyle={tooltipContentStyle}
@@ -854,18 +994,35 @@ export function HistoryView({
               <Line yAxisId="pct" type="monotone" dataKey="CPI 인플레" stroke={c('cpi')} strokeWidth={1.8} dot={false} />
               <Line yAxisId="pct" type="monotone" dataKey="10년물 금리" stroke={c('rate')} strokeWidth={1.8} dot={false} />
               <Line yAxisId="pct" type="monotone" dataKey="실질금리" stroke={c('real')} strokeWidth={1.8} dot={false} />
-              <Line yAxisId="cape" type="monotone" dataKey="CAPE" stroke={c('cape')} strokeWidth={1.8} strokeDasharray="6 3" dot={false} />
+              {!narrow && <Line yAxisId="cape" type="monotone" dataKey="CAPE" stroke={c('cape')} strokeWidth={1.8} strokeDasharray="6 3" dot={false} />}
             </LineChart>
           </ResponsiveContainer>
+          {narrow && (
+            <>
+              <ResponsiveContainer width="100%" height={110}>
+                <LineChart key={`cape-${selected}-${tooltipEpoch}-${zoomed ? phaseIdx : 'full'}`} data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.12)" vertical={false} />
+                  <XAxis dataKey="ym" tick={{ fontSize: 10, fill: axisTickColor }} stroke={axisTickColor} minTickGap={60} />
+                  <YAxis tick={{ fontSize: 10, fill: axisTickColor }} stroke={axisTickColor} width={36} domain={[0, 'auto']} />
+                  <Tooltip trigger={tooltipTrigger} formatter={(v) => Number(v).toFixed(1)} labelStyle={tooltipLabelStyle} contentStyle={tooltipContentStyle} />
+                  {phaseBand && <ReferenceArea x1={phaseBand.x1} x2={phaseBand.x2} fill="rgba(41,98,255,0.12)" stroke="none" />}
+                  <Line type="monotone" dataKey="CAPE" stroke={c('cape')} strokeWidth={1.6} strokeDasharray="6 3" dot={false} name="CAPE (밸류에이션)" />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </>
+          )}
           <p className="text-[11px] text-zinc-400 leading-relaxed">
-            왼쪽 축 = %(인플레이션·금리), 오른쪽 점선 = CAPE(주가가 최근 10년 평균 이익의 몇 배인가).
+            {narrow
+              ? '위 = %(인플레이션·금리), 아래 = CAPE입니다. CAPE는 주가가 최근 10년 평균 이익의 몇 배인가를 잽니다. '
+              : '왼쪽 축 = %(인플레이션·금리), 오른쪽 점선 = CAPE(주가가 최근 10년 평균 이익의 몇 배인가). '}
             인플레이션형 구간은 실질금리가 마이너스로 가라앉고, 밸류에이션 붕괴형은 CAPE가 극단인 상태에서 하락이 시작되는 패턴을 확인해 보세요.
           </p>
           </div>
 
           {/* 연대기 — 흐름 따라가기 */}
           {timeline.length > 0 && (
-            <div className="pt-2 min-w-0 lg:order-1 lg:pt-0">
+            <div id="era-timeline" className="pt-2 min-w-0 lg:order-1 lg:pt-0 scroll-mt-20">
               <div className="flex items-end justify-between flex-wrap gap-2">
                 <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
                   <span className="block text-[8px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">TIMELINE · FOLLOW THE FLOW</span>
@@ -885,7 +1042,7 @@ export function HistoryView({
                   <button
                     onClick={() => changePhase(phaseIdx == null ? 0 : Math.max(0, phaseIdx - 1))}
                     disabled={phaseIdx === 0}
-                    className={`px-2.5 py-1 rounded ${btnGhostCls} disabled:opacity-40`}
+                    className={`px-3 py-2 rounded ${btnGhostCls} disabled:opacity-40`}
                   >
                     ← 이전 국면
                   </button>
@@ -895,7 +1052,7 @@ export function HistoryView({
                   <button
                     onClick={() => changePhase(phaseIdx == null ? 0 : Math.min(timeline.length - 1, phaseIdx + 1))}
                     disabled={phaseIdx === timeline.length - 1}
-                    className={`px-2.5 py-1 rounded ${btnGhostCls} disabled:opacity-40`}
+                    className={`px-3 py-2 rounded ${btnGhostCls} disabled:opacity-40`}
                   >
                     다음 국면 →
                   </button>
@@ -954,12 +1111,38 @@ export function HistoryView({
                                     <Line type="monotone" dataKey="금 현물" stroke={c('gold')} strokeWidth={1.2} dot={false} />
                                   </LineChart>
                                 </ResponsiveContainer>
-                                <p className="text-[10px] text-zinc-400">국면 확대 미니 차트 ({basisLabel}, 국면 시작=100) — 큰 차트는 위쪽에 있습니다.</p>
+                                <p className="text-[10px] text-zinc-400">
+                                  국면 확대 미니 차트 — <span style={{ color: c('stock') }}>주식</span>·<span style={{ color: c('bond') }}>채권</span>·<span style={{ color: c('gold') }}>금</span> ({basisLabel}, 국면 시작=100)
+                                </p>
                               </div>
                             )}
                           </div>
                         )}
                       </button>
+                      {active && (
+                        <div className="flex items-center gap-1.5 flex-wrap px-3 pb-2 pt-1 text-[11px]">
+                          <button
+                            onClick={() => changePhase(Math.max(0, i - 1))}
+                            disabled={i === 0}
+                            className={`px-3 py-2 rounded ${btnGhostCls} disabled:opacity-40`}
+                          >
+                            ← 이전 국면
+                          </button>
+                          <button
+                            onClick={() => changePhase(Math.min(timeline.length - 1, i + 1))}
+                            disabled={i === timeline.length - 1}
+                            className={`px-3 py-2 rounded ${btnGhostCls} disabled:opacity-40`}
+                          >
+                            다음 국면 →
+                          </button>
+                          <button
+                            onClick={() => document.getElementById('era-charts')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                            className={`px-3 py-2 rounded ${btnGhostCls} lg:hidden`}
+                          >
+                            큰 차트 보기 ↑
+                          </button>
+                        </div>
+                      )}
                     </li>
                   )
                 })}

@@ -75,18 +75,23 @@ export function HelpTip({
 
   return (
     <span className="relative inline-flex align-top ml-1">
+      {/* 히트 영역은 p-2(-m-2 상쇄)로 ~30px 확보하되, 시각적 원은 14px 유지 (터치 타깃 개선) */}
       <button
         ref={btnRef}
         type="button"
         aria-label={`${title} 설명`}
         aria-expanded={pos != null}
         onClick={() => (pos ? close() : openAt())}
-        className={`w-3.5 h-3.5 rounded-full border text-[9px] font-bold leading-none flex items-center justify-center transition-colors
+        className="p-2 -m-2 flex items-center justify-center"
+      >
+        <span
+          className={`w-3.5 h-3.5 rounded-full border text-[9px] font-bold leading-none flex items-center justify-center transition-colors
           ${pos
             ? 'border-emerald-700 text-emerald-700 dark:border-emerald-400 dark:text-emerald-400'
             : 'border-zinc-400 dark:border-zinc-600 text-zinc-400 dark:text-zinc-500 hover:border-emerald-600 hover:text-emerald-700 dark:hover:text-emerald-400'}`}
-      >
-        ?
+        >
+          ?
+        </span>
       </button>
       {pos != null &&
         createPortal(
