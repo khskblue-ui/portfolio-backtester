@@ -29,3 +29,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# E2E 검수 산출물
+audit/
+wrap-report.json
