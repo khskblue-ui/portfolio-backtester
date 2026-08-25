@@ -16,12 +16,12 @@ import { FlaskConical, CalendarRange, BookOpen, Flame } from 'lucide-react'
 import { HelpTip } from './HelpTip'
 import { EraStoryModal } from './EraStoryModal'
 import { ERA_STORIES } from './eraStories'
-import { ERA_TIMELINES } from './eraTimelines'
+import { ERA_TIMELINES, ERA_MARKERS } from './eraTimelines'
 import { ManiaStoryModal } from './ManiaStoryModal'
 import { MANIA_STORY } from './maniaStory'
 import { cardCls, btnGhostCls, fmtSignedPct } from './common'
 import { EPISODE_INFO } from './episodeInfo'
-import { fetchNasdaqMonthly, fetchNdx100Monthly, type NasdaqSeries } from './historyExtra'
+import { fetchNasdaqMonthly, fetchNdx100Monthly, fetchGspcDailyWindow, type NasdaqSeries, type DailySlice } from './historyExtra'
 import { histEraStrategies, type StrategyConfig } from '@/core'
 
 /**
@@ -104,6 +104,11 @@ export function HistoryView({
   // 연대기("흐름 따라가기")에서 선택된 국면 — 위 상세 차트 2개에 음영으로 반영.
   // 구간 변경 시 선택 지점(setSelected 호출부)에서 함께 리셋한다
   const [phaseIdx, setPhaseIdx] = useState<number | null>(null)
+  // 국면 선택 시 상세 차트를 해당 국면 ±6개월로 확대(자산은 국면 시작=100 재정규화).
+  // false로 두면 전체 구간(고점−12 ~ 회복+12) 눈금을 유지한다
+  const [phaseZoom, setPhaseZoom] = useState(true)
+  // 국면 확대 중 "일별 확대" 스트립(^GSPC 일별, 1927-12~) — 국면이 바뀌면 끔(캐시는 유지)
+  const [daily, setDaily] = useState<{ status: 'off' | 'loading' | 'on' | 'fail'; slice?: DailySlice | null }>({ status: 'off' })
   // 개요 차트 기간 확대(브러시) — 인덱스는 overviewData 기준. 밴드 클램프·축 라벨에 사용.
   // 브러시 자체는 비제어로 두고, 리셋은 key 재마운트(brushEpoch)로 처리한다.
   // 주의: recharts는 data 배열의 "참조"가 바뀌면 브러시 내부 창을 onChange 호출 없이
@@ -151,6 +156,13 @@ export function HistoryView({
       return () => window.clearTimeout(t)
     }
   }, [selected])
+
+  // 국면 이동(및 해제)의 단일 통로 — 확대는 기본값(켜짐)으로 되돌리고 일별 스트립은 끈다
+  const changePhase = (next: number | null) => {
+    setPhaseIdx(next)
+    setPhaseZoom(true)
+    setDaily({ status: 'off' })
+  }
 
   const axisTickColor = theme === 'dark' ? '#9ca3af' : '#6b7280'
   const c = (k: keyof typeof SERIES_COLORS) => SERIES_COLORS[k][theme]
@@ -274,16 +286,116 @@ export function HistoryView({
     return rows
   }, [data, pick, selectedEp])
 
-  // 선택 국면을 상세 차트 범위로 클램프한 음영 구간
+  // 국면 확대 데이터 — 선택 국면 ±6개월 창, 자산은 "국면 시작 = 100" 재정규화.
+  // 진단(2026-08-25): 전체 창(십수 년) 위의 얇은 음영만으로는 국면 내 움직임이
+  // 재생되지 않아, 확대·재정규화를 기본 동작으로 한다 (전체 보기 토글 제공)
+  const zoomData = useMemo(() => {
+    if (!data || !pick || !selectedEp || phaseIdx == null) return null
+    const ph = timeline[phaseIdx]
+    if (!ph) return null
+    const { dates } = data.series
+    const baseI = dates.indexOf(ph.from)
+    const toI = dates.indexOf(ph.to)
+    if (baseI < 0 || toI < 0) return null
+    const from = Math.max(0, baseI - 6)
+    const to = Math.min(dates.length - 1, toI + 6)
+    const normAt = (arr: (number | null)[], i: number) =>
+      arr[i] != null && arr[baseI] != null && (arr[baseI] as number) > 0
+        ? Number((((arr[i] as number) / (arr[baseI] as number)) * 100).toFixed(2))
+        : null
+    const rows = []
+    for (let i = from; i <= to; i++) {
+      rows.push({
+        ym: dates[i],
+        'S&P500 총수익': normAt(pick.stock, i),
+        '미 10년 국채': normAt(pick.bond, i),
+        '금 현물': normAt(pick.gold, i),
+        '현금(3개월물)': normAt(pick.bill, i),
+        'CPI 인플레': data.macro.cpiYoY[i],
+        '10년물 금리': data.macro.gs10[i],
+        실질금리: data.macro.realRate10[i],
+        CAPE: data.macro.cape[i],
+      })
+    }
+    return rows
+  }, [data, pick, selectedEp, phaseIdx, timeline])
+
+  const zoomed = phaseIdx != null && phaseZoom && zoomData != null && zoomData.length > 0
+  const chartData = zoomed && zoomData ? zoomData : detailData
+
+  // 선택 국면을 현재 차트 범위로 클램프한 음영 구간
   const phaseBand = useMemo(() => {
     const ph = phaseIdx != null ? timeline[phaseIdx] : null
-    if (!ph || detailData.length === 0) return null
-    const first = detailData[0].ym as string
-    const last = detailData[detailData.length - 1].ym as string
+    if (!ph || chartData.length === 0) return null
+    const first = chartData[0].ym as string
+    const last = chartData[chartData.length - 1].ym as string
     const x1 = ph.from < first ? first : ph.from
     const x2 = ph.to > last ? last : ph.to
     return x1 <= x2 ? { x1, x2 } : null
-  }, [phaseIdx, timeline, detailData])
+  }, [phaseIdx, timeline, chartData])
+
+  // 이벤트 마커 — 확대 모드에서만 (전체 창에서는 라벨이 겹쳐 소음이 됨)
+  const markersInView = useMemo(() => {
+    if (!zoomed || !selectedEp || chartData.length === 0) return []
+    const first = chartData[0].ym as string
+    const last = chartData[chartData.length - 1].ym as string
+    return (ERA_MARKERS[selectedEp.peak] ?? []).filter((m) => m.ym >= first && m.ym <= last)
+  }, [zoomed, selectedEp, chartData])
+
+  // 선택 국면의 자동 실측 스탯 — 국면 시작→끝의 자산 변화율과 매크로 이동
+  // (연대기 카드의 수기 '데이터:' 요약과 상호 검증되는 번들 직접 계산값)
+  const phaseStats = useMemo(() => {
+    if (!data || !pick || phaseIdx == null) return null
+    const ph = timeline[phaseIdx]
+    if (!ph) return null
+    const { dates } = data.series
+    const a = dates.indexOf(ph.from)
+    const b = dates.indexOf(ph.to)
+    if (a < 0 || b < 0) return null
+    const chg = (arr: (number | null)[]) =>
+      arr[a] != null && arr[b] != null && (arr[a] as number) > 0 ? ((arr[b] as number) / (arr[a] as number) - 1) * 100 : null
+    const pair = (arr: (number | null)[]) => (arr[a] != null && arr[b] != null ? { a: arr[a] as number, b: arr[b] as number } : null)
+    return {
+      stock: chg(pick.stock),
+      bond: chg(pick.bond),
+      gold: chg(pick.gold),
+      bill: chg(pick.bill),
+      cpi: pair(data.macro.cpiYoY),
+      gs10: pair(data.macro.gs10),
+      cape: pair(data.macro.cape),
+    }
+  }, [data, pick, phaseIdx, timeline])
+
+  // 일별 확대 가능 여부(^GSPC 일별은 1927-12~) 및 현재 확대 창
+  const zoomWindow = useMemo(() => {
+    if (!zoomed || !zoomData || zoomData.length === 0) return null
+    return { from: zoomData[0].ym as string, to: zoomData[zoomData.length - 1].ym as string }
+  }, [zoomed, zoomData])
+  const dailyAvailable = zoomWindow != null && zoomWindow.from >= '1928-01'
+  const toggleDaily = () => {
+    if (!zoomWindow) return
+    if (daily.status === 'on' || daily.status === 'loading') {
+      setDaily({ status: 'off' })
+      return
+    }
+    setDaily({ status: 'loading' })
+    void fetchGspcDailyWindow(zoomWindow.from, zoomWindow.to).then((slice) =>
+      setDaily(slice ? { status: 'on', slice } : { status: 'fail' })
+    )
+  }
+  const dailyRows = useMemo(() => {
+    if (daily.status !== 'on' || !daily.slice) return null
+    const base = daily.slice.close[0]
+    if (!(base > 0)) return null
+    return daily.slice.dates.map((d, i) => ({ d, v: Number(((daily.slice!.close[i] / base) * 100).toFixed(2)) }))
+  }, [daily])
+  const dailyBand = useMemo(() => {
+    const ph = phaseIdx != null ? timeline[phaseIdx] : null
+    if (!ph || !dailyRows || dailyRows.length === 0) return null
+    const x1 = dailyRows.find((r) => r.d >= `${ph.from}-01`)?.d
+    const x2 = [...dailyRows].reverse().find((r) => r.d <= `${ph.to}-31`)?.d
+    return x1 && x2 && x1 <= x2 ? { x1, x2 } : null
+  }, [phaseIdx, timeline, dailyRows])
 
   if (error) {
     return (
@@ -413,7 +525,7 @@ export function HistoryView({
                       x2={cx2}
                       fill={selected === e.peak ? 'rgba(227,73,72,0.28)' : 'rgba(227,73,72,0.12)'}
                       stroke="none"
-                      onClick={() => { setSelected(selected === e.peak ? null : e.peak); setPhaseIdx(null) }}
+                      onClick={() => { setSelected(selected === e.peak ? null : e.peak); changePhase(null) }}
                       style={{ cursor: 'pointer' }}
                     />
                   )
@@ -604,10 +716,32 @@ export function HistoryView({
           </div>
           <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">{EPISODE_INFO[selectedEp.peak]?.cause}</p>
 
-          {/* 자산 추이 (고점=100) */}
+          <div className="lg:grid lg:grid-cols-2 lg:gap-x-6 lg:items-start">
+          <div className="space-y-3 min-w-0 lg:order-2 lg:sticky lg:top-20">
+          {phaseIdx != null && timeline[phaseIdx] && (
+            <div className="flex items-center justify-between gap-2 flex-wrap rounded-lg bg-[#eef4ff] dark:bg-[#16223c] px-3 py-1.5">
+              <span className="text-[11px] font-mono text-[#2962ff] dark:text-[#5b8aff]">
+                {zoomed
+                  ? `국면 확대 ${timeline[phaseIdx].from} ~ ${timeline[phaseIdx].to} · ±6개월 · 국면 시작=100`
+                  : '전체 구간 눈금 표시 중'}
+              </span>
+              <div className="flex items-center gap-1.5">
+                {zoomed && dailyAvailable && (
+                  <button onClick={toggleDaily} className={`px-2.5 py-1 rounded text-[11px] font-medium ${btnGhostCls}`}>
+                    {daily.status === 'on' ? '일별 확대 끄기' : daily.status === 'loading' ? '일별 조회 중…' : '일별 확대 보기'}
+                  </button>
+                )}
+                <button onClick={() => setPhaseZoom((z) => !z)} className={`px-2.5 py-1 rounded text-[11px] font-medium ${btnGhostCls}`}>
+                  {zoomed ? '전체 구간 보기' : '국면 확대'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 자산 추이 (고점=100 / 확대 시 국면 시작=100) */}
           <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 pt-1">
-            <span className="block text-[8px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">ASSETS · PEAK = 100</span>
-            자산별 추이 — 주식이 무너질 때 무엇이 버텼나 ({basisLabel} 기준, 고점=100)
+            <span className="block text-[8px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">ASSETS · {zoomed ? 'PHASE START = 100' : 'PEAK = 100'}</span>
+            자산별 추이 — 주식이 무너질 때 무엇이 버텼나 ({basisLabel} 기준, {zoomed ? '국면 시작=100' : '고점=100'})
             <HelpTip title="각 자산을 어떻게 계산했나">
               위의 실질/명목 토글이 이 차트에도 적용됩니다. <b>주식</b> = S&P500 배당 재투자
               총수익(1957년 이전은 전신 지수를 소급 연결). <b>국채</b> = 미 10년물 금리로 계산한
@@ -618,17 +752,27 @@ export function HistoryView({
             </HelpTip>
           </h4>
           <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={detailData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }} syncId="era-detail">
+            <LineChart data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }} syncId="era-detail">
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" vertical={false} />
               <XAxis dataKey="ym" tick={{ fontSize: 11, fill: axisTickColor }} stroke={axisTickColor} minTickGap={50} />
               <YAxis tick={{ fontSize: 11, fill: axisTickColor }} stroke={axisTickColor} width={44} domain={['auto', 'auto']} tickFormatter={(v: number) => String(Math.round(v))} />
               <Tooltip
-                formatter={(v) => `${Number(v).toFixed(1)} (고점=100)`}
+                formatter={(v) => `${Number(v).toFixed(1)} (${zoomed ? '국면 시작' : '고점'}=100)`}
                 labelStyle={tooltipLabelStyle}
                 contentStyle={tooltipContentStyle}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               {phaseBand && <ReferenceArea x1={phaseBand.x1} x2={phaseBand.x2} fill="rgba(41,98,255,0.12)" stroke="rgba(41,98,255,0.35)" strokeDasharray="4 3" />}
+              {markersInView.map((m) => (
+                <ReferenceLine
+                  key={m.ym}
+                  x={m.ym}
+                  stroke={axisTickColor}
+                  strokeDasharray="3 3"
+                  strokeOpacity={0.6}
+                  label={{ value: m.label, fontSize: 9.5, fill: axisTickColor, position: 'insideTopRight', angle: 0 }}
+                />
+              ))}
               <Line type="monotone" dataKey="S&P500 총수익" stroke={c('stock')} strokeWidth={2} dot={false} />
               <Line type="monotone" dataKey="미 10년 국채" stroke={c('bond')} strokeWidth={2} dot={false} />
               <Line type="monotone" dataKey="금 현물" stroke={c('gold')} strokeWidth={2} dot={false} />
@@ -639,6 +783,28 @@ export function HistoryView({
             <p className="text-[11px] text-zinc-400 leading-relaxed">
               이 시대의 금 가격은 연 단위 자료라 계단 모양으로 표시됩니다. 월별 움직임으로 읽지 마세요 (1949년의 하락 표시도 실제 시세가 아닌 자료상의 흔적입니다).
             </p>
+          )}
+
+          {/* 일별 확대 스트립 — 확대 모드 전용(^GSPC 일별, 명목 가격) */}
+          {zoomed && daily.status === 'fail' && (
+            <p className="text-[11px] text-red-600 dark:text-red-400">일별 데이터 조회에 실패했습니다. 네트워크 상태를 확인한 뒤 "일별 확대 보기"를 다시 눌러 주세요.</p>
+          )}
+          {zoomed && dailyRows && (
+            <>
+              <ResponsiveContainer width="100%" height={120}>
+                <LineChart data={dailyRows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.12)" vertical={false} />
+                  <XAxis dataKey="d" tick={{ fontSize: 10, fill: axisTickColor }} stroke={axisTickColor} minTickGap={70} />
+                  <YAxis tick={{ fontSize: 10, fill: axisTickColor }} stroke={axisTickColor} width={44} domain={['auto', 'auto']} tickFormatter={(v: number) => String(Math.round(v))} />
+                  <Tooltip formatter={(v) => `${Number(v).toFixed(1)} (창 시작=100)`} labelStyle={tooltipLabelStyle} contentStyle={tooltipContentStyle} />
+                  {dailyBand && <ReferenceArea x1={dailyBand.x1} x2={dailyBand.x2} fill="rgba(41,98,255,0.12)" stroke="none" />}
+                  <Line type="monotone" dataKey="v" name="^GSPC 일별" stroke={c('stock')} strokeWidth={1.3} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+              <p className="text-[11px] text-zinc-400 leading-relaxed">
+                일별 확대 = ^GSPC 가격지수(명목·배당 제외), 창 시작=100. 위의 월평균 선이 뭉개는 일간 급등락의 모양을 보는 용도라, 실질 총수익 눈금과 수치를 직접 비교하면 안 됩니다.
+              </p>
+            </>
           )}
 
           {/* 매크로 배경 */}
@@ -659,7 +825,7 @@ export function HistoryView({
             </HelpTip>
           </h4>
           <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={detailData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }} syncId="era-detail">
+            <LineChart data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }} syncId="era-detail">
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" vertical={false} />
               <XAxis dataKey="ym" tick={{ fontSize: 11, fill: axisTickColor }} stroke={axisTickColor} minTickGap={50} />
               <YAxis
@@ -695,24 +861,29 @@ export function HistoryView({
             왼쪽 축 = %(인플레이션·금리), 오른쪽 점선 = CAPE(주가가 최근 10년 평균 이익의 몇 배인가).
             인플레이션형 구간은 실질금리가 마이너스로 가라앉고, 밸류에이션 붕괴형은 CAPE가 극단인 상태에서 하락이 시작되는 패턴을 확인해 보세요.
           </p>
+          </div>
 
           {/* 연대기 — 흐름 따라가기 */}
           {timeline.length > 0 && (
-            <div className="pt-2">
+            <div className="pt-2 min-w-0 lg:order-1 lg:pt-0">
               <div className="flex items-end justify-between flex-wrap gap-2">
                 <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
                   <span className="block text-[8px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">TIMELINE · FOLLOW THE FLOW</span>
                   흐름 따라가기 — 시간 순서로 읽는 이 구간
                   <HelpTip title="연대기 읽는 법">
-                    이 구간을 시간 순서의 국면으로 쪼갠 연대기입니다. 국면을 클릭하면 <b>위의
-                    차트들에 해당 기간이 파란 음영</b>으로 표시되어, 데이터의 꺾임과 그 이유를 짝지어 읽을 수
-                    있습니다. 각 국면의 수치는 이 앱에 내장된 검증 데이터에서 추출한 실측값이고,
+                    이 구간을 시간 순서의 국면으로 쪼갠 연대기입니다. 국면을 클릭하면 <b>차트가
+                    해당 국면 ±6개월로 확대</b>되고(자산은 국면 시작=100으로 다시 매겨짐) 파란
+                    음영과 이벤트 마커가 표시되어, 데이터의 꺾임과 그 이유를 짝지어 읽을 수
+                    있습니다. 전체 구간 눈금이 필요하면 차트 위의 "전체 구간 보기"를 누르세요.
+                    1928년 이후 국면에서는 "일별 확대 보기"로 월평균이 뭉개는 일간 급등락도 겹쳐
+                    볼 수 있습니다. 각 국면의 수치는 이 앱에 내장된 검증 데이터에서 추출한
+                    실측값이고, 카드의 "자동 실측" 줄은 같은 번들에서 즉석 계산한 값입니다.
                     서사는 학계·시장의 표준 해석만 담았습니다(해석이 갈리는 지점은 본문에 명시).
                   </HelpTip>
                 </h4>
                 <div className="flex items-center gap-1.5 text-[11px]">
                   <button
-                    onClick={() => setPhaseIdx((i) => (i == null ? 0 : Math.max(0, i - 1)))}
+                    onClick={() => changePhase(phaseIdx == null ? 0 : Math.max(0, phaseIdx - 1))}
                     disabled={phaseIdx === 0}
                     className={`px-2.5 py-1 rounded ${btnGhostCls} disabled:opacity-40`}
                   >
@@ -722,7 +893,7 @@ export function HistoryView({
                     {phaseIdx != null ? `${phaseIdx + 1} / ${timeline.length}` : `${timeline.length}개 국면`}
                   </span>
                   <button
-                    onClick={() => setPhaseIdx((i) => (i == null ? 0 : Math.min(timeline.length - 1, i + 1)))}
+                    onClick={() => changePhase(phaseIdx == null ? 0 : Math.min(timeline.length - 1, phaseIdx + 1))}
                     disabled={phaseIdx === timeline.length - 1}
                     className={`px-2.5 py-1 rounded ${btnGhostCls} disabled:opacity-40`}
                   >
@@ -742,7 +913,7 @@ export function HistoryView({
                         }`}
                       />
                       <button
-                        onClick={() => setPhaseIdx(active ? null : i)}
+                        onClick={() => changePhase(active ? null : i)}
                         className={`w-full text-left rounded-lg px-3 py-2 transition-colors ${
                           active ? 'bg-[#eef4ff] dark:bg-[#16223c]' : 'hover:bg-[#f3f5f9] dark:hover:bg-[#171c28]'
                         }`}
@@ -760,7 +931,32 @@ export function HistoryView({
                             <p className="text-[12px] font-mono leading-relaxed text-zinc-500 dark:text-zinc-400 bg-white/60 dark:bg-black/20 rounded px-2 py-1.5">
                               데이터: {ph.data}
                             </p>
+                            {phaseStats && (
+                              <p className="text-[11px] font-mono leading-relaxed text-zinc-400 dark:text-zinc-500">
+                                자동 실측·{basisLabel} 주식 {phaseStats.stock == null ? '—' : fmtSignedPct(phaseStats.stock)} · 채권{' '}
+                                {phaseStats.bond == null ? '—' : fmtSignedPct(phaseStats.bond)} · 금 {phaseStats.gold == null ? '—' : fmtSignedPct(phaseStats.gold)} · 현금{' '}
+                                {phaseStats.bill == null ? '—' : fmtSignedPct(phaseStats.bill)}
+                                {phaseStats.cpi ? ` | CPI ${phaseStats.cpi.a.toFixed(1)}→${phaseStats.cpi.b.toFixed(1)}%` : ''}
+                                {phaseStats.gs10 ? ` · 금리 ${phaseStats.gs10.a.toFixed(1)}→${phaseStats.gs10.b.toFixed(1)}%` : ''}
+                                {phaseStats.cape ? ` · CAPE ${phaseStats.cape.a.toFixed(1)}→${phaseStats.cape.b.toFixed(1)}` : ''}
+                              </p>
+                            )}
                             <p className="text-[12.5px] leading-relaxed text-zinc-700 dark:text-zinc-200">{ph.story}</p>
+                            {zoomed && zoomData && (
+                              <div className="lg:hidden pt-1">
+                                <ResponsiveContainer width="100%" height={110}>
+                                  <LineChart data={zoomData} margin={{ top: 4, right: 6, left: 0, bottom: 0 }}>
+                                    <XAxis dataKey="ym" tick={{ fontSize: 9.5, fill: axisTickColor }} stroke={axisTickColor} minTickGap={55} />
+                                    <YAxis tick={{ fontSize: 9.5, fill: axisTickColor }} stroke={axisTickColor} width={36} domain={['auto', 'auto']} tickFormatter={(v: number) => String(Math.round(v))} />
+                                    {phaseBand && <ReferenceArea x1={phaseBand.x1} x2={phaseBand.x2} fill="rgba(41,98,255,0.12)" stroke="none" />}
+                                    <Line type="monotone" dataKey="S&P500 총수익" stroke={c('stock')} strokeWidth={1.6} dot={false} />
+                                    <Line type="monotone" dataKey="미 10년 국채" stroke={c('bond')} strokeWidth={1.2} dot={false} />
+                                    <Line type="monotone" dataKey="금 현물" stroke={c('gold')} strokeWidth={1.2} dot={false} />
+                                  </LineChart>
+                                </ResponsiveContainer>
+                                <p className="text-[10px] text-zinc-400">국면 확대 미니 차트 ({basisLabel}, 국면 시작=100) — 큰 차트는 위쪽에 있습니다.</p>
+                              </div>
+                            )}
                           </div>
                         )}
                       </button>
@@ -769,10 +965,11 @@ export function HistoryView({
                 })}
               </ol>
               <p className="mt-2 text-[11px] text-zinc-400">
-                국면을 선택하면 위 차트들에 해당 기간이 파란 음영으로 표시됩니다. "왜 이렇게 움직였나" 버튼의 자산별 스토리와 함께 읽으면 좋습니다.
+                국면을 선택하면 차트가 해당 국면으로 확대되고 파란 음영과 이벤트 마커가 표시됩니다. "왜 이렇게 움직였나" 버튼의 자산별 스토리와 함께 읽으면 좋습니다.
               </p>
             </div>
           )}
+          </div>
         </div>
       )}
 

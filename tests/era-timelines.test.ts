@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { ERA_TIMELINES } from '../src/ui/eraTimelines'
+import { ERA_TIMELINES, ERA_MARKERS } from '../src/ui/eraTimelines'
 
 const h = JSON.parse(readFileSync(new URL('../public/data/history.json', import.meta.url), 'utf8'))
 
@@ -46,6 +46,25 @@ describe('구간 연대기', () => {
         expect(/\d/.test(p.data), `${peak} ${p.title}: data에 수치 없음`).toBe(true)
         expect(p.story.length, `${peak} ${p.title}`).toBeGreaterThan(60)
         expect(p.title.length).toBeGreaterThanOrEqual(3) // 예: "대폭락"
+      }
+    }
+  })
+
+  it('이벤트 마커 — 7개 에피소드 전부, YM 형식·시간 순·차트 창 안·짧은 라벨', () => {
+    for (const ep of h.episodes) {
+      const ms = ERA_MARKERS[ep.peak]
+      expect(ms, `마커 누락: ${ep.peak}`).toBeDefined()
+      expect(ms.length, ep.peak).toBeGreaterThanOrEqual(3)
+      const lo = addMonths(ep.peak, -12)
+      const hi = addMonths(ep.recovery ?? h.meta.dataEnd, 12)
+      let prev = ''
+      for (const m of ms) {
+        expect(m.ym, `${ep.peak} ${m.label}`).toMatch(YM)
+        expect(m.ym >= lo && m.ym <= hi, `${ep.peak} ${m.label}: 창 밖 (${m.ym}, 허용 ${lo}~${hi})`).toBe(true)
+        expect(m.ym >= prev, `${ep.peak} ${m.label}: 시간 역행`).toBe(true)
+        expect(m.label.length).toBeGreaterThanOrEqual(2)
+        expect(m.label.length, `${ep.peak} ${m.label}: 라벨이 김`).toBeLessThanOrEqual(10)
+        prev = m.ym
       }
     }
   })

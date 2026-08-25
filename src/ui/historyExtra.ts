@@ -168,3 +168,49 @@ export async function fetchNdx100Monthly(): Promise<NasdaqSeries | null> {
     return null
   }
 }
+
+/** 역사 구간 상세의 "일별 확대" 스트립용 — 지정 월 창의 ^GSPC 일별 종가.
+ * 명목 가격지수(배당 제외)라 실질 총수익 차트와 눈금 비교는 불가하고,
+ * 월평균 선이 뭉개는 일간 급등락의 "모양"을 보는 용도다. 데이터는 1927-12~. */
+export interface DailySlice {
+  dates: string[]
+  close: number[]
+}
+
+const dailyCache = new Map<string, DailySlice | null>()
+
+export async function fetchGspcDailyWindow(fromYm: string, toYm: string): Promise<DailySlice | null> {
+  const key = `${fromYm}|${toYm}`
+  const hit = dailyCache.get(key)
+  if (hit !== undefined) return hit
+  const p1 = Math.floor(Date.UTC(Number(fromYm.slice(0, 4)), Number(fromYm.slice(5, 7)) - 1, 1) / 1000)
+  const p2 = Math.floor(Date.UTC(Number(toYm.slice(0, 4)), Number(toYm.slice(5, 7)), 1) / 1000) // 다음 달 1일 (미포함 끝)
+  try {
+    const res = await fetchWithTimeout(`/yf/v8/finance/chart/%5EGSPC?period1=${p1}&period2=${p2}&interval=1d`, 15000)
+    if (!res.ok) {
+      dailyCache.set(key, null)
+      return null
+    }
+    const json: unknown = await res.json()
+    const result = (json as { chart?: { result?: unknown[] } })?.chart?.result?.[0] as
+      | { timestamp?: number[]; meta?: { gmtoffset?: number }; indicators?: { quote?: { close?: (number | null)[] }[] } }
+      | undefined
+    const ts = result?.timestamp ?? []
+    const closes = result?.indicators?.quote?.[0]?.close ?? []
+    const off = result?.meta?.gmtoffset ?? 0
+    const dates: string[] = []
+    const close: number[] = []
+    for (let i = 0; i < ts.length; i++) {
+      const v = closes[i]
+      if (v == null || !(v > 0)) continue
+      dates.push(new Date((ts[i] + off) * 1000).toISOString().slice(0, 10))
+      close.push(v)
+    }
+    const slice = dates.length >= 5 ? { dates, close } : null
+    dailyCache.set(key, slice)
+    return slice
+  } catch {
+    dailyCache.set(key, null)
+    return null
+  }
+}
