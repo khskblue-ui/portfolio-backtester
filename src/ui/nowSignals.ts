@@ -15,7 +15,8 @@
  * - 라이브 조회 실패 시 번들(월평균, dataEnd 기준)로 폴백
  *
  * 임계값의 역사적 근거 (번들 데이터 실측):
- * - CAPE: 1929 고점 32.6 / 2000 고점 44 / 1968 고점 24.1 (B형 시작 밸류에이션)
+ * - CAPE: 1929 32.6 / 2000 42.9 / 1968 22.3 — 각 B형 에피소드 고점월의 실측 CAPE
+ *   (CAPE 자체의 사상 최고는 1999-12의 44.2 — 기준 통일: 2026-08-25, HANDOFF §2-9)
  * - CPI YoY: A형 본격화 수준 5%+ (1916: 20%대, 1946: 19%, 1973: 12%);
  *   3% 돌파 + 상승 추세 = 1968년형 "이륙 초입"
  * - 실질금리: 표시는 사전적(TIPS) 단일 지표 — 시장이 실제로 쓰는 실질 할인율.
@@ -132,13 +133,18 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
   const capeSeries = m.capeProxy ?? m.cape
   const capeBundle = latest(capeSeries)
   const isProxy = capeBundle != null && m.cape[capeBundle.i] == null
+  // 실측(공표) CAPE의 마지막 달 — 프록시 연장이 어디서 시작되는지 카드에 명시
+  const capeRealYm = (() => {
+    for (let i = m.cape.length - 1; i >= 0; i--) if (m.cape[i] != null) return dates[i]
+    return null
+  })()
   // 라이브: 프록시를 실질가격 변화로 미세 연장 (2개월 내 배당·이익 성장 보정은 무시 가능)
   const capeV = capeBundle ? (live.stock && refs?.capeProxy != null ? refs.capeProxy * (stockRealNow / refs.stockRealLast) : capeBundle.v) : null
   const capeAsOf = live.stock ? stockAsOf : dates[n]
-  // 임계값은 차트 기준선·본문과 동일한 실측 시작값(24 / 32.6 / 44)으로 통일
+  // 임계값은 차트 기준선·본문과 동일한 "에피소드 고점월 실측 CAPE"(22.3 / 32.6 / 42.9)로 통일
   let valLevel: SignalLevel = 'ok'
   if (capeV != null && capeV >= 32.6) valLevel = 'alert'
-  else if (capeV != null && capeV >= 24) valLevel = 'watch'
+  else if (capeV != null && capeV >= 22.3) valLevel = 'watch'
   signals.push({
     key: 'valuation',
     label: `밸류에이션 (CAPE${isProxy || live.stock ? ' 프록시' : ''})`,
@@ -147,9 +153,9 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
     asOf: capeAsOf,
     reason:
       capeV != null
-        ? `역사적 대형 하락(B형)의 시작 밸류에이션: 1968년 24.1 · 1929년 32.6 · 2000년 44. 현재 ${capeV.toFixed(1)}(${
-            capeV >= 44 ? '2000년 닷컴 버블 수준' : capeV >= 32.6 ? '1929년 수준 초과' : capeV >= 24 ? '1968년 수준 초과' : '역사적 위험 구간 미만'
-          }). (프록시: 이익·배당 확정이 늦는 최근 1~2개월만 실질 주가 변화로 연장한 값이고, 그 외 구간은 Shiller 공표 실측치)`
+        ? `역사적 대형 하락(B형)이 시작된 달의 실측 CAPE: 1968년 22.3 · 1929년 32.6 · 2000년 42.9. 현재 ${capeV.toFixed(1)}(${
+            capeV >= 42.9 ? '2000년 닷컴 버블 수준' : capeV >= 32.6 ? '1929년 수준 초과' : capeV >= 22.3 ? '1968년 수준 초과' : '역사적 위험 구간 미만'
+          }). (프록시: 실측 CAPE는 ${capeRealYm ?? '—'}까지이고 그 이후는 실질 주가 변화로 연장한 근사치 — 연장이 길어질수록 오차가 커질 수 있음)`
         : 'CAPE 데이터 없음',
   })
 
@@ -270,7 +276,7 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
   const infRising = cpiV != null && cpiV >= 3 && rising
   const infHigh = infLevel === 'alert'
   if (capeHigh && infHigh) analog = '1973년형 (고밸류에이션 + 본격 인플레이션) 조합에 근접'
-  else if (capeHigh && infRising) analog = '1968년형 — 고밸류에이션에서 인플레이션이 이륙하던 초입과 유사한 조합 (단, 밸류에이션은 당시 24 vs 지금이 더 높음)'
+  else if (capeHigh && infRising) analog = '1968년형 — 고밸류에이션에서 인플레이션이 이륙하던 초입과 유사한 조합 (단, 밸류에이션은 당시 22.3 vs 지금이 더 높음)'
   else if (capeHigh) analog = '2000년형 — 인플레 없는 극단 밸류에이션'
   else if (infHigh) analog = '1946/1973년형 — 인플레이션 주도'
 
@@ -289,7 +295,7 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
     `${signals.filter((s) => s.level === 'alert').map((s) => s.label).join(', ') || '없음'} = 경계, ` +
     `${signals.filter((s) => s.level === 'watch').map((s) => s.label).join(', ') || '없음'} = 주의. ` +
     `역사가 보여주는 것: 선행조건 충족은 "하락이 곧 온다"가 아니라 "만약 하락이 오면 깊고 길 수 있는 출발점"이라는 뜻입니다. ` +
-    `CAPE가 1968년 수준(24)을 넘은 1996년 이후에도 시장은 4년을 더 올랐고, 고평가 해소가 하락 없이 이익 성장만으로 이뤄진 사례도 있습니다. ` +
+    `CAPE가 1968년 수준(22.3)을 넘은 1995년 이후에도 시장은 5년을 더 올랐고, 고평가 해소가 하락 없이 이익 성장만으로 이뤄진 사례도 있습니다. ` +
     `반대로 1929·2000년의 공통점은 "극단 밸류에이션에서 출발한 하락은 얕게 끝나지 않았다"는 것입니다.`
 
   return { asOf: stockAsOf, signals, headline, rationale, analog, live: anyLive }

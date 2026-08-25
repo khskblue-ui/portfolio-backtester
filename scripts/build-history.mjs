@@ -286,6 +286,18 @@ const capeProxy = []
   }
 }
 
+// 데이터 신선도 가드: 실측 CAPE 공백(프록시 꼬리)이 길어지면 소스 갱신을 권고.
+// 프록시는 E10 성장 상수(2%/년) 가정이라 공백이 길수록 실측과 벌어진다(과거 3년 방치 시 +9%).
+{
+  let lastReal = -1
+  for (let i = 0; i < capeArr.length; i++) if (capeArr[i] != null) lastReal = i
+  const proxyTail = dates.length - 1 - lastReal
+  if (proxyTail > 4)
+    console.warn(
+      `⚠ CAPE 실측 공백 ${proxyTail}개월 — data-src Shiller CSV 갱신 권장 (원본 ie_data.xls 재변환, docs/HANDOFF.md §2-9 재현 절차)`
+    )
+}
+
 // 1900-01 = 100 정규화
 const baseI = dates.indexOf('1900-01')
 assert(baseI >= 0, '1900-01 기준월 없음')

@@ -166,14 +166,14 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
       },
       {
         title: 'CAPE (실측 1881~ + 말단 프록시)',
-        sub: '기준선 = 역사 하락 시작점: 1968년 24 · 1929년 32.6 · 2000년 44',
+        sub: '기준선 = 역사 하락이 시작된 달의 실측 CAPE: 1968년 22.3 · 1929년 32.6 · 2000년 42.9',
         color: theme === 'dark' ? '#a3a3a3' : '#525252',
         data: mk(capeArr, { label: liveLabel, v: capeLive }),
         dataRecent: mkRecent(capeArr, { label: liveLabel, v: capeLive }),
         refs: [
-          { y: 24, label: '1968' },
+          { y: 22.3, label: '1968' },
           { y: 32.6, label: '1929', danger: true },
-          { y: 44, label: '2000', danger: true },
+          { y: 42.9, label: '2000', danger: true },
         ],
         fmt: (v) => v.toFixed(1),
       },
@@ -329,7 +329,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
           붙여 계산하고 3시간 동안 저장해 다시 씁니다. 과거 흐름은 월 단위 평균값이고 차트의
           마지막 점만 하루 단위 최신 값이라, 마지막 점은 과거 선보다 더 크게 출렁여 보일 수
           있습니다. 역사 하락 구간(음영)의 기준과 비교할 때는 이 차이를 감안하세요. CAPE는 이익·배당 확정이
-          늦는 최근 1~2개월만 근사치(프록시)로 연장되고, 그 외 구간은 실측 공표치입니다. 카드의 판정 이유에 표기됩니다. 선행(Forward) P/E를
+          늦어 실측이 없는 마지막 몇 달만 근사치(프록시)로 연장되고, 그 외 구간은 실측 공표치입니다. 실측 기준월은 카드의 판정 이유에 표기됩니다. 선행(Forward) P/E를
           신호로 쓰지 않는 이유: 분모인 애널리스트 추정 이익이 하필 침체 직전에 크게
           부풀어(2008년 +43%) 고점에서 오히려 싸 보이기 때문입니다(가이드북의 CAPE 절 참조).
           추정 없이 계산한 변형(실현 선행 P/E)은 미래 정보가 필요해 실시간 신호가 될 수 없어,

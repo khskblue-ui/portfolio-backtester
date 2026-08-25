@@ -42,7 +42,7 @@ describe('신호 규칙 경계', () => {
     expect(a.headline).toContain('한복판')
   })
 
-  it('CAPE 32 이상 = 경계 (1929 시작 수준), 24 이상 = 주의 (1968 수준)', () => {
+  it('CAPE 32.6 이상 = 경계 (1929 시작 수준), 22.3 이상 = 주의 (1968 시작 수준)', () => {
     expect(assessNow(mkHistory({ cape: Array(24).fill(33) })).signals.find((s) => s.key === 'valuation')!.level).toBe('alert')
     expect(assessNow(mkHistory({ cape: Array(24).fill(25) })).signals.find((s) => s.key === 'valuation')!.level).toBe('watch')
   })
@@ -85,11 +85,11 @@ describe('신호 규칙 경계', () => {
     expect(a.signals.find((s) => s.key === 'curve')!.level).toBe('alert')
   })
 
-  it('CAPE 판정 임계값 = 차트 기준선(32.6/44)과 정확히 일치', () => {
+  it('CAPE 판정 임계값 = 차트 기준선(32.6/42.9)과 정확히 일치', () => {
     const val = (c: number) => assessNow(mkHistory({ cape: Array(24).fill(c) })).signals.find((s) => s.key === 'valuation')!
     expect(val(32.3).level).toBe('watch') // 32.6 미만은 경계 아님 (기준선 아래인데 경계로 뜨던 버그)
     expect(val(32.7).level).toBe('alert')
-    expect(val(43.5).reason).toContain('1929년 수준 초과') // 44 미만은 "2000년 수준" 아님
+    expect(val(42.5).reason).toContain('1929년 수준 초과') // 42.9 미만은 "2000년 수준" 아님
     expect(val(44.2).reason).toContain('2000년 닷컴 버블 수준')
   })
 
