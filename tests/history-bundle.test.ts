@@ -36,11 +36,12 @@ describe('역사 차트 번들 (public/data/history.json) 무결성', async () =
     // 닷컴 고점 2000-08: 실현 선행 ~48 (트레일링 28보다 훨씬 비싸게 지불)
     expect(at(peFwdReal, '2000-08')).toBeGreaterThan(40)
     expect(at(peFwdReal, '2000-08')).toBeLessThan(55)
-    // 사후 지표 경계: 이익 데이터 끝(2023-06)에서 12개월 전 이후는 정의상 null
-    expect(at(peFwdReal, '2022-06')).not.toBeNull()
-    expect(at(peFwdReal, '2022-07')).toBeNull()
-    expect(at(peTrail, '2023-06')).not.toBeNull()
-    expect(at(peTrail, '2023-07')).toBeNull()
+    // 사후 지표 경계: 실현 선행(P/E(t+12))은 정의상 트레일링(이익 확정월)보다
+    // 정확히 12개월 먼저 끝난다 — 소스 갱신으로 확정월이 이동해도 유지되는 불변식
+    const lastIdx = (arr: (number | null)[]) => arr.reduce((p, v, i) => (v != null ? i : p), -1)
+    expect(lastIdx(peFwdReal)).toBe(lastIdx(peTrail) - 12)
+    // 2026-08 소스 갱신(원본 ie_data.xls 직변환)으로 이익 확정월이 2023-06 이후로 연장됨
+    expect(lastIdx(peTrail)).toBeGreaterThan(dates.indexOf('2023-06'))
   })
 
   it('현금(단기국채) 시리즈 — 1929 디플레 실질 플러스 / 1946 금융억압 실질 마이너스', () => {

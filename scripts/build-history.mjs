@@ -4,9 +4,12 @@
  * 실행: node scripts/build-history.mjs
  *
  * 소스 (전부 리포에 원본 커밋 — 재현 가능):
- * - data-src/shiller-sp500-monthly.csv — Shiller 예일 월간 데이터 미러
- *   (github.com/datasets/s-and-p-500, ODC-PDDL): 가격(일별 종가의 월평균)·배당(보간)·
- *   CPI·GS10·PE10. ⚠ 미러의 펀더멘털은 2023-06(CPI·GS10은 2023-09)에서 갱신 중단
+ * - data-src/shiller-sp500-monthly.csv — Shiller 예일 월간 데이터셋. 원본 ie_data.xls
+ *   (shillerdata.com 미러, 저장본 2026-08-04)를 동일 스키마 CSV로 변환(2026-08-25 수집).
+ *   가격(일별 종가의 월평균)·배당(보간)·이익·CPI·GS10·PE10(공표 CAPE).
+ *   컬럼별 최신: P·CAPE 2026-08 / D 2026-06 / E 2026-03 — 배당이 비는 최근 1~2개월은
+ *   아래 FRED/TR 연장이 담당. ⚠ 과거 소스(github.com/datasets/s-and-p-500 미러)는
+ *   펀더멘털이 2023-06에서 갱신 중단되어 원본 직변환으로 교체함
  * - data-src/gold-monthly.csv — 금 월간 (github.com/datasets/gold-prices, ODC-PDDL, ~현재)
  * - data-src/fred-macro-monthly.csv — FRED 공식 시리즈 (수집: /fred 프록시, 2026-07):
  *   · M13002US35620M156NNBR: NBER 상업어음 금리(NY) 1857~1971 — 단기금리 1934년 이전 구간
@@ -14,13 +17,13 @@
  *   · GS10: 10년물 1953~ — Shiller GS10과 동일 시리즈, 2023-07 이후 연장용
  *   · CPIAUCNS: CPI-U(NSA) 1913~ — Shiller CPI와 동일 시리즈, 연장용
  * - data-src/sp500tr-monthly-avg.csv — ^SP500TR(총수익지수) 일별 종가의 월평균
- *   (Yahoo /yf 프록시로 수집·재계산) — 주식 총수익 2023-07 이후 연장용.
+ *   (Yahoo /yf 프록시로 수집·재계산) — Shiller 배당 미확정 꼬리의 주식 총수익 연장용.
  *   Shiller 명목 총수익과 같은 대상(S&P500 배당 재투자)·같은 관례(월평균)
  *
- * 연장 방법: 2023-06까지는 Shiller 그대로, 2023-07부터
- *   주식 = ^SP500TR 월평균 성장률로 체인, 채권 = FRED GS10으로 동일 공식,
+ * 연장 방법: Shiller 완비 마지막 달(P·D·CPI·GS10 모두 존재)까지는 Shiller 그대로,
+ *   그다음 달부터 주식 = ^SP500TR 월평균 성장률로 체인, 채권 = FRED GS10으로 동일 공식,
  *   금 = 원본 계속, CPI = CPIAUCNS 체인(2025-10 결측 1개월은 선형보간 —
- *   연방정부 데이터 공백), CAPE = 이익 데이터 부재로 2023-06 이후 null
+ *   연방정부 데이터 공백), CAPE = 실측 마지막 달 이후 꼬리만 프록시 연장(아래)
  *
  * 산출 1) public/data/history.json — 역사 연구 탭 (1900-01=100 정규화):
  * - series: stock/bond/gold/bill 실질 + *Nom 명목
@@ -92,8 +95,9 @@ const fredMap = new Map(
 
 // ─── 월간 레코드 통합 (Shiller 1871~2023-06 + FRED/TR 연장) ──────────────────
 
-// 미러 오기입 교정 — 교차 검증(scripts/verify-history.mjs)으로 확정된 단일 월 오류.
-// 1974-07: 미러가 월평균 대신 월말 종가(79.31)를 기입 — ^GSPC 22거래일 평균 82.82
+// 원본 오기입 교정 — 교차 검증(scripts/verify-history.mjs)으로 확정된 단일 월 오류.
+// 1974-07: 원본 ie_data.xls 자체가 월평균 대신 월말 종가(79.31)를 기입(2026-08-25
+// 원본 재확인) — ^GSPC 22거래일 평균 82.82
 // (Shiller 관례 = 일별 종가의 월평균, 인접 795/796개월은 야후 재계산과 <1% 일치)
 const SP500_CORRECTIONS = { '1974-07': 82.82 }
 
@@ -144,7 +148,7 @@ for (let ym = nextYm(lastShiller); ; ym = nextYm(ym)) {
   if (!f?.cpi || !f?.gs10 || !tr) break
   extRows.push({ ym, tr, cpi: f.cpi, gs10: f.gs10, cape: null })
 }
-assert(extRows.length > 24, `연장 구간이 너무 짧음 (${extRows.length}개월)`)
+assert(extRows.length >= 1, `연장 구간 없음 — FRED/TR CSV가 Shiller 마지막 달(${lastShiller}) 이후를 덮는지 확인`)
 console.log(`FRED/TR 연장: ${extRows[0].ym} ~ ${extRows[extRows.length - 1].ym} (${extRows.length}개월)`)
 
 // 연장 접합 검증 ② 주식 TR 관례 일치: 겹치는 마지막 두 달의 성장률 비교
@@ -250,7 +254,7 @@ for (let i = 0; i < dates.length; i++) {
 //   peFwdReal = P(t) ÷ E(t+12)  — 그 뒤 12개월 동안 "실제로 실현된" 이익
 // peFwdReal은 애널리스트 추정이 아니라 사후 확정 이익이므로 추정 편향이 없는
 // 대신, 당시엔 알 수 없던 미래 정보다 — 역사 해석 전용(현재 신호에는 사용 불가).
-// 이익 데이터가 2023-06에 끝나므로 peTrail은 2023-06, peFwdReal은 2022-06까지.
+// 범위는 이익(E) 확정월까지 자동 결정(원본의 E는 몇 달 지연 확정, peFwdReal은 −12개월).
 const peByYm = new Map(shillerRows.map((r) => [r.ym, r]))
 const plus12 = (ym) => `${Number(ym.slice(0, 4)) + 1}${ym.slice(4)}`
 const peTrail = []
@@ -262,11 +266,11 @@ for (let i = 0; i < dates.length; i++) {
   peFwdReal.push(cur && fwd?.earn ? cur.price / fwd.earn : null)
 }
 
-// CAPE 프록시 — 미러의 이익 데이터가 끝난 2023-06 이후를 근사로 연장:
-// 프록시 = 마지막 실측 CAPE × 실질가격 변화율. 실질가격 ≈ 실질 TR ÷ (1+배당수익률)^t
-// (배당 재투자분 제거, 최근 S&P 배당수익률 ~1.3%/년 상수 가정), 분모의 10년 평균
-// 실질이익은 장기 추세(연 ~2%) 성장 가정. 검증: 딥리서치 확정치(2026 초 CAPE ~41)와
-// 대조 어서션 — 근사이므로 UI에 '프록시' 라벨 필수
+// CAPE 프록시 — 실측(공표) CAPE의 마지막 달 이후 짧은 꼬리(배당 미확정 1~2개월)를
+// 근사로 연장: 프록시 = 마지막 실측 CAPE × 실질가격 변화율.
+// 실질가격 ≈ 실질 TR ÷ (1+배당수익률)^t (배당 재투자분 제거, ~1.3%/년 상수 가정),
+// 분모의 10년 평균 실질이익은 장기 추세(연 ~2%) 성장 가정. 검증: 원본 공표 CAPE
+// (2026-01 = 39.64)와의 대조 어서션 — 근사이므로 UI에 '프록시' 라벨 필수
 const capeProxy = []
 {
   let lastCapeI = -1
@@ -397,17 +401,17 @@ const round = (arr, d = 3) => arr.map((v) => (v == null ? null : Number(v.toFixe
 const out = {
   meta: {
     sources: [
-      'Robert Shiller (Yale) 월간 미러 — github.com/datasets/s-and-p-500 (ODC-PDDL), ~2023-06',
+      'Robert Shiller (Yale) 월간 데이터셋 — 원본 ie_data.xls(shillerdata.com) 직변환, 2026-08 수집',
       '금 월간 — github.com/datasets/gold-prices (ODC-PDDL)',
-      'FRED: TB3MS(3개월 T-bill 1934~) · M13002(NBER 상업어음 1871~1933) · GS10 · CPIAUCNS — 2023-07 이후 연장 + 현금 시리즈',
-      '^SP500TR 일별 종가의 월평균 (Yahoo) — 주식 총수익 2023-07 이후 연장',
+      'FRED: TB3MS(3개월 T-bill 1934~) · M13002(NBER 상업어음 1871~1933) · GS10 · CPIAUCNS — Shiller 꼬리 연장 + 현금 시리즈',
+      '^SP500TR 일별 종가의 월평균 (Yahoo) — 주식 총수익 꼬리 연장',
     ],
     method: {
       stock: 'S&P500(1957 이전 Cowles·S&P90 소급 합성) 총수익 — 월평균 가격 + 배당(연/12) 월간 재투자. 2023-07~ ^SP500TR 월평균 체인',
       bond: '미 10년물(GS10) 수익률 파생 만기고정 근사 총수익 — 실제 채권지수 아님',
       gold: '금 현물가 (배당 없음). 1933-1974 미국 민간 금보유 금지·공정가 시대 주의',
       bill: '단기국채(현금): 3개월 T-bill(1934~) + NBER 상업어음 NY(1871~1933 접합 — 신용 프리미엄만큼 소폭 높음) 월할 복리',
-      macro: 'cpiYoY = 직전 12개월 CPI 상승률(2025-10 결측 1개월 선형보간), realRate10 = GS10 − cpiYoY (사후적 근사), cape = Shiller PE10(1881~2023-06, 이후 이익 데이터 부재로 결측), capeProxy = 이후 실질가격 변화 연장 근사(배당수익률 1.3%·E10 성장 2%/년 가정 — 라벨 필수), tbill3m = 3개월 단기금리, tips10 = 10년 TIPS 수익률(사전적 실질금리, 2003~ — realRate10은 사후적 근사로 역사 비교용), peTrail = P(t)/E(t) 트레일링 12개월 as-reported GAAP P/E(1871~2023-06), peFwdReal = P(t)/E(t+12) 실현 선행 P/E — 그 뒤 12개월 실제 확정 이익 기준(사후 정보, 역사 해석 전용, ~2022-06)',
+      macro: 'cpiYoY = 직전 12개월 CPI 상승률(2025-10 결측 1개월 선형보간), realRate10 = GS10 − cpiYoY (사후적 근사), cape = Shiller 공표 PE10(1881~, 배당 미확정 최근 1~2개월 제외), capeProxy = 실측 마지막 달 이후 꼬리를 실질가격 변화로 연장한 근사(배당수익률 1.3%·E10 성장 2%/년 가정 — 라벨 필수), tbill3m = 3개월 단기금리, tips10 = 10년 TIPS 수익률(사전적 실질금리, 2003~ — realRate10은 사후적 근사로 역사 비교용), peTrail = P(t)/E(t) 트레일링 12개월 as-reported GAAP P/E(1871~E 확정월), peFwdReal = P(t)/E(t+12) 실현 선행 P/E — 그 뒤 12개월 실제 확정 이익 기준(사후 정보, 역사 해석 전용)',
       base: '1900-01 = 100 · 실질 = CPI-U(NSA) 디플레이트',
     },
     dataEnd: dates[dates.length - 1],
