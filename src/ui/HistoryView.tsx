@@ -65,8 +65,6 @@ interface HistoryData {
     cape: (number | null)[]
     capeProxy?: (number | null)[]
     tbill3m?: (number | null)[]
-    peTrail?: (number | null)[]
-    peFwdReal?: (number | null)[]
   }
   episodes: Episode[]
 }
@@ -86,7 +84,6 @@ const SERIES_COLORS = {
   rate: { light: '#0f766e', dark: '#2dd4bf' },
   real: { light: '#7c3aed', dark: '#a78bfa' },
   cape: { light: '#525252', dark: '#a3a3a3' },
-  peFwd: { light: '#2962ff', dark: '#5b8aff' },
 }
 
 type Basis = 'real' | 'nominal'
@@ -272,8 +269,6 @@ export function HistoryView({
         '10년물 금리': data.macro.gs10[i],
         실질금리: data.macro.realRate10[i],
         CAPE: data.macro.cape[i],
-        '트레일링 P/E': data.macro.peTrail?.[i] ?? null,
-        '실현 선행 P/E': data.macro.peFwdReal?.[i] ?? null,
       })
     }
     return rows
@@ -700,66 +695,6 @@ export function HistoryView({
             왼쪽 축 = %(인플레이션·금리), 오른쪽 점선 = CAPE(주가가 최근 10년 평균 이익의 몇 배인가).
             인플레이션형 구간은 실질금리가 마이너스로 가라앉고, 밸류에이션 붕괴형은 CAPE가 극단인 상태에서 하락이 시작되는 패턴을 확인해 보세요.
           </p>
-
-          {/* 밸류에이션의 착시 — 트레일링 vs 실현 선행 P/E */}
-          {detailData.some((r) => r['실현 선행 P/E'] != null) && (
-            <>
-              <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 pt-1">
-                <span className="block text-[8px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">VALUATION · HINDSIGHT P/E</span>
-                그때 시장은 "미래 이익"의 몇 배를 지불했나 — 트레일링 vs 실현 선행 P/E
-                <HelpTip title="실현 선행 P/E 읽는 법">
-                  <b>트레일링 P/E</b> = 그 달의 주가 ÷ 직전 12개월 확정 이익, 즉 당시 투자자가 실제로
-                  알던 숫자입니다. <b>실현 선행 P/E</b> = 그 달의 주가 ÷ <b>그 뒤 12개월</b>의 실제
-                  확정 이익입니다. 예: 2008년 3월 값은 2008-03 주가를 2008-04~2009-03에 실현된 이익으로
-                  나눈 것입니다. 애널리스트의 당시 예측이 아니라 사후에 확정된 이익이므로 추정
-                  편향이 없습니다. 두 선의 <b>간극이 곧 "시장이 미래를 얼마나 잘못 샀는가"</b>입니다:
-                  2008-03 트레일링은 22배로 평범했지만 실현 선행은 192배였습니다. 이익 절벽을 몰랐던
-                  시장은 실제로는 다음 1년 이익의 192배를 지불하고 있었습니다. 반대로 2009-03엔
-                  트레일링 110배(이익 붕괴가 만든 착시)로 비싸 보였지만 실현 선행은 12배, 실제로는
-                  헐값이었습니다. 주의: 실현 선행 P/E는 미래 정보를 당겨온 사후 지표라 그 당시엔
-                  계산 자체가 불가능했습니다. 실시간 신호가 될 수 없고 역사 해석 전용입니다.
-                  위기 구간의 극단값은 회계상 대규모 손실 처리가 이익을 붕괴시킨 결과라 영업이익
-                  기준으로는 덜 극단적입니다. 두 지표 모두 실러 월간 이익 데이터에서 직접 계산했고
-                  (추정치 미사용), 세로축은 로그 눈금입니다. 실시간 선행 P/E(애널리스트 추정)를
-                  신호로 쓰지 않는 이유는 가이드북의 CAPE 절에 있습니다.
-                </HelpTip>
-              </h4>
-              <ResponsiveContainer width="100%" height={240}>
-                <LineChart data={detailData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }} syncId="era-detail">
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" vertical={false} />
-                  <XAxis dataKey="ym" tick={{ fontSize: 11, fill: axisTickColor }} stroke={axisTickColor} minTickGap={50} />
-                  <YAxis
-                    scale="log"
-                    domain={['auto', 'auto']}
-                    tick={{ fontSize: 11, fill: axisTickColor }}
-                    stroke={axisTickColor}
-                    width={44}
-                    tickFormatter={(v: number) => `${Math.round(v)}배`}
-                  />
-                  <Tooltip
-                    formatter={(v, name) => [`${Number(v).toFixed(1)}배`, name]}
-                    labelStyle={tooltipLabelStyle}
-                    contentStyle={tooltipContentStyle}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <ReferenceLine
-                    y={15}
-                    stroke={axisTickColor}
-                    strokeDasharray="4 3"
-                    strokeOpacity={0.5}
-                    label={{ value: '장기 평균대 ~15배', fontSize: 10, fill: axisTickColor, position: 'insideBottomLeft' }}
-                  />
-                  {phaseBand && <ReferenceArea x1={phaseBand.x1} x2={phaseBand.x2} fill="rgba(41,98,255,0.12)" stroke="rgba(41,98,255,0.35)" strokeDasharray="4 3" />}
-                  <Line type="monotone" dataKey="트레일링 P/E" stroke={c('cape')} strokeWidth={1.6} strokeDasharray="6 3" dot={false} />
-                  <Line type="monotone" dataKey="실현 선행 P/E" stroke={c('peFwd')} strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-              <p className="text-[11px] text-zinc-400 leading-relaxed">
-                점선 = 당시 투자자가 실제로 알던 값(직전 1년 이익 기준), 파란 선 = 나중에 확정된 "다음 1년" 실제 이익으로 다시 계산한 값.
-                두 선의 간극이 클수록 시장이 미래 이익을 잘못 산 것입니다. 미래를 알아야 계산되는 지표라 역사 공부 전용이며, 최근 12개월은 계산할 수 없습니다.
-              </p>
-            </>
-          )}
 
           {/* 연대기 — 흐름 따라가기 */}
           {timeline.length > 0 && (
