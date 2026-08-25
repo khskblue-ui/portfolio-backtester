@@ -147,9 +147,9 @@ export function assessNow(h: HistoryLike, liveIn?: LiveSnapshot): NowAssessment 
     asOf: capeAsOf,
     reason:
       capeV != null
-        ? `역사적 대형 하락(B형)의 시작 밸류에이션: 1968년 24.1 · 1929년 32.6 · 2000년 44. 현재 ${capeV.toFixed(1)}은 ${
+        ? `역사적 대형 하락(B형)의 시작 밸류에이션: 1968년 24.1 · 1929년 32.6 · 2000년 44. 현재 ${capeV.toFixed(1)}(${
             capeV >= 44 ? '2000년 닷컴 버블 수준' : capeV >= 32.6 ? '1929년 수준 초과' : capeV >= 24 ? '1968년 수준 초과' : '역사적 위험 구간 미만'
-          }. (프록시: 2023-06까지의 실측 CAPE를 이후 주가 변화로 연장한 근사치, 외부 공표치와 정합 확인)`
+          }). (프록시: 이익·배당 확정이 늦는 최근 1~2개월만 실질 주가 변화로 연장한 값이고, 그 외 구간은 Shiller 공표 실측치)`
         : 'CAPE 데이터 없음',
   })
 
