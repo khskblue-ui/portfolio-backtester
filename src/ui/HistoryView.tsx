@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   LineChart,
   Line,
@@ -138,15 +138,16 @@ export function HistoryView({
     return () => mq.removeEventListener('change', on)
   }, [])
   // 유령 툴팁 소거 — recharts v3는 창 좌표 기반으로 툴팁을 켜서 pointer-events 차단이
-  // 안 통함(실측). epoch을 올려 상세 차트를 재마운트하면 툴팁 상태가 초기화된다.
-  // 터치 기기에서 차트 밖을 탭했을 때 + 구간 선택 스크롤 정착 직후에 소거.
-  const [tooltipEpoch, setTooltipEpoch] = useState(0)
+  // 안 통함(실측). 차트 재마운트로 지우는 방식은 touchstart~click 사이에 DOM이 바뀌어
+  // 주변 버튼의 첫 탭이 무시되는 부작용이 있었으므로(모바일 실사용 보고), 재마운트
+  // 없이 CSS로만 숨긴다: 차트 밖 터치 = 숨김, 차트 위 터치 = 다시 표시.
+  // 같은 값 setState는 리렌더를 만들지 않아 일반 탭 비용이 0에 수렴한다.
+  const [tipDismissed, setTipDismissed] = useState(false)
   useEffect(() => {
     if (!coarse) return
     const onTouch = (ev: TouchEvent) => {
       const t = ev.target as Element | null
-      if (t && t.closest('.recharts-responsive-container')) return
-      setTooltipEpoch((k) => k + 1)
+      setTipDismissed(!(t && t.closest('.recharts-responsive-container')))
     }
     document.addEventListener('touchstart', onTouch, { passive: true })
     return () => document.removeEventListener('touchstart', onTouch)
@@ -181,21 +182,6 @@ export function HistoryView({
 
   // 구간 선택 시 상세 카드로 스크롤 — 상세가 카드 그리드 아래에 있어 선택해도
   // 화면 변화가 안 보이던 문제 (차트 밴드 클릭 안내 "클릭해 상세 보기"의 실효성)
-  // 유령 툴팁 가드 — 구간 선택의 자동 스크롤로 차트가 탭 좌표 아래로 들어올 때
-  // 툴팁이 저절로 뜨는 문제(모바일 실측). 스크롤 동안 차트 열의 포인터 이벤트를
-  // 차단하고, 정착 후 epoch 재마운트로 좌표 기반 툴팁 상태까지 소거한다
-  const [chartsInert, setChartsInert] = useState(false)
-  const inertTimer = useRef<number | null>(null)
-  const armChartsInertGuard = () => {
-    setChartsInert(true)
-    if (inertTimer.current != null) window.clearTimeout(inertTimer.current)
-    // 순서 주의: 재마운트(900ms)가 inert 해제(1200ms)보다 먼저 —
-    // 재마운트 직후 브라우저의 hover 재계산이 새 차트에 다시 발화하는 것을 막는다
-    inertTimer.current = window.setTimeout(() => {
-      if (coarse) setTooltipEpoch((k) => k + 1)
-      inertTimer.current = window.setTimeout(() => setChartsInert(false), 300)
-    }, 900)
-  }
   useEffect(() => {
     if (selected) {
       const t = window.setTimeout(() => document.getElementById('era-detail-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
@@ -493,7 +479,7 @@ export function HistoryView({
   const basisLabel = basis === 'real' ? '실질' : '명목'
 
   return (
-    <div className="space-y-5">
+    <div className={`space-y-5 ${tipDismissed ? '[&_.recharts-tooltip-wrapper]:hidden' : ''}`}>
       {/* 전체 총수익 + 음수 구간 밴드 */}
       <div className={`${cardCls} p-4 sm:p-5`}>
         <div className="flex items-start justify-between flex-wrap gap-2">
@@ -625,7 +611,7 @@ export function HistoryView({
                       x2={cx2}
                       fill={selected === e.peak ? 'rgba(227,73,72,0.28)' : 'rgba(227,73,72,0.12)'}
                       stroke="none"
-                      onClick={() => { setSelected(selected === e.peak ? null : e.peak); changePhase(null); if (selected !== e.peak) armChartsInertGuard() }}
+                      onClick={() => { setSelected(selected === e.peak ? null : e.peak); changePhase(null) }}
                       style={{ cursor: 'pointer' }}
                     />
                   )
@@ -719,7 +705,7 @@ export function HistoryView({
           return (
             <button
               key={e.peak}
-              onClick={() => { setSelected(selected === e.peak ? null : e.peak); changePhase(null); if (selected !== e.peak) armChartsInertGuard() }}
+              onClick={() => { setSelected(selected === e.peak ? null : e.peak); changePhase(null) }}
               className={`${cardCls} p-4 text-left transition-colors ${selected === e.peak ? 'ring-2 ring-zinc-500 dark:ring-zinc-400' : 'hover:border-zinc-400 dark:hover:border-zinc-500'}`}
             >
               <div className="flex items-baseline justify-between gap-2">
@@ -822,7 +808,7 @@ export function HistoryView({
           <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">{EPISODE_INFO[selectedEp.peak]?.cause}</p>
 
           <div className="lg:grid lg:grid-cols-2 lg:gap-x-6 lg:items-start">
-          <div id="era-charts" className="space-y-3 min-w-0 lg:order-2 lg:sticky lg:top-20 scroll-mt-20" style={{ pointerEvents: chartsInert ? 'none' : undefined }}>
+          <div id="era-charts" className="space-y-3 min-w-0 lg:order-2 lg:sticky lg:top-20 scroll-mt-20">
           {phaseIdx != null && timeline[phaseIdx] && (
             <div className="flex items-center justify-between gap-2 flex-wrap rounded-lg bg-[#eef4ff] dark:bg-[#16223c] px-3 py-1.5">
               <span className="text-[11px] font-mono text-[#2962ff] dark:text-[#5b8aff]">
@@ -863,7 +849,7 @@ export function HistoryView({
             </HelpTip>
           </h4>
           <ResponsiveContainer width="100%" height={280}>
-            <LineChart key={`assets-${selected}-${tooltipEpoch}-${zoomed ? phaseIdx : 'full'}`} data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }} syncId={detailSyncId}>
+            <LineChart key={`assets-${selected}-${zoomed ? phaseIdx : 'full'}`} data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }} syncId={detailSyncId}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" vertical={false} />
               <XAxis dataKey="ym" tick={{ fontSize: 11, fill: axisTickColor }} stroke={axisTickColor} minTickGap={50} />
               {/* 전체 구간은 로그 눈금 — 금 급등이 축을 지배해 주식·채권이 눌리는 왜곡 방지
@@ -961,7 +947,7 @@ export function HistoryView({
             </HelpTip>
           </h4>
           <ResponsiveContainer width="100%" height={240}>
-            <LineChart key={`macro-${selected}-${tooltipEpoch}-${zoomed ? phaseIdx : 'full'}`} data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }} syncId={detailSyncId}>
+            <LineChart key={`macro-${selected}-${zoomed ? phaseIdx : 'full'}`} data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }} syncId={detailSyncId}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" vertical={false} />
               <XAxis dataKey="ym" tick={{ fontSize: 11, fill: axisTickColor }} stroke={axisTickColor} minTickGap={50} />
               <YAxis
@@ -1000,7 +986,7 @@ export function HistoryView({
           {narrow && (
             <>
               <ResponsiveContainer width="100%" height={110}>
-                <LineChart key={`cape-${selected}-${tooltipEpoch}-${zoomed ? phaseIdx : 'full'}`} data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <LineChart key={`cape-${selected}-${zoomed ? phaseIdx : 'full'}`} data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.12)" vertical={false} />
                   <XAxis dataKey="ym" tick={{ fontSize: 10, fill: axisTickColor }} stroke={axisTickColor} minTickGap={60} />
                   <YAxis tick={{ fontSize: 10, fill: axisTickColor }} stroke={axisTickColor} width={36} domain={[0, 'auto']} />
