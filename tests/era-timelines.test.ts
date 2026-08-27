@@ -78,3 +78,48 @@ describe('구간 연대기', () => {
     expect(all).toContain('강제청산') // 2008 금 급락의 디레버리징
   })
 })
+
+describe('큐레이션 구간 (금태환 이후 상승·이행기)', () => {
+  it('선언된 큐레이션 구간마다 서사·연대기(국면 5개 이상)·마커(3개 이상)가 전부 있다', async () => {
+    const { CURATED_ERAS } = await import('../src/ui/curatedEras')
+    const { ERA_STORIES } = await import('../src/ui/eraStories')
+    for (const c of CURATED_ERAS) {
+      expect(ERA_STORIES[c.start], `서사 누락: ${c.start}`).toBeDefined()
+      const t = ERA_TIMELINES[c.start]
+      expect(t, `연대기 누락: ${c.start}`).toBeDefined()
+      expect(t.length, c.start).toBeGreaterThanOrEqual(5)
+      const ms = ERA_MARKERS[c.start]
+      expect(ms, `마커 누락: ${c.start}`).toBeDefined()
+      expect(ms.length, c.start).toBeGreaterThanOrEqual(3)
+      const lo = addMonths(c.start, -12)
+      const hi = addMonths(c.end ?? h.meta.dataEnd, 12)
+      let prevFrom = ''
+      for (const p of t) {
+        expect(p.from <= p.to, `${c.start} ${p.title}: from > to`).toBe(true)
+        expect(p.from >= lo && p.to <= hi, `${c.start} ${p.title}: 창 밖 (${p.from}~${p.to}, 허용 ${lo}~${hi})`).toBe(true)
+        expect(p.from >= prevFrom, `${c.start} ${p.title}: 시간 역행`).toBe(true)
+        prevFrom = p.from
+      }
+      let prev = ''
+      for (const m of ms) {
+        expect(m.ym >= lo && m.ym <= hi, `${c.start} ${m.label}: 창 밖`).toBe(true)
+        expect(m.ym >= prev, `${c.start} ${m.label}: 시간 역행`).toBe(true)
+        expect(m.label.length).toBeLessThanOrEqual(10)
+        prev = m.ym
+      }
+    }
+  })
+
+  it('커버리지 불변식 — 1971-08 이후 모든 달이 어느 구간의 상세 창(±12개월) 안에 있다', async () => {
+    const { CURATED_ERAS } = await import('../src/ui/curatedEras')
+    const windows: [string, string][] = [
+      ...h.episodes.map((ep: { peak: string; recovery: string | null }) => [addMonths(ep.peak, -12), addMonths(ep.recovery ?? h.meta.dataEnd, 12)] as [string, string]),
+      ...CURATED_ERAS.map((c) => [addMonths(c.start, -12), addMonths(c.end ?? h.meta.dataEnd, 12)] as [string, string]),
+    ]
+    const uncovered: string[] = []
+    for (let ym = '1971-08'; ym <= h.meta.dataEnd; ym = addMonths(ym, 1)) {
+      if (!windows.some(([a, b]) => ym >= a && ym <= b)) uncovered.push(ym)
+    }
+    expect(uncovered, `커버리지 공백: ${uncovered.slice(0, 6).join(', ')}`).toHaveLength(0)
+  })
+})

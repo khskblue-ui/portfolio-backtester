@@ -156,7 +156,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
     const charts: ChartSpec[] = [
       {
         title: '실질 전고점 대비 낙폭',
-        sub: '음수 구간 진입선 = −25% (역사 7개 구간의 검출 기준)',
+        sub: '음수 구간 진입선 = −25% (역사 하락 구간 7개의 검출 기준)',
         color: theme === 'dark' ? '#3987e5' : '#2a78d6',
         data: mk(dd, { label: liveLabel, v: ddLive }),
         dataRecent: mkRecent(dd, { label: liveLabel, v: ddLive }),
