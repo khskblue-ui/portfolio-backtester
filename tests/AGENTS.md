@@ -19,7 +19,7 @@ JSON을 직접 읽기 위함 (history-bundle.test.ts 주석 참조). 따라서 *
 | 파일 | 앵커 대상 | 특징 |
 |------|-----------|------|
 | `now-signals.test.ts` | `assessNow()` 신호 판정 (~16케이스, 최대) | 규칙 경계 테스트 + 실제 번들 대조. 앵커 18개: "1929년 수준 초과"(CAPE 43.5), "2000년 닷컴 버블 수준"(44.2), 커브 날짜 등 |
-| `trading-guide.test.ts` | 가이드 1부 (~9케이스) | 정확히 7챕터, `docs/guides/trading-discipline.md` 포팅 수치 일치 (4,285배, $146,614, 89.2% 계열) |
+| `trading-guide.test.ts` | 가이드 1부 (~9케이스) | 정확히 7챕터, `docs/guides/trading-discipline.md` 포팅 수치 일치 (4,353배, $146,614, 89.2% 계열) |
 | `guide-content.test.ts` | 가이드 2부 (~8케이스) | 9 STEP 순서·구조, `**` 짝 맞음, quad 표 4셀, 용어 사전 커버리지·가나다 정렬 |
 | `mania-story.test.ts` | 광기의 해부 (~6케이스) | 크기 대비 최고 앵커 밀도(10개): "−81.1%"(U+2212), dataAsOf "2026-07" 등 |
 | `era-timelines.test.ts` | 역사 연대기 (~4케이스) | 국면 시간순·차트 윈도 정렬·YM 형식, "147.27"(오일 멜트업) 등 |

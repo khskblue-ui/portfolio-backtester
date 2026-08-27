@@ -8,7 +8,17 @@ const h = JSON.parse(readFileSync(new URL('../public/data/history.json', import.
 const dates = h.series.dates
 const stock = h.series.stock // 실질 TR 지수 (1900-01 = 100)
 const bill = h.series.bill // 실질 단기국채(현금) 지수
-const N = dates.length
+// 문서 수치의 데이터 기준 시점 — 번들이 이후에 갱신되어도 계산은 이 시점까지로 잘라
+// 수행한다(2026-08-27 결정, 원본 ie_data 직변환 소스 기준). 수치를 의도적으로
+// 리프레시할 때는 이 값과 앱(tradingGuide.ts)·원문(trading-discipline.md)·tests
+// 앵커를 함께 갱신할 것 (3중 동기화).
+const DOC_VINTAGE_END = '2026-07'
+const vintageIdx = dates.indexOf(DOC_VINTAGE_END)
+if (vintageIdx < 0) {
+  console.error(`FAIL 기준 시점 ${DOC_VINTAGE_END} 없음 (번들 말단: ${dates[dates.length - 1]})`)
+  process.exit(1)
+}
+const N = vintageIdx + 1
 console.log(`데이터: ${dates[0]} ~ ${dates[N - 1]} (${N}개월), 실질 총수익 기준\n`)
 
 // 전체 기간 성장 배수

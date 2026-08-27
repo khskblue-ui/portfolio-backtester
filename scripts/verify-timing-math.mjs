@@ -11,7 +11,17 @@ const dates = h.series.dates
 const stock = h.series.stock
 const bill = h.series.bill
 const bond = h.series.bond
-const N = dates.length
+// 문서 수치의 데이터 기준 시점 — 번들이 이후에 갱신되어도 계산은 이 시점까지로 잘라
+// 수행한다(2026-08-27 결정, 원본 ie_data 직변환 소스 기준). 수치를 의도적으로
+// 리프레시할 때는 이 값과 앱(tradingGuide.ts)·원문(trading-discipline.md)·tests
+// 앵커를 함께 갱신할 것 (3중 동기화).
+const DOC_VINTAGE_END = '2026-07'
+const vintageIdx = dates.indexOf(DOC_VINTAGE_END)
+if (vintageIdx < 0) {
+  console.error(`FAIL 기준 시점 ${DOC_VINTAGE_END} 없음 (번들 말단: ${dates[dates.length - 1]})`)
+  process.exit(1)
+}
+const N = vintageIdx + 1
 
 let failures = 0
 const check = (name, actual, expected, tol = 0.005) => {
@@ -26,8 +36,8 @@ const check = (name, actual, expected, tol = 0.005) => {
   let logSum = 0
   for (let i = 1; i < N; i++) logSum += Math.log(stock[i] / stock[i - 1])
   const mult = Math.exp(logSum)
-  check('[0] 126년 실질 배수', Math.round(mult), 4285, 0.001)
-  check('[0] 연 수익률(%)', (Math.pow(mult, 12 / (N - 1)) - 1) * 100, 6.84, 0.002)
+  check('[0] 126년 실질 배수', Math.round(mult), 4353, 0.001)
+  check('[0] 연 수익률(%)', (Math.pow(mult, 12 / (N - 1)) - 1) * 100, 6.85, 0.002)
 }
 
 // [a] 30년 5인 비교 — 다른 순회(연 단위 min/max를 정렬로) 재계산
@@ -94,8 +104,8 @@ const check = (name, actual, expected, tol = 0.005) => {
   }
   const wins = gaps.filter((g) => g > 0).length
   const s = [...gaps].sort((a, b) => a - b)
-  check('[c] 표본 수', gaps.length, 1505, 0)
-  check('[c] 일시 승률 %', (wins / gaps.length) * 100, 67.1, 0.005)
+  check('[c] 표본 수', gaps.length, 1507, 0)
+  check('[c] 일시 승률 %', (wins / gaps.length) * 100, 67.2, 0.005)
   check('[c] 중앙값 %p', s[Math.floor(gaps.length / 2)] * 100, 3.6, 0.03)
   check('[c] 하위 5% %p', s[Math.floor(gaps.length * 0.05)] * 100, -13.2, 0.02)
 }
@@ -126,9 +136,9 @@ const check = (name, actual, expected, tol = 0.005) => {
     }
   }
   check('[d] 발동 횟수', triggers, 10, 0)
-  check('[d] 프로토콜 배수', Math.round(v), 161, 0.01)
-  check('[d] 프로토콜 연수익 %', (Math.pow(v, 12 / (N - 1)) - 1) * 100, 4.1, 0.01)
-  check('[d] 문서 "약 27분의 1"', 4285 / v, 26.6, 0.02)
+  check('[d] 프로토콜 배수', Math.round(v), 157, 0.01)
+  check('[d] 프로토콜 연수익 %', (Math.pow(v, 12 / (N - 1)) - 1) * 100, 4.08, 0.01)
+  check('[d] 문서 "약 28분의 1"', 4353 / v, 27.7, 0.02)
   check('[d] 문서 "약 13년에 한 번"', (N - 1) / 12 / triggers, 12.6, 0.01)
   console.log(`     발동 연도: ${trigYears.join(', ')}`)
 }
@@ -164,7 +174,7 @@ const check = (name, actual, expected, tol = 0.005) => {
 
 // [g] 비용 드래그 — 대수적 항등식으로 재계산
 {
-  const eff = (drag) => (1 - Math.pow((1.0684 - drag) / 1.0684, 30)) * 100
+  const eff = (drag) => (1 - Math.pow((1.0685 - drag) / 1.0685, 30)) * 100
   check('[g] 0.5% 드래그 → 30년 감소 %', eff(0.005), 13, 0.04)
   check('[g] 1.0% 드래그 → 30년 감소 %', eff(0.01), 25, 0.02)
   check('[g] 2.0% 드래그 → 30년 감소 %', eff(0.02), 43, 0.02)
