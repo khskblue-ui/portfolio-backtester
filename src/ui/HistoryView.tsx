@@ -21,6 +21,7 @@ import { ManiaStoryModal } from './ManiaStoryModal'
 import { MANIA_STORY } from './maniaStory'
 import { cardCls, btnGhostCls, fmtSignedPct } from './common'
 import { EPISODE_INFO } from './episodeInfo'
+import { CURATED_ERAS, type CuratedEra } from './curatedEras'
 import { fetchNasdaqMonthly, fetchNdx100Monthly, fetchGspcDailyWindow, type NasdaqSeries, type DailySlice } from './historyExtra'
 import { histEraStrategies, type StrategyConfig } from '@/core'
 
@@ -73,6 +74,30 @@ interface HistoryData {
 const TYPE_LABEL = {
   A: { text: '인플레이션형', cls: 'text-amber-700 dark:text-amber-400' },
   B: { text: '밸류에이션 붕괴형', cls: 'text-red-700 dark:text-red-400' },
+}
+
+// 큐레이션 구간(금태환 이후 상승·이행기)의 유형 배지 — 검출 에피소드의 A/B와 별개
+const KIND_LABEL = {
+  bull: { text: '대세 상승', cls: 'text-emerald-700 dark:text-emerald-400' },
+  cycle: { text: '붐-버스트', cls: 'text-sky-700 dark:text-sky-400' },
+  bear: { text: '하락(미검출)', cls: 'text-amber-700 dark:text-amber-400' },
+}
+
+/**
+ * 통합 시대 뷰모델 — 검출 에피소드(kind 'crash')와 큐레이션 구간을 한 배열로.
+ * 큐레이션 구간은 에피소드와 동형으로 물질화한다(start가 peak 자리, end가 recovery
+ * 자리): 상세 창 계산·정규화·연대기 키·백테스트 버튼 등 기존 파이프라인을 그대로
+ * 재사용하기 위함. 수치는 번들 시리즈에서 런타임 실측.
+ */
+interface EraView extends Episode {
+  kind: 'crash' | 'bull' | 'cycle' | 'bear'
+  ongoing: boolean
+  title: string
+  cause: string
+  /** 큐레이션 전용: 구간 실질 수익률·연율·구간 내 최대 조정(월간) */
+  stockRetPct: number | null
+  annualPct: number | null
+  maxDipPct: number | null
 }
 
 const SERIES_COLORS = {
@@ -321,7 +346,65 @@ export function HistoryView({
     }))
   }, [fullRows, zoomRange, overlayOn])
 
-  const selectedEp = data?.episodes.find((e) => e.peak === selected) ?? null
+  // 검출 에피소드 + 콘텐츠(서사·연대기)가 준비된 큐레이션 구간의 통합 목록 (시간순).
+  // 콘텐츠 게이팅: 서사와 연대기가 둘 다 등록된 구간만 노출 — 집필이 끝나는 대로
+  // curatedEras.ts의 항목이 한 구간씩 화면에 켜진다
+  const eras: EraView[] = useMemo(() => {
+    if (!data) return []
+    const { dates, stock } = data.series
+    const fromEpisode = (e: Episode): EraView => ({
+      ...e,
+      kind: 'crash',
+      ongoing: false,
+      title: EPISODE_INFO[e.peak]?.title ?? e.peak,
+      cause: EPISODE_INFO[e.peak]?.cause ?? '',
+      stockRetPct: null,
+      annualPct: null,
+      maxDipPct: null,
+    })
+    const fromCurated = (c: CuratedEra): EraView | null => {
+      const i = dates.indexOf(c.start)
+      const endYm = c.end ?? data.meta.dataEnd
+      const j = dates.indexOf(endYm)
+      if (i < 0 || j <= i) return null
+      const months = j - i
+      const ret = (v0: number | null, v1: number | null) => (v0 != null && v1 != null && v0 > 0 ? (v1 / v0 - 1) * 100 : null)
+      let dip = 0
+      let pk = i
+      let troughI = i
+      for (let k = i; k <= j; k++) {
+        if (stock[k] > stock[pk]) pk = k
+        const dd = stock[k] / stock[pk] - 1
+        if (dd < dip) {
+          dip = dd
+          troughI = k
+        }
+      }
+      const stockRet = ret(stock[i], stock[j])
+      const seg = (arr: (number | null)[]): EpisodeAssets => ({ toTroughPct: null, toRecoveryPct: ret(arr[i], arr[j]) })
+      return {
+        peak: c.start,
+        trough: dates[troughI],
+        recovery: c.end,
+        underwaterMonths: months,
+        depthPct: dip * 100,
+        assets: { stock: seg(data.series.stock), bond: seg(data.series.bond), gold: seg(data.series.gold), bill: seg(data.series.bill) },
+        kind: c.kind,
+        ongoing: c.end == null,
+        title: c.title,
+        cause: c.cause,
+        stockRetPct: stockRet,
+        annualPct: stockRet != null ? (Math.pow(1 + stockRet / 100, 12 / months) - 1) * 100 : null,
+        maxDipPct: dip * 100,
+      }
+    }
+    const curated = CURATED_ERAS.filter((c) => ERA_TIMELINES[c.start] && ERA_STORIES[c.start])
+      .map(fromCurated)
+      .filter((v): v is EraView => v != null)
+    return [...data.episodes.map(fromEpisode), ...curated].sort((a, b) => (a.peak < b.peak ? -1 : 1))
+  }, [data])
+
+  const selectedEp = eras.find((e) => e.peak === selected) ?? null
   const timeline = useMemo(() => (selectedEp ? ERA_TIMELINES[selectedEp.peak] ?? [] : []), [selectedEp])
 
   // 상세 차트: 고점 12개월 전 ~ 회복 12개월 후, 고점 = 100 정규화 + 매크로
@@ -541,7 +624,7 @@ export function HistoryView({
           </div>
         </div>
         <p className="text-xs text-zinc-400 mb-2">
-          붉은 음영 = 실질 가치가 25% 이상 떨어지고 회복까지 3년 넘게 걸린 구간입니다. 아래 카드(또는 음영)를 클릭하면 상세가 열립니다.
+          붉은 음영 = 실질 가치가 25% 이상 떨어지고 회복까지 3년 넘게 걸린 구간(기계 검출), 파란 음영 = 금태환 폐지(1971) 이후의 상승·이행 구간(시대 구분)입니다. 아래 카드(또는 음영)를 클릭하면 상세가 열립니다.
         </p>
         {/* 시대 프리셋 칩 — 브러시 손잡이가 어려운 터치 환경의 기간 확대 대안 */}
         <div className="flex items-center gap-1.5 flex-wrap mb-3">
@@ -598,18 +681,22 @@ export function HistoryView({
                   contentStyle={tooltipContentStyle}
                 />
                 {overlayOn && <Legend verticalAlign="top" wrapperStyle={{ fontSize: 12 }} />}
-                {data.episodes.map((e) => {
+                {eras.map((e) => {
                   const x1 = snapYm(e.peak)
                   const x2 = snapYm(e.recovery ?? data.meta.dataEnd)
                   const cx1 = x1 < visFirst ? visFirst : x1
                   const cx2 = x2 > visLast ? visLast : x2
                   if (cx1 > cx2) return null
+                  const crash = e.kind === 'crash'
+                  const fill = crash
+                    ? selected === e.peak ? 'rgba(227,73,72,0.28)' : 'rgba(227,73,72,0.12)'
+                    : selected === e.peak ? 'rgba(41,98,255,0.24)' : 'rgba(41,98,255,0.09)'
                   return (
                     <ReferenceArea
                       key={e.peak}
                       x1={cx1}
                       x2={cx2}
-                      fill={selected === e.peak ? 'rgba(227,73,72,0.28)' : 'rgba(227,73,72,0.12)'}
+                      fill={fill}
                       stroke="none"
                       onClick={() => { setSelected(selected === e.peak ? null : e.peak); changePhase(null) }}
                       style={{ cursor: 'pointer' }}
@@ -695,13 +782,14 @@ export function HistoryView({
 
       {/* 구간 카드 */}
       <p className="text-[11px] text-zinc-400 leading-relaxed">
-        카드의 수치는 모두 물가를 반영한 실질 기준입니다. <b>주식은 고점→저점 최대 하락률</b>, <b>채권·금은 고점→회복까지 전체 기간의 누적 수익률</b>입니다.
-        재는 구간이 서로 다르니 그대로 비교하지는 마세요.
+        카드의 수치는 모두 물가를 반영한 실질 기준입니다. 하락 구간 카드는 <b>주식 고점→저점 최대 하락률</b>과 <b>채권·금의 고점→회복 누적 수익률</b>,
+        상승·이행 구간 카드는 <b>구간 시작→끝의 주식 수익률과 연율, 구간 내 최대 조정</b>입니다. 재는 구간이 서로 다르니 그대로 비교하지는 마세요.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-        {data.episodes.map((e) => {
-          const info = EPISODE_INFO[e.peak]
-          const t = info ? TYPE_LABEL[info.type] : null
+        {eras.map((e) => {
+          const crash = e.kind === 'crash'
+          const info = crash ? EPISODE_INFO[e.peak] : null
+          const t = e.kind === 'crash' ? (info ? TYPE_LABEL[info.type] : null) : KIND_LABEL[e.kind]
           return (
             <button
               key={e.peak}
@@ -709,21 +797,36 @@ export function HistoryView({
               className={`${cardCls} p-4 text-left transition-colors ${selected === e.peak ? 'ring-2 ring-zinc-500 dark:ring-zinc-400' : 'hover:border-zinc-400 dark:hover:border-zinc-500'}`}
             >
               <div className="flex items-baseline justify-between gap-2">
-                <span className="font-semibold text-sm text-zinc-900 dark:text-zinc-100">{info?.title ?? e.peak}</span>
-                {t && <span className={`text-[10px] font-mono ${t.cls}`}>{t.text}</span>}
+                <span className="font-semibold text-sm text-zinc-900 dark:text-zinc-100">{e.title}</span>
+                {t && (
+                  <span className={`text-[10px] font-mono ${t.cls}`}>
+                    {t.text}
+                    {e.ongoing ? ' · 진행 중' : ''}
+                  </span>
+                )}
               </div>
               <div className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400 mt-1">
-                {e.peak} → {e.recovery ?? '미회복'} · {(e.underwaterMonths / 12).toFixed(1)}년
+                {e.peak} → {e.recovery ?? (e.ongoing ? '진행 중' : '미회복')} · {(e.underwaterMonths / 12).toFixed(1)}년
               </div>
-              <div className="mt-2 grid grid-cols-3 gap-1 text-[11px] font-mono">
-                <span className="text-red-600 dark:text-red-400">주식 {e.depthPct.toFixed(0)}%</span>
-                <span className={e.assets.bond.toRecoveryPct != null && e.assets.bond.toRecoveryPct >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
-                  채권 {e.assets.bond.toRecoveryPct != null ? fmtSignedPct(e.assets.bond.toRecoveryPct) : '—'}
-                </span>
-                <span className={e.assets.gold.toRecoveryPct != null && e.assets.gold.toRecoveryPct >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
-                  금 {e.assets.gold.toRecoveryPct != null ? fmtSignedPct(e.assets.gold.toRecoveryPct) : '—'}
-                </span>
-              </div>
+              {crash ? (
+                <div className="mt-2 grid grid-cols-3 gap-1 text-[11px] font-mono">
+                  <span className="text-red-600 dark:text-red-400">주식 {e.depthPct.toFixed(0)}%</span>
+                  <span className={e.assets.bond.toRecoveryPct != null && e.assets.bond.toRecoveryPct >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
+                    채권 {e.assets.bond.toRecoveryPct != null ? fmtSignedPct(e.assets.bond.toRecoveryPct) : '—'}
+                  </span>
+                  <span className={e.assets.gold.toRecoveryPct != null && e.assets.gold.toRecoveryPct >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
+                    금 {e.assets.gold.toRecoveryPct != null ? fmtSignedPct(e.assets.gold.toRecoveryPct) : '—'}
+                  </span>
+                </div>
+              ) : (
+                <div className="mt-2 grid grid-cols-3 gap-1 text-[11px] font-mono">
+                  <span className={e.stockRetPct != null && e.stockRetPct >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
+                    주식 {e.stockRetPct != null ? fmtSignedPct(e.stockRetPct) : '—'}
+                  </span>
+                  <span className="text-zinc-600 dark:text-zinc-300">연 {e.annualPct != null ? fmtSignedPct(e.annualPct) : '—'}</span>
+                  <span className="text-zinc-600 dark:text-zinc-300">조정 {e.maxDipPct != null ? `${e.maxDipPct.toFixed(0)}%` : '—'}</span>
+                </div>
+              )}
             </button>
           )
         })}
@@ -754,10 +857,19 @@ export function HistoryView({
         <div id="era-detail-card" className={`${cardCls} p-4 sm:p-5 space-y-3 scroll-mt-20`}>
           <div className="flex items-start justify-between flex-wrap gap-2">
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-              {EPISODE_INFO[selectedEp.peak]?.title ?? selectedEp.peak}
-              <span className="ml-2 text-[11px] font-mono font-normal text-zinc-400">
-                고점 {selectedEp.peak} · 저점 {selectedEp.trough} ({selectedEp.depthPct.toFixed(1)}%) · 회복 {selectedEp.recovery ?? '미회복'}
-              </span>
+              {selectedEp.title}
+              {selectedEp.kind === 'crash' ? (
+                <span className="ml-2 text-[11px] font-mono font-normal text-zinc-400">
+                  고점 {selectedEp.peak} · 저점 {selectedEp.trough} ({selectedEp.depthPct.toFixed(1)}%) · 회복 {selectedEp.recovery ?? '미회복'}
+                </span>
+              ) : (
+                <span className="ml-2 text-[11px] font-mono font-normal text-zinc-400">
+                  {selectedEp.peak} ~ {selectedEp.recovery ?? `${data.meta.dataEnd} (진행 중)`} · 주식{' '}
+                  {selectedEp.stockRetPct != null ? fmtSignedPct(selectedEp.stockRetPct) : '—'} (연{' '}
+                  {selectedEp.annualPct != null ? fmtSignedPct(selectedEp.annualPct) : '—'}) · 최대 조정{' '}
+                  {selectedEp.maxDipPct != null ? `${selectedEp.maxDipPct.toFixed(1)}%` : '—'}
+                </span>
+              )}
             </h3>
             <div className="flex gap-1.5 flex-wrap">
               {ERA_STORIES[selectedEp.peak] && (
@@ -772,7 +884,7 @@ export function HistoryView({
               <button
                 onClick={() => {
                   const end = selectedEp.recovery ?? data.meta.dataEnd
-                  const title = EPISODE_INFO[selectedEp.peak]?.title ?? selectedEp.peak
+                  const title = selectedEp.title
                   onExplore(
                     `${selectedEp.peak}-01`,
                     `${end}-01`,
@@ -788,7 +900,7 @@ export function HistoryView({
               <button
                 onClick={() => {
                   const end = selectedEp.recovery ?? data.meta.dataEnd
-                  const title = EPISODE_INFO[selectedEp.peak]?.title ?? selectedEp.peak
+                  const title = selectedEp.title
                   onExplore(
                     `${selectedEp.peak}-01`,
                     `${end}-01`,
@@ -805,7 +917,7 @@ export function HistoryView({
               </button>
             </div>
           </div>
-          <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">{EPISODE_INFO[selectedEp.peak]?.cause}</p>
+          <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">{selectedEp.cause}</p>
 
           <div className="lg:grid lg:grid-cols-2 lg:gap-x-6 lg:items-start">
           <div id="era-charts" className="space-y-3 min-w-0 lg:order-2 lg:sticky lg:top-20 scroll-mt-20">
@@ -1145,7 +1257,7 @@ export function HistoryView({
       {/* 구간 스토리 팝업 */}
       {storyOpen && selectedEp && ERA_STORIES[selectedEp.peak] && (
         <EraStoryModal
-          title={EPISODE_INFO[selectedEp.peak]?.title ?? selectedEp.peak}
+          title={selectedEp.title}
           period={`${selectedEp.peak} ~ ${selectedEp.recovery ?? '미회복'}`}
           story={ERA_STORIES[selectedEp.peak]}
           onClose={() => setStoryOpen(false)}
