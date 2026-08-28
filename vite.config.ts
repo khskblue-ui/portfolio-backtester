@@ -5,6 +5,11 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // @ts-expect-error vitest 필드 — vite 타입에는 없지만 vitest가 읽는다
+  test: {
+    // .claude/worktrees/ 안의 병렬 세션 워크트리가 테스트를 이중 발견하는 것 방지
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.claude/**', '**/.omc/**'],
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

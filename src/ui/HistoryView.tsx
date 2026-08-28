@@ -66,6 +66,7 @@ interface HistoryData {
     cape: (number | null)[]
     capeProxy?: (number | null)[]
     tbill3m?: (number | null)[]
+    tips10?: (number | null)[]
   }
   episodes: Episode[]
 }
@@ -428,6 +429,7 @@ export function HistoryView({
         'CPI 인플레': data.macro.cpiYoY[i],
         '10년물 금리': data.macro.gs10[i],
         실질금리: data.macro.realRate10[i],
+        'TIPS(사전)': data.macro.tips10?.[i] ?? null,
         CAPE: data.macro.cape[i],
       })
     }
@@ -462,6 +464,7 @@ export function HistoryView({
         'CPI 인플레': data.macro.cpiYoY[i],
         '10년물 금리': data.macro.gs10[i],
         실질금리: data.macro.realRate10[i],
+        'TIPS(사전)': data.macro.tips10?.[i] ?? null,
         CAPE: data.macro.cape[i],
       })
     }
@@ -470,6 +473,9 @@ export function HistoryView({
 
   const zoomed = phaseIdx != null && phaseZoom && zoomData != null && zoomData.length > 0
   const chartData = zoomed && zoomData ? zoomData : detailData
+
+  // 현재 차트 창 안에 TIPS(2003-01~) 값이 있는지 — 없으면 라인·범례 자체를 숨긴다
+  const tipsInView = useMemo(() => chartData.some((r) => r['TIPS(사전)'] != null), [chartData])
 
   // 선택 국면을 현재 차트 범위로 클램프한 음영 구간
   const phaseBand = useMemo(() => {
@@ -1051,7 +1057,9 @@ export function HistoryView({
               명목 금리</b> · <b>실질금리(명목 금리 − 인플레이션, 사후적 근사)</b> · <b>CAPE(주가
               ÷ 10년 평균 실질 이익)</b>. 실질금리가 사후적 기준인 이유: 시장이 매기는 사전적
               실질금리(TIPS)는 1997년에야 도입되어 20세기 구간에는 존재하지 않습니다. 시대
-              비교가 가능한 유일한 실질금리가 사후적입니다(현재의 TIPS는 "현재 신호" 탭).
+              비교가 가능한 유일한 실질금리가 사후적입니다. 자료가 있는 2003년 이후
+              창에는 사전 실질금리(TIPS)를 가는 점선으로 함께 표시합니다(현재 값은
+              "현재 신호" 탭).
               수치는 널리 검증된 역사 기준값(1929년 CAPE 32.6, 2000년 CAPE ~44, 1981년 금리
               15.32% 등)과 자동 대조를 통과한 것만 싣습니다. 연준 기준금리·통화량·회사채
               스프레드는 1900년대 전반을 커버하지 못해 제외했습니다. 1913년 이전 CPI는 재구성
@@ -1092,6 +1100,9 @@ export function HistoryView({
               <Line yAxisId="pct" type="monotone" dataKey="CPI 인플레" stroke={c('cpi')} strokeWidth={1.8} dot={false} />
               <Line yAxisId="pct" type="monotone" dataKey="10년물 금리" stroke={c('rate')} strokeWidth={1.8} dot={false} />
               <Line yAxisId="pct" type="monotone" dataKey="실질금리" stroke={c('real')} strokeWidth={1.8} dot={false} />
+              {tipsInView && (
+                <Line yAxisId="pct" type="monotone" dataKey="TIPS(사전)" stroke={c('real')} strokeWidth={1.3} strokeDasharray="4 3" strokeOpacity={0.85} dot={false} />
+              )}
               {!narrow && <Line yAxisId="cape" type="monotone" dataKey="CAPE" stroke={c('cape')} strokeWidth={1.8} strokeDasharray="6 3" dot={false} />}
             </LineChart>
           </ResponsiveContainer>
@@ -1114,7 +1125,7 @@ export function HistoryView({
             {narrow
               ? '위 = %(인플레이션·금리), 아래 = CAPE입니다. CAPE는 주가가 최근 10년 평균 이익의 몇 배인가를 잽니다. '
               : '왼쪽 축 = %(인플레이션·금리), 오른쪽 점선 = CAPE(주가가 최근 10년 평균 이익의 몇 배인가). '}
-            인플레이션형 구간은 실질금리가 마이너스로 가라앉고, 밸류에이션 붕괴형은 CAPE가 극단인 상태에서 하락이 시작되는 패턴을 확인해 보세요.
+            2003년 이후 창에는 시장이 앞으로를 보고 매기는 사전 실질금리(TIPS)가 가는 점선으로 함께 표시됩니다. 인플레이션형 구간은 실질금리가 마이너스로 가라앉고, 밸류에이션 붕괴형은 CAPE가 극단인 상태에서 하락이 시작되는 패턴을 확인해 보세요.
           </p>
           </div>
 
