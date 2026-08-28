@@ -1097,9 +1097,9 @@ export function HistoryView({
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <ReferenceLine yAxisId="pct" y={0} stroke={axisTickColor} strokeDasharray="4 3" strokeOpacity={0.5} />
               {phaseBand && <ReferenceArea yAxisId="pct" x1={phaseBand.x1} x2={phaseBand.x2} fill="rgba(41,98,255,0.12)" stroke="rgba(41,98,255,0.35)" strokeDasharray="4 3" />}
-              <Line yAxisId="pct" type="monotone" dataKey="CPI 인플레" stroke={c('cpi')} strokeWidth={1.8} dot={false} />
-              <Line yAxisId="pct" type="monotone" dataKey="10년물 금리" stroke={c('rate')} strokeWidth={1.8} dot={false} />
-              <Line yAxisId="pct" type="monotone" dataKey="실질금리" stroke={c('real')} strokeWidth={1.8} dot={false} />
+              <Line yAxisId="pct" type="monotone" dataKey="CPI 인플레" name="CPI" stroke={c('cpi')} strokeWidth={1.8} dot={false} />
+              <Line yAxisId="pct" type="monotone" dataKey="10년물 금리" name="10년물" stroke={c('rate')} strokeWidth={1.8} dot={false} />
+              <Line yAxisId="pct" type="monotone" dataKey="실질금리" name="실질(사후)" stroke={c('real')} strokeWidth={1.8} dot={false} />
               {tipsInView && (
                 <Line yAxisId="pct" type="monotone" dataKey="TIPS(사전)" stroke={c('real')} strokeWidth={1.3} strokeDasharray="4 3" strokeOpacity={0.85} dot={false} />
               )}
