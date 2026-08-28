@@ -109,6 +109,7 @@ const SERIES_COLORS = {
   cpi: { light: '#c2410c', dark: '#f97316' },
   rate: { light: '#0f766e', dark: '#2dd4bf' },
   real: { light: '#7c3aed', dark: '#a78bfa' },
+  tips: { light: '#c026d3', dark: '#e879f9' },
   cape: { light: '#525252', dark: '#a3a3a3' },
 }
 
@@ -956,7 +957,7 @@ export function HistoryView({
           {/* 자산 추이 (고점=100 / 확대 시 국면 시작=100) */}
           <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 pt-1">
             <span className="block text-[8px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">ASSETS · {zoomed ? 'PHASE START = 100' : 'PEAK = 100'}</span>
-            자산별 추이 — 주식이 무너질 때 무엇이 버텼나 ({basisLabel} 기준, {zoomed ? '국면 시작=100' : '고점=100'})
+            자산별 추이
             <HelpTip title="각 자산을 어떻게 계산했나">
               위의 실질/명목 토글이 이 차트에도 적용됩니다. <b>주식</b> = S&P500 배당 재투자
               총수익(1957년 이전은 전신 지수를 소급 연결). <b>국채</b> = 미 10년물 금리로 계산한
@@ -998,14 +999,19 @@ export function HistoryView({
               )}
               <Legend wrapperStyle={{ fontSize: 12 }} />
               {phaseBand && <ReferenceArea x1={phaseBand.x1} x2={phaseBand.x2} fill="rgba(41,98,255,0.12)" stroke="rgba(41,98,255,0.35)" strokeDasharray="4 3" />}
-              {markersInView.map((m) => (
+              {markersInView.map((m, mi) => (
                 <ReferenceLine
                   key={m.ym}
                   x={m.ym}
                   stroke={axisTickColor}
                   strokeDasharray="3 3"
                   strokeOpacity={0.6}
-                  label={{ value: m.label, fontSize: 9.5, fill: axisTickColor, position: 'insideTopRight', angle: 0 }}
+                  // 이웃 마커의 라벨이 겹치지 않도록 홀짝으로 두 단 배치
+                  label={(props: { viewBox: { x: number } }) => (
+                    <text x={props.viewBox.x - 4} y={mi % 2 === 1 ? 27 : 14} textAnchor="end" fontSize={9.5} fill={axisTickColor}>
+                      {m.label}
+                    </text>
+                  )}
                 />
               ))}
               <Line type="monotone" dataKey="S&P500 총수익" stroke={c('stock')} strokeWidth={2} dot={false} />
@@ -1058,7 +1064,7 @@ export function HistoryView({
               ÷ 10년 평균 실질 이익)</b>. 실질금리가 사후적 기준인 이유: 시장이 매기는 사전적
               실질금리(TIPS)는 1997년에야 도입되어 20세기 구간에는 존재하지 않습니다. 시대
               비교가 가능한 유일한 실질금리가 사후적입니다. 자료가 있는 2003년 이후
-              창에는 사전 실질금리(TIPS)를 가는 점선으로 함께 표시합니다(현재 값은
+              창에는 사전 실질금리(TIPS)를 점선으로 함께 표시합니다(현재 값은
               "현재 신호" 탭).
               수치는 널리 검증된 역사 기준값(1929년 CAPE 32.6, 2000년 CAPE ~44, 1981년 금리
               15.32% 등)과 자동 대조를 통과한 것만 싣습니다. 연준 기준금리·통화량·회사채
@@ -1101,7 +1107,7 @@ export function HistoryView({
               <Line yAxisId="pct" type="monotone" dataKey="10년물 금리" name="10년물" stroke={c('rate')} strokeWidth={1.8} dot={false} />
               <Line yAxisId="pct" type="monotone" dataKey="실질금리" name="실질(사후)" stroke={c('real')} strokeWidth={1.8} dot={false} />
               {tipsInView && (
-                <Line yAxisId="pct" type="monotone" dataKey="TIPS(사전)" stroke={c('real')} strokeWidth={1.3} strokeDasharray="4 3" strokeOpacity={0.85} dot={false} />
+                <Line yAxisId="pct" type="monotone" dataKey="TIPS(사전)" legendType="plainline" stroke={c('tips')} strokeWidth={1.5} strokeDasharray="5 3" dot={false} />
               )}
               {!narrow && <Line yAxisId="cape" type="monotone" dataKey="CAPE" stroke={c('cape')} strokeWidth={1.8} strokeDasharray="6 3" dot={false} />}
             </LineChart>
@@ -1125,7 +1131,7 @@ export function HistoryView({
             {narrow
               ? '위 = %(인플레이션·금리), 아래 = CAPE입니다. CAPE는 주가가 최근 10년 평균 이익의 몇 배인가를 잽니다. '
               : '왼쪽 축 = %(인플레이션·금리), 오른쪽 점선 = CAPE(주가가 최근 10년 평균 이익의 몇 배인가). '}
-            2003년 이후 창에는 시장이 앞으로를 보고 매기는 사전 실질금리(TIPS)가 가는 점선으로 함께 표시됩니다. 인플레이션형 구간은 실질금리가 마이너스로 가라앉고, 밸류에이션 붕괴형은 CAPE가 극단인 상태에서 하락이 시작되는 패턴을 확인해 보세요.
+            2003년 이후 창에는 시장이 앞으로를 보고 매기는 사전 실질금리(TIPS)가 점선으로 함께 표시됩니다. 인플레이션형 구간은 실질금리가 마이너스로 가라앉고, 밸류에이션 붕괴형은 CAPE가 극단인 상태에서 하락이 시작되는 패턴을 확인해 보세요.
           </p>
           </div>
 
