@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { GraduationCap, Landmark, Activity, Play, ArrowRight, BarChart3 } from 'lucide-react'
 import { cardCls, btnPrimaryCls, btnGhostCls } from './common'
+import { HomeHero } from './HomeHero'
 import { assessNow, type LiveSnapshot, type NowAssessment, type Signal } from './nowSignals'
 import { fetchLiveSnapshot } from './nowData'
 import { loadGuideProgress, computePartProgress, findSection } from './guideProgress'
@@ -16,7 +17,7 @@ import type { StrategyConfig } from '@/core'
 
 interface HistoryData {
   meta: { dataEnd: string; liveRefs?: { ym: string; sp500trMonthlyAvg: number | null; cpi: number; capeProxy: number | null; stockRealLast: number } }
-  series: { dates: string[]; stock: number[] }
+  series: { dates: string[]; stock: number[]; bond?: (number | null)[]; gold?: (number | null)[] }
   macro: {
     cpiYoY: (number | null)[]
     gs10: (number | null)[]
@@ -97,6 +98,9 @@ export function HomeView({
 
   return (
     <div className="space-y-4">
+      {/* 히어로 — 126년 곡선 배경의 에디토리얼 밴드 (A안). 로딩 중에도 문구는 먼저 보인다 */}
+      <HomeHero series={data?.series ?? null} guideStarted={guide.pct > 0} onNavigate={onNavigate} />
+
       {/* 체제 히어로 */}
       <div className={`${cardCls} p-4 sm:p-6`}>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
