@@ -96,6 +96,9 @@ export const labelCls = 'text-xs font-medium text-zinc-600 dark:text-zinc-400'
 /** 패널 카드 — 화이트 서피스 + 헤어라인 + 미세 그림자 (금융 터미널 대시보드 질감) */
 export const cardCls =
   'bg-white dark:bg-[#1e222d] rounded-xl border border-[#e0e3eb] dark:border-[#2a2e39] shadow-[0_1px_3px_rgba(19,23,34,0.04)] dark:shadow-none'
+/** 유기체 문법의 타일(홈·가이드북·역사·신호) — 카드 선 대신 옅은 반투명 바탕으로만 구분.
+ *  백테스트(도구 UI)는 cardCls의 경계선 문법을 유지한다 */
+export const tileCls = 'bg-white/70 dark:bg-white/[0.045] rounded-2xl'
 /** 주 액션 버튼 — 프라이머리 블루 */
 export const btnPrimaryCls = 'btn-primary'
 

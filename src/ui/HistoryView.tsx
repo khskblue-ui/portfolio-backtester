@@ -19,7 +19,7 @@ import { ERA_STORIES } from './eraStories'
 import { ERA_TIMELINES, ERA_MARKERS } from './eraTimelines'
 import { ManiaStoryModal } from './ManiaStoryModal'
 import { MANIA_STORY } from './maniaStory'
-import { cardCls, btnGhostCls, fmtSignedPct } from './common'
+import { tileCls, btnGhostCls, fmtSignedPct } from './common'
 import { EPISODE_INFO } from './episodeInfo'
 import { CURATED_ERAS, type CuratedEra } from './curatedEras'
 import { fetchNasdaqMonthly, fetchNdx100Monthly, fetchGspcDailyWindow, type NasdaqSeries, type DailySlice } from './historyExtra'
@@ -554,7 +554,7 @@ export function HistoryView({
 
   if (error) {
     return (
-      <div className={`${cardCls} p-6 text-sm text-red-700 dark:text-red-300 flex items-center justify-between gap-3 flex-wrap`}>
+      <div className={`${tileCls} p-6 text-sm text-red-700 dark:text-red-300 flex items-center justify-between gap-3 flex-wrap`}>
         <span>역사 데이터 로드 실패: {error}</span>
         <button onClick={() => { setError(null); setRetryTick((t) => t + 1) }} className={`px-3 py-1.5 rounded text-xs font-medium ${btnGhostCls}`}>
           다시 시도
@@ -563,7 +563,7 @@ export function HistoryView({
     )
   }
   if (!data) {
-    return <div className={`${cardCls} p-6 text-sm text-zinc-500`}>역사 데이터 로딩 중…</div>
+    return <div className={`${tileCls} p-6 text-sm text-zinc-500`}>역사 데이터 로딩 중…</div>
   }
 
   const basisLabel = basis === 'real' ? '실질' : '명목'
@@ -571,7 +571,7 @@ export function HistoryView({
   return (
     <div className={`space-y-5 ${tipDismissed ? '[&_.recharts-tooltip-wrapper]:hidden' : ''}`}>
       {/* 전체 총수익 + 음수 구간 밴드 */}
-      <div className={`${cardCls} p-4 sm:p-5`}>
+      <div className={`${tileCls} p-4 sm:p-5`}>
         <div className="flex items-start justify-between flex-wrap gap-2">
           <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
             <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
@@ -801,7 +801,7 @@ export function HistoryView({
             <button
               key={e.peak}
               onClick={() => { setSelected(selected === e.peak ? null : e.peak); changePhase(null) }}
-              className={`${cardCls} p-4 text-left transition-colors ${selected === e.peak ? 'ring-2 ring-zinc-500 dark:ring-zinc-400' : 'hover:border-zinc-400 dark:hover:border-zinc-500'}`}
+              className={`${tileCls} p-4 text-left transition-colors ${selected === e.peak ? 'ring-2 ring-zinc-500 dark:ring-zinc-400' : 'hover:bg-white dark:hover:bg-white/[0.08]'}`}
             >
               <div className="flex items-baseline justify-between gap-2">
                 <span className="font-semibold text-sm text-zinc-900 dark:text-zinc-100">{e.title}</span>
@@ -842,7 +842,7 @@ export function HistoryView({
       {/* 특집 — 광기의 해부 (닷컴·서브프라임은 둘 다 2000-08 "잃어버린 10년" 구간 안의 사건) */}
       <button
         onClick={() => setManiaOpen(true)}
-        className={`${cardCls} w-full p-4 text-left hover:border-[#e34948]/60 transition-colors group`}
+        className={`${tileCls} w-full p-4 text-left hover:ring-1 hover:ring-[#e34948]/50 transition-colors group`}
       >
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="min-w-0">
@@ -861,7 +861,7 @@ export function HistoryView({
 
       {/* 선택 구간 상세 */}
       {selectedEp && (
-        <div id="era-detail-card" className={`${cardCls} p-4 sm:p-5 space-y-3 scroll-mt-20`}>
+        <div id="era-detail-card" className={`${tileCls} p-4 sm:p-5 space-y-3 scroll-mt-20`}>
           <div className="flex items-start justify-between flex-wrap gap-2">
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
               {selectedEp.title}

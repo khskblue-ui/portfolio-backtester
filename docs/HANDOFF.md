@@ -250,7 +250,16 @@
       페이드(→#131722), 버튼은 흰 알약형(`dark:rounded-full dark:!bg-white`)
       ⑤ 콕핏 무테두리: 체제 블록은 카드 없이 바탕 위에, 신호 5종·이어서 3카드는
       `tileCls`(bg-white/70 · dark:bg-white/[0.045], rounded-2xl, 경계선 없음,
-      경계 신호는 ring) — 홈 한정, 다른 탭 cardCls 불변.
+      경계 신호는 ring).
+    - **후속 4 — 유기체 문법을 가이드북·역사·신호 탭까지 확장** (같은 날): ① `tileCls`를
+      common.ts 공용 토큰으로 승격, GuideView(8)·HistoryView(7)·NowView(4)·NowPanel(2)의
+      cardCls → tileCls(테두리 hover는 배경/ring hover로, 가이드 sticky 2곳은 blur 추가)
+      ② 헤더·레일 투명↔유리 규칙을 `organic = view !== 'backtest'`로 확장 ③ 홈이 아닌
+      유기체 탭 상단에 `CurveBackdrop`(같은 126년 곡선, 불투명도 0.16/0.22, 460px,
+      페이지 바탕으로 페이드)을 앱 루트(relative isolate, -z-10)에 렌더 ④ 곡선 계산은
+      `curveData.ts`(훅·상수)로 분리(react-refresh 규칙), HomeHero·CurveBackdrop 공유.
+      **백테스트 탭은 도구 UI라 cardCls·불투명 헤더 그대로**(사용자가 세 탭만 지정).
+      히어로 범례 "주식 4,353배" → "주식"(사용자 지정).
 
 ## 3. 도메인 규약 (어기면 수익률이 틀어지는 것들)
 

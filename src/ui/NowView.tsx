@@ -6,7 +6,7 @@ import { HelpTip } from './HelpTip'
 import { assessNow, type LiveSnapshot } from './nowSignals'
 import { fetchLiveSnapshot } from './nowData'
 import { ManiaStoryModal } from './ManiaStoryModal'
-import { cardCls } from './common'
+import { tileCls } from './common'
 
 /**
  * "현재 신호" 탭 — 최신 데이터(주가·금리 일별, CPI 최신 발표월)를 역사 선행조건과
@@ -217,10 +217,10 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
   }, [data, live, theme])
 
   if (error) {
-    return <div className={`${cardCls} p-6 text-sm text-red-700 dark:text-red-300`}>데이터 로드 실패: {error}</div>
+    return <div className={`${tileCls} p-6 text-sm text-red-700 dark:text-red-300`}>데이터 로드 실패: {error}</div>
   }
   if (!data || !assessment || !liveTried) {
-    return <div className={`${cardCls} p-6 text-sm text-zinc-500`}>최신 데이터 조회 중… (주가·금리 일별 + CPI 최신 발표월)</div>
+    return <div className={`${tileCls} p-6 text-sm text-zinc-500`}>최신 데이터 조회 중… (주가·금리 일별 + CPI 최신 발표월)</div>
   }
 
   return (
@@ -278,7 +278,7 @@ export function NowView({ theme }: { theme: 'light' | 'dark' }) {
             .filter((b) => b.x2 >= first)
             .map((b) => ({ x1: b.x1 >= first ? b.x1 : first, x2: b.x2 }))
           return (
-            <div key={c.title} className={`${cardCls} p-4`}>
+            <div key={c.title} className={`${tileCls} p-4`}>
               <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{c.title}</h3>
               <p className="text-[11px] text-zinc-400 mb-2">
                 {c.sub} · {zoom === 'recent' ? '최근 5년 확대 — 기준선은 그대로' : `음영 = 역사 하락 구간 · ${c.range ?? '1900 ~ 현재'}`}

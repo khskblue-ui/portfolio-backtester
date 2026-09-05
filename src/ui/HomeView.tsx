@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { GraduationCap, Landmark, Activity, Play, ArrowRight, BarChart3 } from 'lucide-react'
-import { btnPrimaryCls, btnGhostCls } from './common'
+import { btnPrimaryCls, btnGhostCls, tileCls as baseTileCls } from './common'
 import { assessNow, type LiveSnapshot, type NowAssessment, type Signal } from './nowSignals'
 import { fetchLiveSnapshot } from './nowData'
 import { loadGuideProgress, computePartProgress, findSection } from './guideProgress'
@@ -43,9 +43,8 @@ const LEVEL_META: Record<Signal['level'], { label: string; text: string; chip: s
   alert: { label: '경계', text: 'text-[#e34948] dark:text-[#e66767]', chip: 'bg-[#e34948]/10', dot: 'bg-[#e34948]' },
 }
 
-/** 유기체 홈의 타일 — 카드 선 대신 옅은 반투명 바탕으로만 구분 (다른 탭의 cardCls와 구별) */
-const tileCls =
-  'bg-white/70 dark:bg-white/[0.045] rounded-2xl transition-colors hover:bg-white dark:hover:bg-white/[0.08]'
+/** 홈 타일 — 공용 tileCls에 클릭 가능 힌트(hover)만 얹음 */
+const tileCls = `${baseTileCls} transition-colors hover:bg-white dark:hover:bg-white/[0.08]`
 
 export function HomeView({
   data,

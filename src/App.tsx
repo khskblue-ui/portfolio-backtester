@@ -33,6 +33,7 @@ import { NowView } from '@/ui/NowView'
 import { GuideView } from '@/ui/GuideView'
 import { HomeView, type HomeHistoryData } from '@/ui/HomeView'
 import { HomeHero } from '@/ui/HomeHero'
+import { CurveBackdrop } from '@/ui/CurveBackdrop'
 import { loadGuideProgress, computePartProgress } from '@/ui/guideProgress'
 import { TRADING_GUIDE_CHAPTERS } from '@/ui/tradingGuide'
 import { GUIDE_CHAPTERS } from '@/ui/guideContent'
@@ -130,18 +131,19 @@ export default function App() {
       .catch((e) => setHistoryError(e instanceof Error ? e.message : '로드 실패'))
   }, [])
 
-  // 유기체 홈: 최상단 근처(스크롤 80px 미만)에서만 헤더·레일이 투명(곡선 위에 떠 있음),
-  // 조금만 내려도 유리(blur) 바탕으로 — 히어로 문구·버튼 위에 투명 헤더가 겹치지 않게.
-  // 다른 탭에서는 늘 불투명. 같은 값 setState는 리렌더를 만들지 않아 스크롤 비용은 없다
+  // 유기체 문법(홈·가이드북·역사·신호): 최상단 근처(스크롤 80px 미만)에서는 헤더·레일이
+  // 투명(곡선 배경 위에 떠 있음), 조금만 내려도 유리(blur) 바탕으로. 백테스트(도구 UI)는
+  // 늘 불투명. 같은 값 setState는 리렌더를 만들지 않아 스크롤 비용은 없다
+  const organic = view !== 'backtest'
   const [atTop, setAtTop] = useState(true)
   useEffect(() => {
-    if (view !== 'home') return
+    if (!organic) return
     const onScroll = () => setAtTop(window.scrollY < 80)
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
-  }, [view])
-  const floating = view === 'home' && atTop
+  }, [organic, view])
+  const floating = organic && atTop
   const guideStarted = useMemo(() => {
     const prog = loadGuideProgress()
     return computePartProgress(TRADING_GUIDE_CHAPTERS, prog.visited).pct > 0 || computePartProgress(GUIDE_CHAPTERS, prog.visited).pct > 0
@@ -255,13 +257,15 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#eef1f5] dark:bg-[#131722] text-zinc-900 dark:text-zinc-100">
+    <div className="relative isolate min-h-screen bg-[#eef1f5] dark:bg-[#131722] text-zinc-900 dark:text-zinc-100">
+      {/* 유기체 문법: 홈이 아닌 탭은 상단에 같은 곡선 모티프를 옅게 깔아 한 몸으로 읽히게 */}
+      {organic && view !== 'home' && <CurveBackdrop series={history?.series ?? null} />}
       {/* 상단 고정 헤더 — 단일 바: 로고 · 텍스트 내비 · 우측 액션 (미니멀) */}
       <header
         className={`sticky top-0 z-40 border-b transition-colors duration-300 ${
           floating
             ? 'bg-transparent border-transparent'
-            : view === 'home'
+            : organic
               ? 'bg-white/90 dark:bg-[#1e222d]/90 backdrop-blur-md border-[#e0e3eb] dark:border-[#2a2e39]'
               : 'bg-white dark:bg-[#1e222d] border-[#e0e3eb] dark:border-[#2a2e39]'
         }`}

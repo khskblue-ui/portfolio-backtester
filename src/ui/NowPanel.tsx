@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronUp, Activity } from 'lucide-react'
 import { HelpTip } from './HelpTip'
-import { cardCls } from './common'
+import { tileCls } from './common'
 import type { NowAssessment, SignalLevel } from './nowSignals'
 
 /**
@@ -20,7 +20,7 @@ export function NowPanel({ assessment }: { assessment: NowAssessment }) {
   const a = assessment
 
   return (
-    <div className={`${cardCls} p-4 sm:p-5`}>
+    <div className={`${tileCls} p-4 sm:p-5`}>
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
           <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">

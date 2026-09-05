@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
 import { GraduationCap, Activity, ChevronDown } from 'lucide-react'
+import { CURVE_VB_W, CURVE_VB_H, useCurvePolylines, type CurveSeries } from './curveData'
 
 /**
  * 홈 히어로 — "유기체 홈"(테마 연동). App 셸이 컨테이너 바깥에서 렌더해 화면 끝까지
@@ -9,37 +9,7 @@ import { GraduationCap, Activity, ChevronDown } from 'lucide-react'
  * 페이지 바탕(#eef1f5 / #131722)으로 끝나 아래 콕핏과 경계 없이 이어진다.
  */
 
-export interface HeroSeries {
-  dates: string[]
-  stock: number[]
-  bond?: (number | null)[]
-  gold?: (number | null)[]
-}
-
-const VB_W = 1600
-const VB_H = 400
-const SAMPLE_STEP = 3 // 3개월 간격 샘플 — 1,519개월을 500점 안팎으로
-
-/** 로그 눈금 폴리라인 — 각 시리즈를 자기 범위로 정규화해 세 곡선이 같은 높이대를 쓰게 한다 */
-function toPolyline(arr: (number | null)[] | undefined, n: number): string {
-  if (!arr) return ''
-  const pts: [number, number][] = []
-  for (let i = 0; i < n; i += SAMPLE_STEP) {
-    const v = arr[i]
-    if (v != null && v > 0) pts.push([i, Math.log10(v)])
-  }
-  if (pts.length < 2) return ''
-  let lo = Infinity
-  let hi = -Infinity
-  for (const [, y] of pts) {
-    if (y < lo) lo = y
-    if (y > hi) hi = y
-  }
-  const span = hi - lo || 1
-  return pts
-    .map(([i, y]) => `${((i / (n - 1)) * VB_W).toFixed(1)},${(VB_H - 20 - ((y - lo) / span) * (VB_H - 40)).toFixed(1)}`)
-    .join(' ')
-}
+export type HeroSeries = CurveSeries
 
 export function HomeHero({
   series,
@@ -50,18 +20,7 @@ export function HomeHero({
   guideStarted: boolean
   onNavigate: (view: 'guide' | 'now') => void
 }) {
-  const curves = useMemo(() => {
-    if (!series) return null
-    const n = series.dates.length
-    return {
-      stock: toPolyline(series.stock, n),
-      bond: toPolyline(series.bond, n),
-      gold: toPolyline(series.gold, n),
-      years: Math.floor((n - 1) / 12),
-      mult: Math.round(series.stock[n - 1] / series.stock[0]),
-    }
-  }, [series])
-
+  const curves = useCurvePolylines(series)
   const years = curves?.years ?? 126
 
   // 다크에서는 흰 알약형(O2), 라이트에서는 기존 프라이머리/고스트(O1)
@@ -98,7 +57,7 @@ export function HomeHero({
         {/* 배경 아트: 126년 실질 총수익 곡선 3종 (로그 눈금). 장식이므로 보조기기에는 숨김 */}
         {curves && (
           <svg
-            viewBox={`0 0 ${VB_W} ${VB_H}`}
+            viewBox={`0 0 ${CURVE_VB_W} ${CURVE_VB_H}`}
             preserveAspectRatio="none"
             className="pointer-events-none absolute inset-x-0 bottom-0 h-[50%] sm:h-[60%] lg:h-[66%] w-full opacity-50 dark:opacity-90"
             aria-hidden="true"
@@ -141,7 +100,7 @@ export function HomeHero({
           <div className="absolute right-4 sm:right-8 lg:right-24 bottom-5 hidden sm:flex gap-4 text-[12px] text-zinc-600 dark:text-[#b4b8c2]">
             <span className="flex items-center gap-1.5">
               <span className="w-3.5 h-[3px] rounded-sm bg-[#2962ff] dark:bg-[#5b8aff]" />
-              주식 {curves.mult.toLocaleString('ko-KR')}배
+              주식
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-3.5 h-[3px] rounded-sm bg-[#1baf7a]" />

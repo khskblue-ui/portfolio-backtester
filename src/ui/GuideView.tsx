@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { GraduationCap, Landmark, Activity, Lightbulb, AlertTriangle, Quote, ArrowUpRight, Check, Play, ArrowRight } from 'lucide-react'
 import { usePersistentState } from '@/hooks/usePersistentState'
-import { cardCls, btnGhostCls, btnPrimaryCls, nbspShortParens } from './common'
+import { tileCls, btnGhostCls, btnPrimaryCls, nbspShortParens } from './common'
 import {
   GUIDE_PROGRESS_KEY,
   emptyGuideProgress,
@@ -213,7 +213,7 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
   return (
     <div className="space-y-4">
       {/* 파트 세그먼트 */}
-      <div className={`${cardCls} p-1.5 flex gap-1.5 sticky top-[60px] z-30`}>
+      <div className={`${tileCls} backdrop-blur-md p-1.5 flex gap-1.5 sticky top-[60px] z-30`}>
         {PARTS.map((pt, i) => (
           <button
             key={pt.label}
@@ -234,7 +234,7 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
 
       <div className="lg:grid lg:grid-cols-[225px_minmax(0,1fr)] lg:gap-5 lg:items-start">
         {/* 목차 — 데스크톱 좌측 고정, 자체 스크롤, 현재 챕터만 하위 절 펼침(아코디언) */}
-        <nav className={`${cardCls} hidden lg:block sticky top-[128px] p-4 text-[12px] max-h-[calc(100vh-148px)] overflow-y-auto`}>
+        <nav className={`${tileCls} backdrop-blur-md hidden lg:block sticky top-[128px] p-4 text-[12px] max-h-[calc(100vh-148px)] overflow-y-auto`}>
           <div className="text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500 mb-2">
             CONTENTS · {PARTS[part].label}
           </div>
@@ -298,7 +298,7 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
 
         <div className="space-y-5 min-w-0">
           {/* 학습 진도 히어로 — 코스형 UX: 링·이어 읽기·남은 분량 */}
-          <div className={`${cardCls} p-4 sm:p-5 flex flex-wrap items-center gap-4`}>
+          <div className={`${tileCls} p-4 sm:p-5 flex flex-wrap items-center gap-4`}>
             <svg width="54" height="54" viewBox="0 0 54 54" className="flex-shrink-0" aria-hidden="true">
               <circle cx="27" cy="27" r="22" fill="none" strokeWidth="6" className="stroke-[#eef1f5] dark:stroke-[#2a2e39]" />
               <circle
@@ -342,7 +342,7 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
 
           {/* 인트로 — 첫 파트에서만 (두 파트 공통 안내) */}
           {part === 0 && (
-            <div className={`${cardCls} p-4 sm:p-5`}>
+            <div className={`${tileCls} p-4 sm:p-5`}>
               <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
                 <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
                   GUIDE · 1부 {PARTS[0].chapters.reduce((a, c) => a + c.minutes, 0)}분 + 2부{' '}
@@ -384,7 +384,7 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
 
           {/* 챕터 본문 */}
           {chapters.map((c, ci) => (
-            <div key={c.id} id={c.id} className={`${cardCls} p-4 sm:p-5 scroll-mt-32`}>
+            <div key={c.id} id={c.id} className={`${tileCls} p-4 sm:p-5 scroll-mt-32`}>
               <h3 className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100">
                 <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
                   {c.kicker ?? `STEP ${c.step}`} · 약 {c.minutes}분
@@ -412,7 +412,7 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
           ))}
 
           {/* 용어 사전 — 파트별 데이터 */}
-          <div id="glossary" className={`${cardCls} p-4 sm:p-5 scroll-mt-32`}>
+          <div id="glossary" className={`${tileCls} p-4 sm:p-5 scroll-mt-32`}>
             <h3 className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100">
               <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">APPENDIX · GLOSSARY</span>
               용어 사전 — 막힐 때 찾아보기
@@ -435,7 +435,7 @@ export function GuideView({ onNavigate }: { onNavigate: (view: 'history' | 'now'
           </div>
 
           {/* 파트 말미 — 다음 동선 */}
-          <div className={`${cardCls} p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3`}>
+          <div className={`${tileCls} p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3`}>
             <p className="text-[13px] text-zinc-600 dark:text-zinc-300">
               {part === 0 ? '지침서를 마쳤다면, 앱의 용어와 지표를 읽는 법(2부)으로.' : '준비됐다면, 배운 눈으로 두 탭의 문장을 직접 읽어 보세요.'}
             </p>
