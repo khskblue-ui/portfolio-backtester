@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { GraduationCap, Landmark, Activity, Play, ArrowRight, BarChart3 } from 'lucide-react'
-import { cardCls, btnPrimaryCls, btnGhostCls } from './common'
-import { HomeHero } from './HomeHero'
+import { btnPrimaryCls, btnGhostCls } from './common'
 import { assessNow, type LiveSnapshot, type NowAssessment, type Signal } from './nowSignals'
 import { fetchLiveSnapshot } from './nowData'
 import { loadGuideProgress, computePartProgress, findSection } from './guideProgress'
@@ -15,7 +14,7 @@ import type { StrategyConfig } from '@/core'
  * 신호의 상세 차트·설명은 "현재 신호" 탭이 담당한다.
  */
 
-interface HistoryData {
+export interface HomeHistoryData {
   meta: { dataEnd: string; liveRefs?: { ym: string; sp500trMonthlyAvg: number | null; cpi: number; capeProxy: number | null; stockRealLast: number } }
   series: { dates: string[]; stock: number[]; bond?: (number | null)[]; gold?: (number | null)[] }
   macro: {
@@ -44,28 +43,29 @@ const LEVEL_META: Record<Signal['level'], { label: string; text: string; chip: s
   alert: { label: '경계', text: 'text-[#e34948] dark:text-[#e66767]', chip: 'bg-[#e34948]/10', dot: 'bg-[#e34948]' },
 }
 
+/** 유기체 홈의 타일 — 카드 선 대신 옅은 반투명 바탕으로만 구분 (다른 탭의 cardCls와 구별) */
+const tileCls =
+  'bg-white/70 dark:bg-white/[0.045] rounded-2xl transition-colors hover:bg-white dark:hover:bg-white/[0.08]'
+
 export function HomeView({
+  data,
+  error,
   strategies,
   onNavigate,
   onRun,
 }: {
+  /** 역사 번들 — App 셸이 한 번 받아 히어로와 공유 (null = 로딩 중) */
+  data: HomeHistoryData | null
+  error: string | null
   strategies: StrategyConfig[]
   onNavigate: (view: 'guide' | 'history' | 'now' | 'backtest') => void
   onRun: () => void
 }) {
-  const [data, setData] = useState<HistoryData | null>(null)
   const [live, setLive] = useState<LiveSnapshot | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/data/history.json')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: HistoryData) => {
-        setData(d)
-        if (d.meta.liveRefs) fetchLiveSnapshot(d.meta.liveRefs).then(setLive).catch(() => {})
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : '로드 실패'))
-  }, [])
+    if (data?.meta.liveRefs) fetchLiveSnapshot(data.meta.liveRefs).then(setLive).catch(() => {})
+  }, [data])
 
   const assessment: NowAssessment | null = useMemo(
     () => (data ? assessNow(data, live ?? undefined) : null),
@@ -97,18 +97,15 @@ export function HomeView({
   }, [assessment])
 
   return (
-    <div className="space-y-4">
-      {/* 히어로 — 126년 곡선 배경의 에디토리얼 밴드 (A안). 로딩 중에도 문구는 먼저 보인다 */}
-      <HomeHero series={data?.series ?? null} guideStarted={guide.pct > 0} onNavigate={onNavigate} />
-
-      {/* 체제 히어로 */}
-      <div className={`${cardCls} p-4 sm:p-6`}>
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+    <div className="space-y-6">
+      {/* 체제 블록 — 유기체 홈: 카드 선 없이 바탕 위에 놓고 여백·글자 크기로 구분 */}
+      <div className="px-1 pt-1 sm:pt-2">
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
           <div className="flex-1 min-w-[260px] space-y-1.5">
             <div className="text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">
               REGIME · 지금은?{assessment && <span className="ml-2 normal-case tracking-normal">기준 {assessment.asOf}{assessment.live ? ' · 라이브' : ''}</span>}
             </div>
-            <h2 className="text-lg sm:text-xl font-bold leading-snug text-zinc-900 dark:text-zinc-100">
+            <h2 className="text-xl sm:text-[26px] font-bold leading-snug tracking-[-0.01em] text-zinc-900 dark:text-zinc-100">
               {assessment ? assessment.headline : error ? '신호 데이터를 불러오지 못했습니다' : '시장 위치 확인 중…'}
             </h2>
             {assessment?.analog && (
@@ -143,8 +140,8 @@ export function HomeView({
             <button
               key={s.key}
               onClick={() => onNavigate('now')}
-              className={`${cardCls} p-3.5 text-left hover:border-[#2962ff] transition-colors ${
-                s.level === 'alert' ? '!border-[#e34948]/60 dark:!border-[#e66767]/60' : ''
+              className={`${tileCls} p-4 text-left ${
+                s.level === 'alert' ? 'ring-1 ring-[#e34948]/45 dark:ring-[#e66767]/50' : ''
               }`}
             >
               <div className="flex items-center justify-between gap-2">
@@ -165,7 +162,7 @@ export function HomeView({
       {/* 이어서 하기 — 각 탭의 입구 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {/* 가이드 학습 */}
-        <div className={`${cardCls} p-4 flex flex-col gap-2.5`}>
+        <div className={`${tileCls} p-4 flex flex-col gap-2.5`}>
           <div className="flex items-center justify-between">
             <span className="text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">CONTINUE · 가이드북</span>
             <span className="text-[12px] font-mono font-semibold text-[#2962ff] dark:text-[#5b8aff]">
@@ -187,7 +184,7 @@ export function HomeView({
         </div>
 
         {/* 백테스트 */}
-        <div className={`${cardCls} p-4 flex flex-col gap-2.5`}>
+        <div className={`${tileCls} p-4 flex flex-col gap-2.5`}>
           <span className="text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">RE-RUN · 백테스트</span>
           <div className="text-[13.5px] font-semibold text-zinc-800 dark:text-zinc-100 leading-snug">
             전략 {strategies.length}개 대기 중
@@ -216,7 +213,7 @@ export function HomeView({
         </div>
 
         {/* 닮은 역사 */}
-        <div className={`${cardCls} p-4 flex flex-col gap-2.5`}>
+        <div className={`${tileCls} p-4 flex flex-col gap-2.5`}>
           <span className="text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">READ · 닮은 역사</span>
           <div className="text-[13.5px] font-semibold text-zinc-800 dark:text-zinc-100 leading-snug flex-1">
             {assessment?.analog ? assessment.analog.replace(/ \(단,[^)]*\)/, '') : '1900년 이후 7개 대형 하락 구간의 연대기를 읽어보세요'}

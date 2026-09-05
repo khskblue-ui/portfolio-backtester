@@ -31,7 +31,11 @@ import { ReportView } from '@/ui/ReportView'
 import { HistoryView } from '@/ui/HistoryView'
 import { NowView } from '@/ui/NowView'
 import { GuideView } from '@/ui/GuideView'
-import { HomeView } from '@/ui/HomeView'
+import { HomeView, type HomeHistoryData } from '@/ui/HomeView'
+import { HomeHero } from '@/ui/HomeHero'
+import { loadGuideProgress, computePartProgress } from '@/ui/guideProgress'
+import { TRADING_GUIDE_CHAPTERS } from '@/ui/tradingGuide'
+import { GUIDE_CHAPTERS } from '@/ui/guideContent'
 
 type Theme = 'light' | 'dark'
 type View = 'home' | 'guide' | 'history' | 'now' | 'backtest'
@@ -115,6 +119,35 @@ export default function App() {
     setNoticeState(text == null ? null : { text, kind })
   const [showReport, setShowReport] = useState(false)
   const [view, setView] = useState<View>('home')
+
+  // 홈 히어로·콕핏이 함께 쓰는 역사 번들 — 셸에서 한 번만 받아 둘에 내려준다
+  const [history, setHistory] = useState<HomeHistoryData | null>(null)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  useEffect(() => {
+    fetch('/data/history.json')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: HomeHistoryData) => setHistory(d))
+      .catch((e) => setHistoryError(e instanceof Error ? e.message : '로드 실패'))
+  }, [])
+
+  // 유기체 홈: 최상단 근처(스크롤 80px 미만)에서만 헤더·레일이 투명(곡선 위에 떠 있음),
+  // 조금만 내려도 유리(blur) 바탕으로 — 히어로 문구·버튼 위에 투명 헤더가 겹치지 않게.
+  // 다른 탭에서는 늘 불투명. 같은 값 setState는 리렌더를 만들지 않아 스크롤 비용은 없다
+  const [atTop, setAtTop] = useState(true)
+  useEffect(() => {
+    if (view !== 'home') return
+    const onScroll = () => setAtTop(window.scrollY < 80)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [view])
+  const floating = view === 'home' && atTop
+  const guideStarted = useMemo(() => {
+    const prog = loadGuideProgress()
+    return computePartProgress(TRADING_GUIDE_CHAPTERS, prog.visited).pct > 0 || computePartProgress(GUIDE_CHAPTERS, prog.visited).pct > 0
+    // 홈으로 돌아올 때마다 다시 읽음 (가이드 진도는 localStorage)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view])
   // 모바일 워크벤치 위저드 (① 전략 → ② 가정 → ③ 결과). 데스크톱(lg+) 분할 화면에서는 무시됨
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -224,7 +257,15 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#eef1f5] dark:bg-[#131722] text-zinc-900 dark:text-zinc-100">
       {/* 상단 고정 헤더 — 단일 바: 로고 · 텍스트 내비 · 우측 액션 (미니멀) */}
-      <header className="sticky top-0 z-40 bg-white dark:bg-[#1e222d] border-b border-[#e0e3eb] dark:border-[#2a2e39]">
+      <header
+        className={`sticky top-0 z-40 border-b transition-colors duration-300 ${
+          floating
+            ? 'bg-transparent border-transparent'
+            : view === 'home'
+              ? 'bg-white/90 dark:bg-[#1e222d]/90 backdrop-blur-md border-[#e0e3eb] dark:border-[#2a2e39]'
+              : 'bg-white dark:bg-[#1e222d] border-[#e0e3eb] dark:border-[#2a2e39]'
+        }`}
+      >
         <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 flex items-center justify-between flex-wrap gap-x-4 gap-y-1 min-h-14 py-1.5">
           <div className="flex items-center gap-3 sm:gap-7 min-w-0">
             <button onClick={() => setView('home')} className="flex items-center gap-2 flex-shrink-0" title="홈으로">
@@ -302,7 +343,11 @@ export default function App() {
       </header>
 
       {/* 데스크톱 좌측 아이콘 레일 (A안) — 헤더 아래 고정 */}
-      <aside className="hidden lg:flex fixed left-0 top-14 bottom-0 w-16 z-30 flex-col items-center gap-1 pt-3 bg-white dark:bg-[#1e222d] border-r border-[#e0e3eb] dark:border-[#2a2e39]">
+      <aside
+        className={`hidden lg:flex fixed left-0 top-14 bottom-0 w-16 z-30 flex-col items-center gap-1 pt-3 border-r transition-colors duration-300 ${
+          floating ? 'bg-transparent border-transparent' : 'bg-white dark:bg-[#1e222d] border-[#e0e3eb] dark:border-[#2a2e39]'
+        }`}
+      >
         {NAV_ITEMS.map(({ key, label, Icon }) => (
           <button key={key} onClick={() => setView(key)} title={label} className="flex flex-col items-center gap-0.5 py-1.5 w-14 rounded-xl">
             <span
@@ -321,6 +366,8 @@ export default function App() {
         ))}
       </aside>
 
+      {/* 유기체 홈: 히어로는 컨테이너·레일 바깥에서 화면 끝까지 (헤더 뒤까지 -mt-14) */}
+      {view === 'home' && <HomeHero series={history?.series ?? null} guideStarted={guideStarted} onNavigate={setView} />}
       <div className="lg:pl-16 pb-20 lg:pb-0">
       <div className="max-w-7xl mx-auto px-3 py-4 sm:px-4 md:px-6 md:py-5 space-y-5">
         {/* 알림 배너 — 오류는 빨강, 안내는 파랑 */}
@@ -351,7 +398,7 @@ export default function App() {
           </div>
         )}
 
-        {view === 'home' && <HomeView strategies={strategies} onNavigate={setView} onRun={() => run(false)} />}
+        {view === 'home' && <HomeView data={history} error={historyError} strategies={strategies} onNavigate={setView} onRun={() => run(false)} />}
 
         {view === 'guide' && <GuideView onNavigate={setView} />}
 
