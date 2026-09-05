@@ -53,16 +53,12 @@ export function HomeHero({
   const curves = useMemo(() => {
     if (!series) return null
     const n = series.dates.length
-    const first = series.dates[0]?.slice(0, 4) ?? '1900'
-    const last = series.dates[n - 1]?.slice(0, 4) ?? ''
     const years = Math.floor((n - 1) / 12)
     const mult = Math.round(series.stock[n - 1] / series.stock[0])
     return {
       stock: toPolyline(series.stock, n),
       bond: toPolyline(series.bond, n),
       gold: toPolyline(series.gold, n),
-      first,
-      last,
       years,
       mult,
     }
@@ -70,7 +66,26 @@ export function HomeHero({
 
   const years = curves?.years ?? 126
 
+  // 모바일(<sm)에서는 버튼을 밴드 밖 별도 행으로 빼서 곡선을 가리지 않게 한다(M4안)
+  const ctas = (
+    <>
+      <button
+        onClick={() => onNavigate('guide')}
+        className={`h-11 px-[18px] rounded-lg text-[14px] font-semibold inline-flex items-center justify-center gap-2 ${btnPrimaryCls}`}
+      >
+        <GraduationCap className="w-4 h-4" /> {guideStarted ? '가이드북 이어 읽기' : '가이드북 시작'}
+      </button>
+      <button
+        onClick={() => onNavigate('now')}
+        className={`h-11 px-[18px] rounded-lg text-[14px] font-medium inline-flex items-center justify-center gap-2 ${btnGhostCls}`}
+      >
+        <Activity className="w-4 h-4" /> 현재 신호 보기
+      </button>
+    </>
+  )
+
   return (
+    <>
     <section
       className="relative overflow-hidden rounded-xl border border-[#e0e3eb] dark:border-[#2a2e39] bg-gradient-to-b from-white to-[#eef1f5] dark:from-[#1e222d] dark:to-[#131722] shadow-[0_1px_3px_rgba(19,23,34,0.04)] dark:shadow-none"
       aria-label="투자의 정석 소개"
@@ -89,33 +104,16 @@ export function HomeHero({
         </svg>
       )}
 
-      <div className="relative px-5 pt-9 pb-44 sm:px-10 sm:pt-14 sm:pb-56 lg:px-14 lg:pt-16 lg:pb-64 flex flex-col gap-4 sm:gap-5">
-        <div className="text-[10px] sm:text-[11px] font-mono tracking-[0.22em] text-zinc-500 dark:text-zinc-400">
-          {curves ? `${curves.first} — ${curves.last}` : '1900 —'} · {years}년의 실질 총수익
-          <span className="hidden sm:inline">, 배당 재투자·물가 조정</span>
-        </div>
+      <div className="relative px-5 pt-8 pb-40 sm:px-10 sm:pt-14 sm:pb-56 lg:px-14 lg:pt-16 lg:pb-64 flex flex-col gap-4 sm:gap-5">
         <h2 className="text-[40px] sm:text-[60px] lg:text-[76px] font-bold leading-[1.1] tracking-[-0.025em] text-zinc-900 dark:text-zinc-50 max-w-[900px]">
           {years}년의 시장을
           <br />
           먼저 읽습니다.
         </h2>
         <p className="text-[15px] sm:text-[17px] lg:text-[19px] leading-relaxed text-zinc-600 dark:text-zinc-300 max-w-[620px]">
-          예측이 아니라 위치 확인입니다. 역사 데이터로 배우고, 정해 둔 규칙으로 투자합니다.
+          역사 데이터로 배우고, 정해 둔 규칙으로 투자
         </p>
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5 sm:items-center pt-1">
-          <button
-            onClick={() => onNavigate('guide')}
-            className={`h-11 px-[18px] rounded-lg text-[14px] font-semibold inline-flex items-center justify-center gap-2 ${btnPrimaryCls}`}
-          >
-            <GraduationCap className="w-4 h-4" /> {guideStarted ? '가이드북 이어 읽기' : '가이드북 시작'}
-          </button>
-          <button
-            onClick={() => onNavigate('now')}
-            className={`h-11 px-[18px] rounded-lg text-[14px] font-medium inline-flex items-center justify-center gap-2 ${btnGhostCls}`}
-          >
-            <Activity className="w-4 h-4" /> 현재 신호 보기
-          </button>
-        </div>
+        <div className="hidden sm:flex flex-row gap-2.5 items-center pt-1">{ctas}</div>
       </div>
 
       {curves && (
@@ -134,5 +132,7 @@ export function HomeHero({
         </div>
       )}
     </section>
+    <div className="grid grid-cols-2 gap-2 sm:hidden">{ctas}</div>
+    </>
   )
 }
