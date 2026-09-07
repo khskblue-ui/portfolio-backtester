@@ -3,7 +3,7 @@ import { CURVE_VB_W, CURVE_VB_H, useCurvePolylines, type CurveSeries } from './c
 
 /**
  * 홈 히어로 — "유기체 홈"(테마 연동). App 셸이 컨테이너 바깥에서 렌더해 화면 끝까지
- * 닿고, 투명해진 헤더·좌측 레일 뒤까지 이어진다(-mt-14). 사진 대신 이 앱의 126년
+ * 닿고, 투명해진 헤더·좌측 레일 뒤까지 이어진다(--app-header-h). 사진 대신 이 앱의 126년
  * 실질 총수익 곡선(주식·10년 국채·금, 로그 눈금)을 배경 아트로 쓴다.
  * 라이트 = 흰→회 한 장의 바탕(O1), 다크 = 검정→남색 바탕 + 곡선 글로우(O2).
  * 페이지 바탕(#eef1f5 / #131722)으로 끝나 아래 콕핏과 경계 없이 이어진다.
@@ -41,10 +41,11 @@ export function HomeHero({
 
   return (
     <>
-      {/* -mt-14: 헤더(56px) 뒤까지 올라가 투명 헤더가 곡선 위에 떠 있게 한다 */}
+      {/* 헤더 높이(--app-header-h, App이 실측)만큼 끌어올려 투명 헤더가 곡선 위에 떠 있게 한다.
+          좁은 화면에서 헤더가 두 줄로 접히면 값이 커져 로고 줄 뒤까지 히어로 바탕이 이어진다 */}
       <section
         id="home-hero"
-        className="relative overflow-hidden -mt-14 bg-gradient-to-b from-white to-[#eef1f5] dark:from-[#0c101b] dark:via-[#10141f] dark:to-[#131722]"
+        className="relative overflow-hidden mt-[calc(var(--app-header-h,56px)*-1)] bg-gradient-to-b from-white to-[#eef1f5] dark:from-[#0c101b] dark:via-[#10141f] dark:to-[#131722]"
         aria-label="투자의 정석 소개"
       >
         {/* 다크 전용 글로우 한 점 (O2) */}
@@ -83,7 +84,8 @@ export function HomeHero({
 
         {/* 본문 — 앱 콘텐츠 컬럼(레일 64px + max-w-7xl)과 같은 축에 정렬 */}
         <div className="lg:pl-16">
-          <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 pt-[104px] sm:pt-[128px] lg:pt-[150px] pb-40 sm:pb-52 lg:pb-64 flex flex-col gap-4 sm:gap-5">
+          {/* 상단 여백은 헤더 아래 기준(48/72/94px) — 헤더가 두 줄이어도 제목이 가려지지 않는다 */}
+          <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 pt-[calc(var(--app-header-h,56px)+48px)] sm:pt-[calc(var(--app-header-h,56px)+72px)] lg:pt-[calc(var(--app-header-h,56px)+94px)] pb-40 sm:pb-52 lg:pb-64 flex flex-col gap-4 sm:gap-5">
             <h2 className="text-[40px] sm:text-[60px] lg:text-[80px] font-bold leading-[1.08] tracking-[-0.028em] text-zinc-900 dark:text-white max-w-[900px]">
               {years}년의 시장을
               <br />

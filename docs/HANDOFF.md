@@ -260,6 +260,18 @@
       `curveData.ts`(훅·상수)로 분리(react-refresh 규칙), HomeHero·CurveBackdrop 공유.
       **백테스트 탭은 도구 UI라 cardCls·불투명 헤더 그대로**(사용자가 세 탭만 지정).
       히어로 범례 "주식 4,353배" → "주식"(사용자 지정).
+    - **후속 5 — 헤더 높이 실측(`--app-header-h`)**: 사용자 실기기(390px) 제보로
+      "투자의 정석 줄만 배경이 어둡다". 원인은 히어로의 `-mt-14`(56px 고정)였다.
+      좁은 화면에서 헤더가 로고 줄 + 액션 줄로 접혀 81px가 되면 아래 56px만 히어로
+      흰 바탕이 덮고, 남은 로고 줄 뒤로 페이지 바탕(#eef1f5, 다크 #131722)이 드러난다.
+      App이 헤더를 ResizeObserver로 실측해 `document.documentElement`의
+      `--app-header-h`에 쓰고(기본값은 index.css `:root`의 56px), 히어로는
+      `mt-[calc(var(--app-header-h,56px)*-1)]`, 히어로 본문 상단 여백은
+      `calc(var(--app-header-h,56px)+48/72/94px)`(헤더 아래 기준이라 두 줄이어도
+      제목이 가려지지 않음), 좌측 레일은 `top-[var(--app-header-h,56px)]`.
+      데스크톱 헤더는 테두리 포함 57px이라 남아 있던 1px 띠도 함께 사라진다.
+      검증: 테스트 173, 빌드, tsc, eslint, fullaudit flagged 0, wrapaudit 신규 0,
+      390 라이트·다크 및 1280 실캡처.
 
 ## 3. 도메인 규약 (어기면 수익률이 틀어지는 것들)
 

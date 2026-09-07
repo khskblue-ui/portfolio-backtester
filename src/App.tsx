@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, X, FileText, BarChart3, Landmark, Activity, GraduationCap, Check, Home } from 'lucide-react'
 import {
   loadDataBundle,
@@ -144,6 +144,19 @@ export default function App() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [organic, view])
   const floating = organic && atTop
+  // 헤더 실제 높이를 --app-header-h로 공유한다. 좁은 화면(로고 줄 + 액션 줄로 줄바꿈)에서는
+  // 56px보다 커지는데, 히어로가 56px만 끌어올려지면 로고 줄 뒤만 페이지 바탕(#eef1f5)이
+  // 드러나 그 줄만 어둡게 보인다. 측정값을 쓰면 히어로 흰 바탕이 헤더 전체를 덮는다
+  const headerRef = useRef<HTMLElement>(null)
+  useLayoutEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const apply = () => document.documentElement.style.setProperty('--app-header-h', `${Math.round(el.getBoundingClientRect().height)}px`)
+    apply()
+    const ro = new ResizeObserver(apply)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   const guideStarted = useMemo(() => {
     const prog = loadGuideProgress()
     return computePartProgress(TRADING_GUIDE_CHAPTERS, prog.visited).pct > 0 || computePartProgress(GUIDE_CHAPTERS, prog.visited).pct > 0
@@ -262,6 +275,7 @@ export default function App() {
       {organic && view !== 'home' && <CurveBackdrop series={history?.series ?? null} />}
       {/* 상단 고정 헤더 — 단일 바: 로고 · 텍스트 내비 · 우측 액션 (미니멀) */}
       <header
+        ref={headerRef}
         className={`sticky top-0 z-40 border-b transition-colors duration-300 ${
           floating
             ? 'bg-transparent border-transparent'
@@ -348,7 +362,7 @@ export default function App() {
 
       {/* 데스크톱 좌측 아이콘 레일 (A안) — 헤더 아래 고정 */}
       <aside
-        className={`hidden lg:flex fixed left-0 top-14 bottom-0 w-16 z-30 flex-col items-center gap-1 pt-3 border-r transition-colors duration-300 ${
+        className={`hidden lg:flex fixed left-0 top-[var(--app-header-h,56px)] bottom-0 w-16 z-30 flex-col items-center gap-1 pt-3 border-r transition-colors duration-300 ${
           floating ? 'bg-transparent border-transparent' : 'bg-white dark:bg-[#1e222d] border-[#e0e3eb] dark:border-[#2a2e39]'
         }`}
       >

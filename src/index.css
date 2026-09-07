@@ -4,6 +4,12 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ── Base ────────────────────────────────────────────────── */
+:root {
+  /* 상단 헤더 실측 높이 (App.tsx가 ResizeObserver로 갱신). 좁은 화면에서 헤더가
+     두 줄로 접히면 커진다 — 히어로의 음수 마진·상단 여백, 좌측 레일 top이 참조 */
+  --app-header-h: 56px;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
 }
