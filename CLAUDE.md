@@ -1,7 +1,8 @@
 # CLAUDE.md — 투자의 정석 (portfolio-backtester)
 
 투자 교육(가이드북·역사 연구·현재 신호) + 포트폴리오 백테스터 웹앱.
-배포: main 푸시 → Vercel 자동 배포 → https://portfolio-backtester-chi.vercel.app/
+배포: main 푸시 → Vercel 자동 배포 → https://tujajungseok.com/
+(Vercel 기본 주소 https://portfolio-backtester-chi.vercel.app/ 도 같은 배포를 가리킨다 — 배포 확인용)
 저작권: 김현성 (lifescienkhs@naver.com) — 푸터에 표기됨, 유지할 것.
 
 세션 인수인계 상세(작업 이력·아키텍처·미결 과제)는 **docs/HANDOFF.md**를 먼저 읽을 것.

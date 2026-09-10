@@ -51,7 +51,7 @@ const NAV_ITEMS = [
   { key: 'history', label: '역사', Icon: Landmark },
   { key: 'now', label: '신호', Icon: Activity },
   { key: 'backtest', label: '백테스트', Icon: BarChart3 },
-  { key: 'daily', label: '데일리 리포트', Icon: Newspaper, href: 'https://sector-flow-monitor.vercel.app/' },
+  { key: 'daily', label: '데일리 리포트', Icon: Newspaper, href: 'https://report.tujajungseok.com/' },
 ] as const
 
 /** 내보내기/가져오기 파일 스키마 */
