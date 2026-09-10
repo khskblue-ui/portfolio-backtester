@@ -8,7 +8,8 @@
 백테스터) + 홈 콕핏. **백엔드 없는 정적 SPA** (React 19 + Vite 7 + Tailwind 4).
 시세는 브라우저가 프록시(/yf·/fred·/stooq) 경유로 직접 조회하고, 1900~ 월간 역사는
 검증된 정적 번들(`public/data/`)을 쓴다.
-공개 서비스: https://portfolio-backtester-chi.vercel.app/ (main 푸시 → Vercel 자동 배포).
+공개 서비스: https://tujajungseok.com/ (main 푸시 → Vercel 자동 배포. Vercel 기본 주소
+portfolio-backtester-chi.vercel.app 도 같은 배포를 가리킨다).
 
 **읽는 순서**: 루트 `CLAUDE.md`(사용자 표준 규칙·검증 워크플로 — 권위 원천) →
 `docs/HANDOFF.md`(작업 이력·도메인 규약·미결 과제) → 작업할 디렉토리의 AGENTS.md.

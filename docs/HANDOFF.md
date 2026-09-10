@@ -23,6 +23,10 @@
 
 - 배포: main 푸시 → Vercel 자동. projectId `prj_Z5KJWVV9ZL1qzgzxeuj8PRn8nECy`,
   teamId `team_qKUDEGSTI3XqjH9aOJkfcASf` (배포 확인용).
+- 도메인(2026-09-10 등록): 본 앱 **tujajungseok.com**, 데일리 리포트
+  **report.tujajungseok.com**. 각각 portfolio-backtester-chi.vercel.app,
+  sector-flow-monitor.vercel.app와 같은 배포를 가리킨다(번들 해시 동일 확인).
+  앞으로 앱·문서 표기는 커스텀 도메인 기준.
 - localStorage 키: `bt_theme`, `bt_strategies_v1`, `bt_shared_v1`,
   `bt_guide_progress_v1`(가이드 학습 진도 — guideProgress.ts와 HomeView가 공유).
 
@@ -274,8 +278,8 @@
       390 라이트·다크 및 1280 실캡처.
 
 13. **외부 링크 메뉴 "데일리 리포트" 추가** (2026-09-07, 사용자 요청): 전역 내비에
-    여섯 번째 항목으로 `https://sector-flow-monitor.vercel.app/`(별도 배포된 섹터 자금
-    흐름 모니터)을 새 탭으로 여는 링크를 넣었다.
+    여섯 번째 항목으로 별도 배포된 섹터 자금 흐름 모니터를 새 탭으로 여는 링크를 넣었다
+    (최초 `sector-flow-monitor.vercel.app`, 2026-09-10 `report.tujajungseok.com`로 교체).
     - `NAV_ITEMS` 항목에 선택적 `href`를 도입해, 좌측 레일(lg+)과 하단 탭바 양쪽이
       `'href' in item` 분기로 `<a target="_blank" rel="noopener noreferrer">` 또는
       기존 뷰 전환 `<button>`을 고른다. `View` 타입은 그대로다(외부 항목은 뷰가 아님).
