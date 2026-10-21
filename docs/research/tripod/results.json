@@ -1,0 +1,684 @@
+{
+ "config": {
+  "START": "1991-01-02",
+  "END": "2026-08-28",
+  "COST_DEFAULT": {
+   "preDivYield": 0,
+   "etfFee": 0.2,
+   "levFee": 0.95,
+   "spread": 0.75,
+   "divs": true
+  },
+  "RULE_DEFAULT": {
+   "maWin": 250,
+   "maType": "sma",
+   "upBand": 1.01,
+   "downBand": 0.95,
+   "vixWin": 10,
+   "vixUp": 28,
+   "vixDown": 18,
+   "ddLimit": -0.09,
+   "useDD": true,
+   "ddDef": "c252",
+   "hold": "A",
+   "init": "cash",
+   "signalFrom": null
+  }
+ },
+ "grid": [
+  {
+   "exec": "close0",
+   "ddDef": "c252",
+   "hold": "A",
+   "perf": {
+    "cagr": 25.8072,
+    "mdd": -68.5831,
+    "sortino": 0.9198,
+    "ulcer": 36.1828
+   },
+   "dist10": [
+    0.7669,
+    3.7795,
+    6.8483,
+    52.7589
+   ],
+   "tradesPerYear": 7.9378
+  },
+  {
+   "exec": "close0",
+   "ddDef": "c252",
+   "hold": "B",
+   "perf": {
+    "cagr": 24.8155,
+    "mdd": -68.5831,
+    "sortino": 0.8938,
+    "ulcer": 36.7309
+   },
+   "dist10": [
+    0.7877,
+    3.2387,
+    5.9417,
+    52.7945
+   ],
+   "tradesPerYear": 6.4792
+  },
+  {
+   "exec": "close0",
+   "ddDef": "h252",
+   "hold": "A",
+   "perf": {
+    "cagr": 27.1866,
+    "mdd": -63.0491,
+    "sortino": 0.954,
+    "ulcer": 32.9627
+   },
+   "dist10": [
+    0.985,
+    3.8969,
+    6.7462,
+    70.4267
+   ],
+   "tradesPerYear": 8.2744
+  },
+  {
+   "exec": "close0",
+   "ddDef": "h252",
+   "hold": "B",
+   "perf": {
+    "cagr": 26.0631,
+    "mdd": -65.5138,
+    "sortino": 0.9246,
+    "ulcer": 34.2731
+   },
+   "dist10": [
+    0.921,
+    3.1718,
+    5.9115,
+    70.4743
+   ],
+   "tradesPerYear": 6.8439
+  },
+  {
+   "exec": "close0",
+   "ddDef": "c250",
+   "hold": "A",
+   "perf": {
+    "cagr": 25.7816,
+    "mdd": -68.5831,
+    "sortino": 0.9194,
+    "ulcer": 35.579
+   },
+   "dist10": [
+    0.7833,
+    3.7404,
+    6.794,
+    55.5479
+   ],
+   "tradesPerYear": 8.05
+  },
+  {
+   "exec": "close0",
+   "ddDef": "c250",
+   "hold": "B",
+   "perf": {
+    "cagr": 24.7901,
+    "mdd": -68.5831,
+    "sortino": 0.8934,
+    "ulcer": 36.447
+   },
+   "dist10": [
+    0.8046,
+    3.2454,
+    5.8229,
+    55.5854
+   ],
+   "tradesPerYear": 6.5914
+  },
+  {
+   "exec": "close0",
+   "ddDef": "c365",
+   "hold": "A",
+   "perf": {
+    "cagr": 25.7146,
+    "mdd": -68.5831,
+    "sortino": 0.9177,
+    "ulcer": 36.211
+   },
+   "dist10": [
+    0.7669,
+    3.7724,
+    6.8091,
+    52.7589
+   ],
+   "tradesPerYear": 7.9939
+  },
+  {
+   "exec": "close0",
+   "ddDef": "c365",
+   "hold": "B",
+   "perf": {
+    "cagr": 24.7237,
+    "mdd": -68.5831,
+    "sortino": 0.8917,
+    "ulcer": 36.7606
+   },
+   "dist10": [
+    0.7877,
+    3.2387,
+    5.9417,
+    52.7945
+   ],
+   "tradesPerYear": 6.5353
+  },
+  {
+   "exec": "open1",
+   "ddDef": "c252",
+   "hold": "A",
+   "perf": {
+    "cagr": 27.1442,
+    "mdd": -67.7572,
+    "sortino": 0.95,
+    "ulcer": 35.0245
+   },
+   "dist10": [
+    0.8283,
+    4.149,
+    8.8951,
+    54.0406
+   ],
+   "tradesPerYear": 7.9378
+  },
+  {
+   "exec": "open1",
+   "ddDef": "c252",
+   "hold": "B",
+   "perf": {
+    "cagr": 26.5981,
+    "mdd": -67.7572,
+    "sortino": 0.935,
+    "ulcer": 35.3508
+   },
+   "dist10": [
+    0.8206,
+    3.7584,
+    8.9051,
+    54.0771
+   ],
+   "tradesPerYear": 6.4792
+  },
+  {
+   "exec": "open1",
+   "ddDef": "h252",
+   "hold": "A",
+   "perf": {
+    "cagr": 28.7041,
+    "mdd": -61.9171,
+    "sortino": 0.9876,
+    "ulcer": 31.7849
+   },
+   "dist10": [
+    1.1085,
+    4.2226,
+    8.4487,
+    74.9847
+   ],
+   "tradesPerYear": 8.2744
+  },
+  {
+   "exec": "open1",
+   "ddDef": "h252",
+   "hold": "B",
+   "perf": {
+    "cagr": 27.8338,
+    "mdd": -61.9171,
+    "sortino": 0.9653,
+    "ulcer": 32.8348
+   },
+   "dist10": [
+    1.0028,
+    3.9209,
+    8.6517,
+    75.0353
+   ],
+   "tradesPerYear": 6.8439
+  },
+  {
+   "exec": "open1",
+   "ddDef": "c250",
+   "hold": "A",
+   "perf": {
+    "cagr": 27.2238,
+    "mdd": -67.7572,
+    "sortino": 0.952,
+    "ulcer": 34.5106
+   },
+   "dist10": [
+    0.8513,
+    4.039,
+    8.8541,
+    57.4145
+   ],
+   "tradesPerYear": 8.05
+  },
+  {
+   "exec": "open1",
+   "ddDef": "c250",
+   "hold": "B",
+   "perf": {
+    "cagr": 26.6773,
+    "mdd": -67.7572,
+    "sortino": 0.9369,
+    "ulcer": 34.967
+   },
+   "dist10": [
+    0.8434,
+    3.7462,
+    8.7846,
+    57.4533
+   ],
+   "tradesPerYear": 6.5914
+  },
+  {
+   "exec": "open1",
+   "ddDef": "c365",
+   "hold": "A",
+   "perf": {
+    "cagr": 27.0856,
+    "mdd": -67.7572,
+    "sortino": 0.9487,
+    "ulcer": 35.0367
+   },
+   "dist10": [
+    0.8283,
+    4.149,
+    8.8308,
+    54.0406
+   ],
+   "tradesPerYear": 7.9939
+  },
+  {
+   "exec": "open1",
+   "ddDef": "c365",
+   "hold": "B",
+   "perf": {
+    "cagr": 26.5397,
+    "mdd": -67.7572,
+    "sortino": 0.9337,
+    "ulcer": 35.3653
+   },
+   "dist10": [
+    0.8206,
+    3.7584,
+    8.8413,
+    54.0771
+   ],
+   "tradesPerYear": 6.5353
+  },
+  {
+   "exec": "close1",
+   "ddDef": "c252",
+   "hold": "A",
+   "perf": {
+    "cagr": 32.608,
+    "mdd": -61.362,
+    "sortino": 1.0812,
+    "ulcer": 30.2083
+   },
+   "dist10": [
+    1.3577,
+    4.7402,
+    13.3261,
+    125.1119
+   ],
+   "tradesPerYear": 7.9378
+  },
+  {
+   "exec": "close1",
+   "ddDef": "c252",
+   "hold": "B",
+   "perf": {
+    "cagr": 30.733,
+    "mdd": -64.7766,
+    "sortino": 1.0328,
+    "ulcer": 32.2852
+   },
+   "dist10": [
+    1.1065,
+    3.777,
+    12.1486,
+    125.1754
+   ],
+   "tradesPerYear": 6.4792
+  },
+  {
+   "exec": "close1",
+   "ddDef": "h252",
+   "hold": "A",
+   "perf": {
+    "cagr": 32.0243,
+    "mdd": -60.2226,
+    "sortino": 1.07,
+    "ulcer": 29.7851
+   },
+   "dist10": [
+    1.376,
+    4.9112,
+    13.5935,
+    98.0588
+   ],
+   "tradesPerYear": 8.2744
+  },
+  {
+   "exec": "close1",
+   "ddDef": "h252",
+   "hold": "B",
+   "perf": {
+    "cagr": 30.0491,
+    "mdd": -64.7766,
+    "sortino": 1.019,
+    "ulcer": 31.9796
+   },
+   "dist10": [
+    1.0968,
+    3.8268,
+    12.6154,
+    96.06
+   ],
+   "tradesPerYear": 6.8439
+  },
+  {
+   "exec": "close1",
+   "ddDef": "c250",
+   "hold": "A",
+   "perf": {
+    "cagr": 32.606,
+    "mdd": -61.362,
+    "sortino": 1.0811,
+    "ulcer": 30.2131
+   },
+   "dist10": [
+    1.3533,
+    4.721,
+    13.3617,
+    125.218
+   ],
+   "tradesPerYear": 8.05
+  },
+  {
+   "exec": "close1",
+   "ddDef": "c250",
+   "hold": "B",
+   "perf": {
+    "cagr": 30.731,
+    "mdd": -64.7766,
+    "sortino": 1.0328,
+    "ulcer": 32.2907
+   },
+   "dist10": [
+    1.103,
+    3.7633,
+    12.1534,
+    125.2816
+   ],
+   "tradesPerYear": 6.5914
+  },
+  {
+   "exec": "close1",
+   "ddDef": "c365",
+   "hold": "A",
+   "perf": {
+    "cagr": 32.6565,
+    "mdd": -61.362,
+    "sortino": 1.0822,
+    "ulcer": 30.1927
+   },
+   "dist10": [
+    1.3577,
+    4.7402,
+    13.5009,
+    125.1119
+   ],
+   "tradesPerYear": 7.9939
+  },
+  {
+   "exec": "close1",
+   "ddDef": "c365",
+   "hold": "B",
+   "perf": {
+    "cagr": 30.7808,
+    "mdd": -64.7766,
+    "sortino": 1.0338,
+    "ulcer": 32.2684
+   },
+   "dist10": [
+    1.1065,
+    3.777,
+    12.28,
+    125.1754
+   ],
+   "tradesPerYear": 6.5353
+  }
+ ],
+ "oat": [
+  {
+   "label": "기본",
+   "rule": {},
+   "sim": {},
+   "perf": {
+    "cagr": 32.608,
+    "mdd": -61.362,
+    "sortino": 1.0812,
+    "ulcer": 30.2083
+   },
+   "dist10": [
+    1.3577,
+    4.7402,
+    13.3261,
+    125.1119
+   ],
+   "tradesPerYear": 7.9378
+  },
+  {
+   "label": "V4 첫날 MA 기준 국면",
+   "rule": {
+    "init": "ma"
+   },
+   "sim": {},
+   "perf": {
+    "cagr": 32.608,
+    "mdd": -61.362,
+    "sortino": 1.0812,
+    "ulcer": 30.2083
+   },
+   "dist10": [
+    1.3577,
+    4.7402,
+    13.3261,
+    125.1119
+   ],
+   "tradesPerYear": 7.9378
+  },
+  {
+   "label": "신호 시작 1990-12-26",
+   "rule": {
+    "signalFrom": "1990-12-26"
+   },
+   "sim": {},
+   "perf": {
+    "cagr": 32.608,
+    "mdd": -61.362,
+    "sortino": 1.0812,
+    "ulcer": 30.2083
+   },
+   "dist10": [
+    1.3577,
+    4.7402,
+    13.3261,
+    125.1119
+   ],
+   "tradesPerYear": 7.9378
+  },
+  {
+   "label": "V5 EMA",
+   "rule": {
+    "maType": "ema"
+   },
+   "sim": {},
+   "perf": {
+    "cagr": 32.4588,
+    "mdd": -61.9306,
+    "sortino": 1.0756,
+    "ulcer": 32.3801
+   },
+   "dist10": [
+    0.8936,
+    5.9578,
+    16.0363,
+    95.4711
+   ],
+   "tradesPerYear": 8.2463
+  },
+  {
+   "label": "V10 매일 리밸런싱",
+   "rule": {},
+   "sim": {
+    "rebal": "daily"
+   },
+   "perf": {
+    "cagr": 32.675,
+    "mdd": -61.3601,
+    "sortino": 1.0825,
+    "ulcer": 30.1314
+   },
+   "dist10": [
+    1.371,
+    4.7541,
+    13.3201,
+    126.7961
+   ],
+   "tradesPerYear": 7.9378
+  },
+  {
+   "label": "V10 월초 리밸런싱",
+   "rule": {},
+   "sim": {
+    "rebal": "monthly"
+   },
+   "perf": {
+    "cagr": 32.6381,
+    "mdd": -61.362,
+    "sortino": 1.0817,
+    "ulcer": 30.1928
+   },
+   "dist10": [
+    1.3614,
+    4.753,
+    13.3331,
+    125.515
+   ],
+   "tradesPerYear": 7.9378
+  },
+  {
+   "label": "V12 거래비용 0",
+   "rule": {},
+   "sim": {
+    "costBps": 0
+   },
+   "perf": {
+    "cagr": 33.6653,
+    "mdd": -60.8953,
+    "sortino": 1.1044,
+    "ulcer": 29.6366
+   },
+   "dist10": [
+    1.4504,
+    5.0993,
+    14.4654,
+    136.014
+   ],
+   "tradesPerYear": 7.9378
+  },
+  {
+   "label": "V12 거래비용 10bp",
+   "rule": {},
+   "sim": {
+    "costBps": 10
+   },
+   "perf": {
+    "cagr": 31.5579,
+    "mdd": -61.8236,
+    "sortino": 1.0579,
+    "ulcer": 30.8017
+   },
+   "dist10": [
+    1.2708,
+    4.387,
+    12.2754,
+    115.3634
+   ],
+   "tradesPerYear": 7.9378
+  },
+  {
+   "label": "낙폭 조건 제거",
+   "rule": {
+    "useDD": false
+   },
+   "sim": {},
+   "perf": {
+    "cagr": 32.8608,
+    "mdd": -79.8219,
+    "sortino": 1.0557,
+    "ulcer": 38.701
+   },
+   "dist10": [
+    0.8444,
+    5.2867,
+    12.7057,
+    149.4999
+   ],
+   "tradesPerYear": 2.1597
+  },
+  {
+   "label": "낙폭 조건 제거(close0)",
+   "rule": {
+    "useDD": false
+   },
+   "sim": {
+    "exec": "close0"
+   },
+   "perf": {
+    "cagr": 30.9236,
+    "mdd": -83.5108,
+    "sortino": 1.0167,
+    "ulcer": 43.5041
+   },
+   "dist10": [
+    0.5868,
+    4.68,
+    9.9754,
+    97.0581
+   ],
+   "tradesPerYear": 2.1597
+  },
+  {
+   "label": "VIX 상한 32",
+   "rule": {
+    "vixUp": 32
+   },
+   "sim": {},
+   "perf": {
+    "cagr": 30.5146,
+    "mdd": -61.362,
+    "sortino": 1.0284,
+    "ulcer": 31.1329
+   },
+   "dist10": [
+    1.3577,
+    3.9831,
+    11.916,
+    84.4781
+   ],
+   "tradesPerYear": 8.3585
+  }
+ ]
+}

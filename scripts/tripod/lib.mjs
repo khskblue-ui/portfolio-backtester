@@ -192,7 +192,7 @@ export function computeSignals(mkt, rule = RULE_DEFAULT) {
   let reg = null
   let prevT = null
   for (let i = 0; i < n; i++) {
-    const ready = !Number.isNaN(ma[i]) && vixOk[i] === 0 && !Number.isNaN(dd[i]) &&
+    const ready = !Number.isNaN(ma[i]) && vixOk[i] === 0 && (!r.useDD || !Number.isNaN(dd[i])) &&
       (!r.signalFrom || mkt.dates[i] >= r.signalFrom)
     if (!ready) continue
     const p = mkt.close[i]
@@ -217,11 +217,13 @@ const sameHold = (a, b) => a === b // B15는 국면과 무관하게 같은 보�
 /**
  * 자산곡선 시뮬레이션.
  * exec (V1): 'close0' 당일 종가 / 'close1' 다음 날 종가 / 'open1' 다음 날 시가
+ *   진단용: 'peek' 판정일 수익까지 새 보유로 계산(미래 참조 — 구현 실수 재현용), 'close2' 이틀 뒤 종가
  * rebal (V10): 'signal' 신호 변경 때만 / 'daily' 매일 목표 비중 / 'monthly' 월초
  * costBps (V12): 편도 거래비용(bp, 매매 금액 기준)
  */
 export function simulate(mkt, prod, sig, { startIdx, endIdx = mkt.dates.length - 1, exec = 'close1', rebal = 'signal', costBps = 5 } = {}) {
-  const lag = exec === 'close0' ? 0 : 1
+  const lag = { peek: -1, close0: 0, close1: 1, open1: 1, close2: 2 }[exec]
+  if (lag === undefined) throw new Error(`exec 미지원: ${exec}`)
   const v = new Float64Array(endIdx - startIdx + 1)
   let w = [0, 0, 0, 1] // 시작 전 현금
   let held = 'CASH'
@@ -238,7 +240,7 @@ export function simulate(mkt, prod, sig, { startIdx, endIdx = mkt.dates.length -
     held = tgt
   }
   // i일에 체결되는 목표: close0은 i일 판정, close1·open1은 i-1일 판정
-  const decided = (i) => sig.target[i - lag] ?? 'CASH'
+  const decided = (i) => (i - lag > endIdx ? held : sig.target[i - lag] ?? 'CASH')
   // 시작일 종가 시점에 이미 그 목표를 보유한 상태로 출발(진입 비용·매매 횟수 미산입)
   held = decided(startIdx)
   w = TARGETS[held].slice()
