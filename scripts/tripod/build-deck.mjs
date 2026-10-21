@@ -1,6 +1,7 @@
 // 발표 자료 빌드: 검증 결과 데이터를 계산해 슬라이드 템플릿에 넣는다
 // 사용: node scripts/tripod/build-deck.mjs [--page-only <골격 없는 사본 경로>]
-// 입력: docs/research/tripod/deck.template.html  →  출력: docs/research/tripod/tripod-deck.html
+// 입력: docs/research/tripod/deck.template.html  →  출력: docs/research/tripod/tripod-deck.html(CDN 사용),
+//       tripod-deck-standalone.html(라이브러리 내장, 내려받아 오프라인으로 열기용)
 // 모든 수치는 다른 스크립트와 같은 모듈에서 다시 계산한다(문서에 손으로 옮긴 값이 아님).
 import fs from 'node:fs'
 import path from 'node:path'
@@ -234,4 +235,21 @@ const standalone = '<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="ut
 fs.writeFileSync(path.join(DIR, 'tripod-deck.html'), standalone)
 const pageOnly = process.argv.indexOf('--page-only')
 if (pageOnly > 0 && process.argv[pageOnly + 1]) fs.writeFileSync(process.argv[pageOnly + 1], page)
+
+// 내려받아 인터넷 없이도 열 수 있는 단독 사본: D3·GSAP를 파일 안에 넣는다(글꼴은 온라인일 때만 IBM Plex, 아니면 시스템 글꼴)
+const LIBS = [
+  'https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js',
+]
+let offline = standalone
+for (const url of LIBS) {
+  const tag = `<script src="${url}"></script>`
+  if (!offline.includes(tag)) throw new Error(`템플릿에 ${url} 스크립트 태그가 없습니다`)
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`)
+  const code = (await res.text()).replace(/<\/script/gi, '<\\/script')
+  offline = offline.replace(tag, () => `<script>/* ${url} */\n${code}\n</script>`)
+}
+fs.writeFileSync(path.join(DIR, 'tripod-deck-standalone.html'), offline)
+console.log(`단독 사본 tripod-deck-standalone.html ${(offline.length / 1024).toFixed(0)}KB`)
 console.log(`데이터 ${(json.length / 1024).toFixed(0)}KB → tripod-deck.html ${(standalone.length / 1024).toFixed(0)}KB`)
