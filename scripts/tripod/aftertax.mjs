@@ -216,7 +216,7 @@ function main() {
     ['낙폭 한도 8%', tripodPlan(computeSignals(mkt, { ...RULE_DEFAULT, ddLimit: -0.08 })), {}],
     ['낙폭 한도 7%(절벽 아래)', tripodPlan(computeSignals(mkt, { ...RULE_DEFAULT, ddLimit: -0.07 })), {}],
     ['당일 종가 + 25bp + VIX 25', sameClose(computeSignals(mkt, { ...RULE_DEFAULT, vixUp: 25 })), { costBps: 25 }],
-    ['(참고) 250일선 규칙만: 상승 TQQQ, 하락 현금', tripodPlan(computeSignals(mkt, { ...RULE_DEFAULT, vixUp: 999, vixDown: -1, useDD: false })), {}],
+    ['(참고) 250일선 국면만(밴드 포함): 상승 TQQQ, 하락 현금', tripodPlan(computeSignals(mkt, { ...RULE_DEFAULT, vixUp: 999, vixDown: -1, useDD: false })), {}],
     ['(비교) QQQ 100%', holdPlan(0), {}],
     ['(비교) QQQ 70% + 현금', mixPlan(0.7), { rebalance: yearlyRebal(mkt) }],
   ]
