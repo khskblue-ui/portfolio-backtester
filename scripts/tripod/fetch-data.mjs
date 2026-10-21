@@ -1,5 +1,5 @@
 // 트라이팟 검증용 일봉 스냅숏 수집 (Yahoo v8 chart API → data-src/tripod/*.csv)
-// 사용: node scripts/tripod/fetch-data.mjs
+// 사용: node scripts/tripod/fetch-data.mjs [이름...]   (이름을 주면 그 계열만 받는다. 예: N225 GDAXI)
 // 스냅숏은 커밋해 고정한다. 다시 받으면 과거 값도 미세하게 바뀔 수 있으므로
 // 검증 결과를 갱신할 때만 재수집할 것.
 import fs from 'node:fs'
@@ -11,14 +11,18 @@ const P2 = Date.UTC(2026, 9, 21) / 1000 // 2026-10-21 00:00 UTC (스냅숏 기�
 const TICKERS = [
   ['^NDX', 'NDX'], ['^VIX', 'VIX'], ['^IRX', 'IRX'], ['^GSPC', 'GSPC'],
   ['QQQ', 'QQQ'], ['QLD', 'QLD'], ['TQQQ', 'TQQQ'], ['SPY', 'SPY'],
+  // 비판적 점검(critique.mjs)용: 다른 시장. 나스닥 종합은 1971년부터(세 번째 값 = 시작 시각)
+  ['^IXIC', 'IXIC', 0], ['^RUT', 'RUT'], ['^N225', 'N225'], ['^GDAXI', 'GDAXI'],
+  ['^FTSE', 'FTSE'], ['^HSI', 'HSI'], ['^KS11', 'KS11'], ['^IRX', 'IRX-1971', 0],
 ]
+const ONLY = process.argv.slice(2)
 
 const num = (v) => (v == null || Number.isNaN(v) ? '' : String(+v.toFixed(6)))
 
 fs.mkdirSync(OUT, { recursive: true })
-for (const [sym, name] of TICKERS) {
+for (const [sym, name, from = P1] of TICKERS.filter(([, n]) => !ONLY.length || ONLY.includes(n))) {
   const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}` +
-    `?period1=${P1}&period2=${P2}&interval=1d&events=div`
+    `?period1=${from}&period2=${P2}&interval=1d&events=div`
   const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } })
   if (!res.ok) throw new Error(`${sym}: HTTP ${res.status}`)
   const r = (await res.json()).chart.result[0]

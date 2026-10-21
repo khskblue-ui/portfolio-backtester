@@ -32,6 +32,9 @@
 
 `scripts/tripod/fetch-data.mjs`가 야후 v8에서 받은 ^NDX ^VIX ^IRX ^GSPC QQQ QLD TQQQ SPY
 일봉(`date,open,high,low,close,adjclose`)과 ETF 배당(`*-div.csv`). 수집일 2026-10-20.
+비판적 점검(`critique.mjs`)용으로 같은 날 ^IXIC(1971~) ^RUT ^GDAXI ^FTSE ^N225 ^HSI ^KS11과
+1970년부터의 ^IRX(`IRX-1971.csv`, 겹치는 구간은 `IRX.csv`와 같음)를 추가로 받았다.
+기존 계열은 다시 받지 않는다(`fetch-data.mjs 이름…`으로 계열을 골라 받을 수 있음).
 ^NDX 시가는 1999년 이전 대부분 전일 종가 복사본이다. 소비자는 `scripts/tripod/`와
 `docs/research/tripod-verification.md`뿐이므로, 다시 받으면 그 문서 수치도 함께 재계산할 것.
 

@@ -26,33 +26,44 @@ export function readDivs(name) {
   })
 }
 
+const DIV_ETF = { NDX: 'QQQ', GSPC: 'SPY' } // 배당 프록시 ETF가 있는 지수
+const US_INDEX = new Set(['NDX', 'GSPC', 'IXIC', 'RUT'])
+
 /**
  * 기준 지수 달력으로 정렬한 일별 데이터.
- * base: 'NDX'(기본) 또는 'GSPC'. 배당 프록시 ETF: NDX→QQQ, GSPC→SPY.
- * VIX·IRX는 기준 달력에 맞춰 직전 값 forward-fill.
+ * base: 'NDX'(기본)·'GSPC'(배당 프록시 ETF: NDX→QQQ, GSPC→SPY) 또는 critique.mjs용 다른 지수
+ * (IXIC·RUT·N225·GDAXI·FTSE·HSI·KS11, 배당 프록시 없음 → preDivYield만 적용).
+ * VIX·IRX는 기준 달력에 맞춰 직전 값 forward-fill. 미국 밖 지수는 같은 날짜의 VIX가
+ * 그 시장 마감 뒤에 확정되므로 날짜가 앞선 미국 거래일 값만 쓴다(미래 참조 방지).
+ * irxName: 금리 계열 파일명. 1984년 이전이 필요하면 'IRX-1971'.
  */
-export function loadMarket({ base = 'NDX', end = '2026-08-28' } = {}) {
+export function loadMarket({ base = 'NDX', end = '2026-08-28', irxName = 'IRX' } = {}) {
   const idx = readBars(base).filter((x) => x.d <= end)
-  const etf = base === 'NDX' ? 'QQQ' : 'SPY'
-  const ffill = (bars) => {
-    const m = new Map(bars.map((x) => [x.d, x.c]))
-    let last = NaN
-    return idx.map((x) => { const v = m.get(x.d); if (v != null) last = v; return last })
-  }
-  const etfBars = readBars(etf)
+  const etf = DIV_ETF[base] ?? null
+  const ffill = US_INDEX.has(base)
+    ? (bars) => {
+        const m = new Map(bars.map((x) => [x.d, x.c]))
+        let last = NaN
+        return idx.map((x) => { const v = m.get(x.d); if (v != null) last = v; return last })
+      }
+    : (bars) => {
+        let j = -1
+        return idx.map((x) => { while (j + 1 < bars.length && bars[j + 1].d < x.d) j++; return j < 0 ? NaN : bars[j].c })
+      }
+  const etfBars = etf ? readBars(etf) : []
   const etfClose = new Map(etfBars.map((x) => [x.d, x.c]))
   // 배당락일 → 배당수익률(전 거래일 ETF 종가 대비)
   const divYield = new Map()
-  for (const dv of readDivs(etf)) {
+  for (const dv of etf ? readDivs(etf) : []) {
     const i = etfBars.findIndex((x) => x.d >= dv.d)
     if (i > 0) divYield.set(etfBars[i].d, dv.amt / etfBars[i - 1].c)
   }
   return {
-    base, etf, etfStart: etfBars[0].d,
+    base, etf, etfStart: etf ? etfBars[0].d : '9999-12-31',
     dates: idx.map((x) => x.d),
     open: idx.map((x) => x.o), high: idx.map((x) => x.h), close: idx.map((x) => x.c),
     vix: ffill(readBars('VIX')),
-    irx: ffill(readBars('IRX')),
+    irx: ffill(readBars(irxName)),
     etfClose, divYield,
   }
 }
