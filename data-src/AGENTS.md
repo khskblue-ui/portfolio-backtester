@@ -28,6 +28,13 @@
 | `ief-adjclose-monthly-avg.csv` | IEF 총수익 (2002-07~) — GS10 파생 채권 근사 대조 |
 | `spy-adjclose-monthly-avg.csv` | SPY 총수익 (2023-05~) — TR 연장 구간 대조 |
 
+## tripod/ — 외부 매매법 재현 검증용 일봉 스냅숏 (번들·앱 미사용)
+
+`scripts/tripod/fetch-data.mjs`가 야후 v8에서 받은 ^NDX ^VIX ^IRX ^GSPC QQQ QLD TQQQ SPY
+일봉(`date,open,high,low,close,adjclose`)과 ETF 배당(`*-div.csv`). 수집일 2026-10-20.
+^NDX 시가는 1999년 이전 대부분 전일 종가 복사본이다. 소비자는 `scripts/tripod/`와
+`docs/research/tripod-verification.md`뿐이므로, 다시 받으면 그 문서 수치도 함께 재계산할 것.
+
 공통 형식: `Date`(`YYYY-MM` 또는 `YYYY-MM-DD`) + 값 컬럼.
 
 ## AI 에이전트 지침

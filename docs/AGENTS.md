@@ -21,7 +21,7 @@
 | 디렉토리 | 목적 |
 |----------|------|
 | `guides/` | `trading-discipline.md` (350줄) — 가이드 1부 "매매 습관 교정" **원문**. 앱 내 렌더는 `src/ui/tradingGuide.ts` |
-| `research/` | 데이터 검증 리포트 2건: `data-verification-2026-07.md` (18개 체크 교차 검증), `negative-real-return-eras.md` (1900~ 실질 수익률 음(−) 구간 7개, 역사 차트 기초 자료) |
+| `research/` | 데이터 검증 리포트 2건: `data-verification-2026-07.md` (18개 체크 교차 검증), `negative-real-return-eras.md` (1900~ 실질 수익률 음(−) 구간 7개, 역사 차트 기초 자료), `tripod-verification.md` (외부 영상 매매법 독립 재현 검증, 명세·산출물은 `research/tripod/`, 앱 콘텐츠 미반영) |
 
 ## AI 에이전트 지침
 
