@@ -55,3 +55,6 @@ node scripts/e2e/e2e-wrapaudit.mjs     # 잔존 ≤ 11 확인
 - playwright (수동 설치), Chromium
 
 <!-- MANUAL: 이 줄 아래의 수동 메모는 재생성 시 보존됩니다 -->
+
+<!-- 추가 2026-10-21 -->
+- `e2e-deckaudit.mjs`: 트라이팟 발표 자료(docs/research/tripod/tripod-deck.html)의 겹침·튀어나옴·넘침 검수. 발표 자료를 고친 뒤 실행하고 문제 0건(exit 0)을 확인할 것.

@@ -35,34 +35,8 @@
   --fs-body: clamp(14px, 1.05vw, 17px);
   --fs-small: 13px;
   --fs-micro: 11px;
+  color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #131722; --surface: #1e222d; --surface-2: #191d27; --line: #2a2e39;
-    --ink: #d1d4dc; --ink-2: #a9acb5; --ink-3: #8a8e99;
-    --accent: #5b84ff; --accent-wash: rgba(91, 132, 255, 0.14);
-    --s1: #5b84ff; --s2: #d95926; --s2t: #9a5436; --s3: #199e70; --s4: #c98500;
-    --h3: #5b84ff; --h15: #34488a; --h0: #2c313d;
-    --good: #22ab94; --warn: #e0a100; --bad: #ff6370;
-    --q0: #1b2338; --q1: #212f5c; --q2: #2a4189; --q3: #3a5ac0; --q4: #5b84ff; --q5: #a3bbff;
-    --qt-lo: #d1d4dc; --qt-hi: #131722;
-    --shadow: none;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #131722; --surface: #1e222d; --surface-2: #191d27; --line: #2a2e39;
-  --ink: #d1d4dc; --ink-2: #a9acb5; --ink-3: #8a8e99;
-  --accent: #5b84ff; --accent-wash: rgba(91, 132, 255, 0.14);
-  --s1: #5b84ff; --s2: #d95926; --s2t: #9a5436; --s3: #199e70; --s4: #c98500;
-  --h3: #5b84ff; --h15: #34488a; --h0: #2c313d;
-  --good: #22ab94; --warn: #e0a100; --bad: #ff6370;
-  --q0: #1b2338; --q1: #212f5c; --q2: #2a4189; --q3: #3a5ac0; --q4: #5b84ff; --q5: #a3bbff;
-  --qt-lo: #d1d4dc; --qt-hi: #131722;
-  --shadow: none;
-  color-scheme: dark;
-}
-
 html, body { height: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
@@ -124,6 +98,8 @@ p { margin: 0; }
 .chart { position: relative; flex: 1; min-height: 200px; min-width: 0; }
 .chart.h-s { flex: 0 0 auto; height: clamp(110px, 16vh, 170px); min-height: 110px; }
 .chart.h-m { flex: 0 0 auto; height: clamp(170px, 25vh, 250px); min-height: 170px; }
+.chart.h-nb { flex: 0 0 auto; height: clamp(120px, 18vh, 190px); min-height: 120px; }
+.chart.mh-s { min-height: 140px; }
 .chart svg { display: block; overflow: visible; }
 .notes { display: flex; flex-direction: column; gap: 12px; min-width: 0; font-size: var(--fs-body); color: var(--ink-2); }
 .notes strong { color: var(--ink); font-weight: 600; }
@@ -137,6 +113,7 @@ p { margin: 0; }
 table.t { width: 100%; border-collapse: collapse; font-size: clamp(13px, 0.95vw, 15px); font-variant-numeric: tabular-nums; }
 table.t th, table.t td { padding: clamp(6px, 0.9vh, 10px) 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
 table.t th:first-child, table.t td:first-child { text-align: left; white-space: normal; }
+table.t td:first-child:has(.key) { white-space: nowrap; }
 table.t thead th { font-weight: 600; color: var(--ink-3); font-size: 12px; }
 table.t td .v { color: var(--ink); font-weight: 600; }
 table.t td .vid { color: var(--ink-3); font-size: 12px; margin-left: 6px; }
@@ -163,6 +140,7 @@ table.t tr.hl td { background: var(--accent-wash); }
 .lbl { fill: var(--ink-2); font: 500 12px var(--font-sans); }
 .lbl-b { fill: var(--ink); font: 600 12px var(--font-sans); }
 .lbl-m { fill: var(--ink-3); font: 11px var(--font-mono); }
+.halo { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
 .ln { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .c1 { stroke: var(--s1); } .c2 { stroke: var(--s2); } .c2t { stroke: var(--s2t); } .c3 { stroke: var(--s3); } .c4 { stroke: var(--s4); }
 .cink { stroke: var(--ink-2); } .cmute { stroke: var(--ink-3); }
@@ -190,7 +168,7 @@ table.t tr.hl td { background: var(--accent-wash); }
 /* 표지 */
 .cover .frame { justify-content: center; position: relative; }
 .cover-bg { position: absolute; inset: 0; pointer-events: none; }
-@media (max-width: 900px) { .cover-bg { opacity: 0.35; } }
+@media (max-width: 900px) { .cover-bg { opacity: 0.3; } }
 .cover-bg svg { width: 100%; height: 100%; }
 .cover-copy { position: relative; display: grid; gap: clamp(14px, 2.4vh, 26px); max-width: min(760px, 58%); }
 @media (max-width: 900px) { .cover-copy { max-width: none; } }
@@ -214,6 +192,7 @@ table.t tr.hl td { background: var(--accent-wash); }
 .vcard { background: var(--surface); border-radius: 12px; box-shadow: var(--shadow); padding: clamp(12px, 1.3vw, 18px); display: grid; gap: 8px; align-content: start; min-width: 0; }
 .vcard h3 { margin: 0; font-size: clamp(16px, 1.35vw, 21px); line-height: 1.35; }
 .vcard p { font-size: clamp(13px, 1.02vw, 16px); color: var(--ink-2); line-height: 1.65; }
+.bottomline b { color: var(--accent); }
 .bottomline { border-left: 3px solid var(--accent); padding: 6px 0 6px 14px; font-size: clamp(15px, 1.25vw, 19px); color: var(--ink); max-width: 80ch; }
 
 /* 절차 */
@@ -226,12 +205,12 @@ table.t tr.hl td { background: var(--accent-wash); }
 
 /* 규칙 도해 */
 .rule-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: clamp(12px, 1.6vw, 24px); }
-.ind { display: grid; gap: 10px; }
+.ind { display: grid; gap: 10px; align-content: start; }
 .ind .row { display: grid; grid-template-columns: 44px 1fr; gap: 12px; align-items: start; background: var(--surface); border-radius: 12px; box-shadow: var(--shadow); padding: 12px 14px; }
 .ind .row svg { width: 40px; height: 40px; color: var(--accent); }
 .ind .row h3 { margin: 0; font-size: 15px; }
 .ind .row p { font-size: var(--fs-small); color: var(--ink-2); }
-.decide { display: grid; gap: 10px; }
+.decide { display: grid; gap: 10px; align-content: start; }
 .decide table.t td, .decide table.t th { white-space: normal; }
 .lev { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
 
@@ -251,6 +230,32 @@ table.t tr.hl td { background: var(--accent-wash); }
 .concl ul b { color: var(--ink); }
 pre.cmd { margin: 0; align-self: start; font: clamp(12px, 0.95vw, 14px)/1.75 var(--font-mono); background: var(--surface); border-radius: 12px; padding: 14px 16px; overflow-x: auto; color: var(--ink-2); box-shadow: var(--shadow); }
 pre.cmd span { color: var(--ink-3); }
+
+/* 배경 설명 */
+.howto { margin: 0; font-size: clamp(13px, 0.95vw, 15px); color: var(--ink-2); max-width: 92ch; padding: 8px 12px; background: var(--surface-2); border-radius: 8px; }
+.howto b { color: var(--accent); font-weight: 600; margin-right: 6px; }
+.vtl { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 24px; align-content: start; }
+.vtl li { display: grid; grid-template-columns: 92px 1fr; gap: 10px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: clamp(13px, 0.98vw, 15px); color: var(--ink-2); }
+.vtl li time { font: 600 12px var(--font-mono); color: var(--accent); white-space: nowrap; }
+.vtl li b { color: var(--ink); font-weight: 600; }
+.gloss { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px clamp(14px, 1.6vw, 26px); align-content: start; }
+.gloss div { display: grid; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.gloss dt { font-weight: 600; color: var(--ink); font-size: clamp(14px, 1.05vw, 16px); }
+.gloss dd { margin: 0; font-size: clamp(13px, 0.95vw, 15px); color: var(--ink-2); line-height: 1.6; }
+.exec { display: grid; gap: 12px; align-content: start; }
+.exec .track { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 26px 0 8px; }
+.exec .track::before { content: ""; position: absolute; left: 8%; right: 8%; top: 13px; height: 2px; background: var(--line); }
+.exec .pt { position: relative; display: grid; justify-items: center; gap: 4px; text-align: center; font-size: 13px; color: var(--ink-2); }
+.exec .pt::before { content: ""; position: absolute; top: -19px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); box-shadow: inset 0 0 0 2px var(--ink-3); }
+.exec .pt.judge::before { background: var(--accent); box-shadow: none; }
+.exec .pt b { color: var(--ink); font-weight: 600; }
+.exec .pt span { font: 11px var(--font-mono); color: var(--ink-3); }
+.exec .opt { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; align-items: center; background: var(--surface); border-radius: 12px; box-shadow: var(--shadow); padding: 12px 16px; }
+.exec .opt h3 { margin: 0; font-size: clamp(15px, 1.1vw, 17px); }
+.exec .opt p { grid-column: 1 / 2; font-size: clamp(13px, 0.95vw, 15px); color: var(--ink-2); }
+.exec .opt .res { grid-row: 1 / 3; grid-column: 2; text-align: right; font-size: clamp(22px, 2vw, 30px); font-weight: 600; line-height: 1.1; }
+.exec .opt .res small { display: block; font-size: 12px; font-weight: 500; color: var(--ink-3); }
+.exec .opt.on { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 /* 하단 막대 */
 .bar {
@@ -283,14 +288,37 @@ pre.cmd span { color: var(--ink-3); }
 @media (max-width: 900px), (max-height: 560px) {
   .cols-2, .cols-2e, .cols-3, .rule-grid, .concl, .verdicts { grid-template-columns: minmax(0, 1fr); }
   .tiles, .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .vtl, .gloss { grid-template-columns: minmax(0, 1fr); }
+  .vtl li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  table.t td .vid { display: block; margin-left: 0; }
+  .cover-bg { opacity: 0.22 !important; }
   .frame { min-height: auto; }
   .chart { flex: 0 0 auto; height: 280px; }
   .chart.h-s { height: 150px; }
-  .chart.h-m { height: 200px; }
+  .chart.h-m, .chart.h-nb { height: 200px; }
+  .chart.tall { height: 420px; }
+  .stack > .panel { flex: none !important; }
+  .body { flex: none; }
   .miss { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .miss > div:first-child { grid-column: 1 / -1; }
   .chapters span { display: none; }
   .bar .where { display: none; }
+}
+@media (min-width: 901px) and (max-height: 800px) {
+  .slide { padding-block: 12px; }
+  .frame { gap: 8px; }
+  h2 { font-size: clamp(20px, 2vw, 30px); }
+  .lede { font-size: 14px; }
+  .howto { font-size: 13px; padding: 5px 10px; }
+  .panel { padding: 10px 12px; gap: 6px; }
+  .chart { min-height: 140px; }
+  .chart.h-m { height: clamp(130px, 21vh, 190px); min-height: 130px; }
+  .chart.h-s { height: clamp(90px, 14vh, 140px); min-height: 90px; }
+  .notes { gap: 8px; font-size: 14px; }
+  .tile { padding: 10px 14px; }
+  .tile .big { font-size: clamp(26px, 3vw, 44px); }
+  table.t th, table.t td { padding: 5px 8px; }
+  .exec .opt { padding: 9px 14px; }
 }
 @media (max-width: 480px) {
   .tiles { grid-template-columns: minmax(0, 1fr); }
@@ -313,13 +341,13 @@ pre.cmd span { color: var(--ink-3); }
     <div class="prog" id="prog"></div>
 
     <!-- ───────────── 1. 개요 ───────────── -->
-    <section class="slide cover" data-chap="개요" data-title="표지" aria-label="표지">
+    <section class="slide cover" data-chap="배경" data-title="표지" aria-label="표지">
       <div class="frame">
         <div class="cover-bg" data-chart="cover" aria-hidden="true"></div>
         <div class="cover-copy">
           <div class="eyebrow reveal"><span class="tag">독립 재현 검증</span><span>2026-10-21</span><span>NDX · VIX · ^IRX 일봉</span></div>
           <h1 class="reveal">트라이팟 매매법,<br><em>35년 백테스트</em>를 다시 돌렸습니다</h1>
-          <p class="lede reveal">송팀장 영상(2026-09-01 업로드)에서 공개한 규칙만으로 나스닥100 1991~2026을 재현했습니다. 영상 수치 대조, 강건성 점검, 한국 거주자 세후 성과까지 정리합니다.</p>
+          <p class="lede reveal">송팀장 영상(2026-09-01 업로드)에서 공개한 규칙만으로 나스닥100 1991~2026을 재현했습니다. 영상을 보지 않았어도 따라올 수 있게 배경과 용어부터 설명하고, 영상 수치 대조, 강건성 점검, 한국 거주자 세후 성과까지 정리합니다.</p>
           <div class="cover-meta reveal">
             <span>분석 기간 <b>1991-01-02 ~ 2026-08-28</b></span>
             <span>데이터 <b>야후 v8 일봉, 2026-10-20 수집</b></span>
@@ -330,13 +358,137 @@ pre.cmd span { color: var(--ink-3); }
       </div>
     </section>
 
+
+    <!-- ───────────── 0. 배경 ───────────── -->
+    <section class="slide" data-chap="배경" data-title="영상은 무엇을 주장했나">
+      <div class="frame">
+        <div class="head">
+          <div class="eyebrow reveal"><span class="tag">배경</span><span>송팀장 · 2026-09-01 업로드 · 37분 20초</span></div>
+          <h2 class="reveal">영상은 "TQQQ를 그냥 들고 있지 말고, 지표 세 개로 레버리지를 조절하라"고 말합니다</h2>
+          <p class="lede reveal">나스닥100 지수를 3배로 따라가는 TQQQ는 많이 오르지만 폭락장에서 거의 전부를 잃을 수 있습니다. 영상은 추세·공포·피로도 지표로 3배, 1.5배, 현금 사이를 오가는 '트라이팟' 규칙을 소개하고, 35년 백테스트에서 연 32.9%를 냈다고 설명합니다. 아래는 영상의 흐름을 시간순으로 정리한 것입니다.</p>
+        </div>
+        <ol class="vtl body">
+          <li class="reveal"><time>15:03</time><span><b>체결 시점 비교.</b> 같은 규칙도 당일 종가에 사면 44.3%, 다음 날 사면 24.7%라며 "현실에서는 다음 날 사야 한다"고 강조</span></li>
+          <li class="reveal"><time>15:41~16:58</time><span><b>10년 보유 시뮬레이션.</b> 1991년부터 매 거래일 진입해 10년씩 들고 있는 경우 6,456번을 계산했다고 소개</span></li>
+          <li class="reveal"><time>18:21~19:40</time><span><b>셔플 검정.</b> 데이터를 하루 단위로 섞으면 같은 성과가 안 나오고, 1년 단위로 섞으면 비슷하다. 그래서 나스닥의 추세 구조 덕분이라고 해석</span></li>
+          <li class="reveal"><time>20:39~23:53</time><span><b>규칙 공개.</b> 250일 이동평균, VIX 10일 평균, 52주 고점 대비 낙폭으로 국면과 보유를 정함</span></li>
+          <li class="reveal"><time>24:18~24:36</time><span><b>매매 리듬.</b> 1년 평균 8.1회. 촬영 시점에는 약 4개월째 매매가 없었다고 언급</span></li>
+          <li class="reveal"><time>25:58~26:44</time><span><b>하락장 사례와 가상 상품.</b> 2000년 3월 진입 3년 뒤 트라이팟 6,437만 원, TQQQ 10만 원. 백테스트의 QLD·TQQQ는 지수로 만든 가상 상품</span></li>
+          <li class="reveal"><time>27:29</time><span><b>35년 성적표.</b> 연평균 32.9%, 최대낙폭 -62.0%, QQQ 보유 15.4%, TQQQ 보유 16.4%</span></li>
+          <li class="reveal"><time>29:01~31:39</time><span><b>보유 기간별 결과.</b> 7년 이상 들고 있으면 원금 손실 0%. 1억 원 10년 보유의 중간값 12.52억 원</span></li>
+          <li class="reveal"><time>32:29~33:09</time><span><b>QLD 대비 승률과 '보험료'.</b> 레버리지를 줄인 55번 중 40번은 TQQQ를 계속 들고 있는 편이 나았다(줄이는 비용)</span></li>
+          <li class="reveal"><time>33:32</time><span><b>2026년 3월 실제 사례.</b> 52주 낙폭이 9%를 넘어 1.5배로 줄였다가 나흘 뒤 3배로 복귀, 기회비용 618만 원</span></li>
+        </ol>
+        <p class="src reveal">시각은 영상 위치(분:초). 명세 docs/research/tripod/spec-v2.md에서 정리했고, 화면 표 5장은 캡처로 확인했습니다.</p>
+      </div>
+    </section>
+
+    <section class="slide" data-chap="배경" data-title="등장하는 세 상품">
+      <div class="frame">
+        <div class="head">
+          <div class="eyebrow reveal"><span class="tag">배경</span><span>QQQ · QLD · TQQQ</span></div>
+          <h2 class="reveal">세 상품은 같은 나스닥100 지수를 하루 기준 1배, 2배, 3배로 따라갑니다</h2>
+        </div>
+        <div class="cols-2e body">
+          <div class="panel reveal">
+            <h3>지수가 하루에 이만큼 움직이면</h3>
+            <div class="legend"><span><i class="sw" style="background:var(--s2)"></i>QQQ(1배)</span><span><i class="sw" style="background:var(--s3)"></i>QLD(2배)</span><span><i class="sw" style="background:var(--s4)"></i>TQQQ(3배)</span></div>
+            <div class="chart" data-chart="products" aria-label="지수 하루 변동에 따른 세 상품의 변동"></div>
+          </div>
+          <div class="stack">
+            <div class="panel fit reveal">
+              <div class="tblwrap">
+                <table class="t">
+                  <thead><tr><th>상품</th><th>하루 배수</th><th>상장</th><th>보수 가정</th></tr></thead>
+                  <tbody>
+                    <tr><td><span class="key" style="background:var(--s2)"></span>QQQ</td><td>1배</td><td>1999-03</td><td>연 0.20%</td></tr>
+                    <tr><td><span class="key" style="background:var(--s3)"></span>QLD</td><td>2배</td><td>2006-06</td><td>연 0.95%</td></tr>
+                    <tr><td><span class="key" style="background:var(--s4)"></span>TQQQ</td><td>3배</td><td>2010-02</td><td>연 0.95%</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="notes reveal">
+              <p>레버리지 ETF는 <strong>매일 배수를 다시 맞춥니다</strong>(일간 리셋). 하루 수익률은 정확히 2배·3배지만, 여러 날을 이어 보면 2배·3배가 되지 않습니다. 빌린 돈의 이자(단기 국채 금리 + 0.75%)도 비용으로 빠집니다.</p>
+              <p>상장 전 기간(1991~2010)은 실제 상품이 없어서, 영상과 이 검증 모두 지수의 하루 수익률로 만든 <strong>가상 상품</strong>으로 계산했습니다. 가상 상품은 상장 뒤 실제 QLD·TQQQ와 연 0.1~0.2%p 차이로 겹칩니다.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" data-chap="배경" data-title="레버리지의 함정">
+      <div class="frame">
+        <div class="head">
+          <div class="eyebrow reveal"><span class="tag">배경</span><span>변동성 끌림 · 영상의 음의 복리 예시</span></div>
+          <h2 class="reveal">오르내림만 반복해도 3배 상품은 녹습니다</h2>
+        </div>
+        <div class="cols-2 body">
+          <div class="panel reveal">
+            <h3>하루 +5%, 다음 날 -5%를 20번 반복(40거래일, 처음 = 100)</h3>
+            <div class="legend"><span><i class="key" style="background:var(--s2)"></i>지수(1배)</span><span><i class="key" style="background:var(--s4)"></i>매일 3배를 맞추는 상품</span></div>
+            <div class="chart" data-chart="decay" aria-label="오르내림 반복 시 1배와 3배의 가치 변화"></div>
+          </div>
+          <div class="notes">
+            <p class="reveal">지수는 하루 +5%, -5%를 오가 제자리처럼 보이지만 40일 뒤 <strong>-4.9%</strong>입니다. 매일 3배를 맞추는 상품은 하루 +15%, -15%를 오가 <strong>-36.6%</strong>가 됩니다. 영상의 예시(1억 원 → 6,343만 원)와 같은 계산입니다.</p>
+            <p class="reveal">실제 35년도 같습니다. TQQQ를 사서 그냥 들고 있었다면 2000년 고점에서 <strong>99.98%</strong>까지 떨어졌고, 2026년 8월까지도 그 고점을 회복하지 못했습니다(고점 대비 -71%).</p>
+            <p class="reveal">그래서 영상은 늘 3배로 있지 말고, 추세가 꺾이거나 시장이 불안할 때 레버리지를 줄이자고 제안합니다. 이 자료는 그 규칙이 영상의 숫자를 정말 만드는지, 그리고 믿을 만한지 확인합니다.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" data-chap="배경" data-title="성과 지표 읽는 법">
+      <div class="frame">
+        <div class="head">
+          <div class="eyebrow reveal"><span class="tag">용어</span><span>이 자료에 계속 나오는 성과 지표</span></div>
+          <h2 class="reveal">수익은 CAGR, 위험은 MDD로 먼저 봅니다</h2>
+        </div>
+        <div class="cols-2e body">
+          <div class="panel reveal">
+            <h3>예시: QQQ 보유의 최대낙폭(1998~2016, 월말)</h3>
+            <div class="chart" data-chart="mddDemo" aria-label="QQQ 보유의 최대낙폭 예시"></div>
+          </div>
+          <dl class="gloss reveal" style="grid-template-columns:minmax(0,1fr)">
+            <div><dt>CAGR(연평균 복리 수익률)</dt><dd>시작부터 끝까지 매년 같은 비율로 불었다고 볼 때의 연 수익률. 연 32.9%를 35년 이어 가면 1억 원이 약 2조 원이 됩니다.</dd></div>
+            <div><dt>MDD(최대낙폭)</dt><dd>직전 최고점에서 가장 크게 떨어진 비율. -62%면 1억 원이 한때 3,800만 원까지 줄었다는 뜻입니다.</dd></div>
+            <div><dt>소르티노 비율</dt><dd>손실 쪽 흔들림만 위험으로 보고 계산한 위험 대비 수익. 높을수록 좋습니다.</dd></div>
+            <div><dt>울서 지수</dt><dd>낙폭이 얼마나 깊고 오래 이어졌는지를 하나로 잰 값. 낮을수록 좋습니다.</dd></div>
+            <div><dt>롤링 창(보유 기간별 결과)</dt><dd>시작 시점을 한 달씩 옮겨 가며 같은 기간을 들고 있었던 경우를 모두 계산한 묶음. 10년 보유는 1991년 1월 말 ~ 2016년 7월 말 시작 307번입니다.</dd></div>
+            <div><dt>세후 · 청산 후</dt><dd>세금을 내고, 기간 끝에 전부 팔아 그해 세금까지 낸 뒤 남는 금액 기준입니다.</dd></div>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" data-chap="배경" data-title="규칙·검증 용어">
+      <div class="frame">
+        <div class="head">
+          <div class="eyebrow reveal"><span class="tag">용어</span><span>규칙과 검증 방법에 나오는 말</span></div>
+          <h2 class="reveal">규칙과 검증에 쓰는 말을 먼저 정리합니다</h2>
+        </div>
+        <dl class="gloss body reveal">
+          <div><dt>백테스트</dt><dd>과거 데이터에 규칙을 그대로 적용해 "그때 이렇게 했다면"의 결과를 계산하는 것. 과거 성과가 미래를 보장하지는 않습니다.</dd></div>
+          <div><dt>비교 대상(그냥 보유)</dt><dd>규칙 없이 QQQ·QLD·TQQQ를 사서 계속 들고 있는 경우. 규칙이 이것보다 나아야 의미가 있습니다.</dd></div>
+          <div><dt>250일 이동평균(250일선)</dt><dd>최근 250거래일(약 1년) 종가의 평균. 지수가 이 선 위면 장기 상승 추세로 봅니다.</dd></div>
+          <div><dt>VIX</dt><dd>S&amp;P500 옵션 가격으로 계산한 앞으로 30일의 예상 변동성. 시장이 불안할수록 높아져 '공포 지수'라고 부릅니다.</dd></div>
+          <div><dt>52주 고점 대비 낙폭</dt><dd>최근 1년 최고 종가에서 지금 몇 % 내려와 있는지. 오래 오른 뒤의 피로도를 봅니다.</dd></div>
+          <div><dt>완충 구간(히스테리시스)</dt><dd>들어가는 문턱(+1%)과 나오는 문턱(-5%)을 다르게 둬서, 경계선 근처에서 사고팔기를 반복하지 않게 하는 장치.</dd></div>
+          <div><dt>체결 시점</dt><dd>신호를 본 뒤 실제로 사고파는 때. 같은 신호도 언제 거래하느냐에 따라 결과가 크게 달라집니다(다음 장 이후 설명).</dd></div>
+          <div><dt>bp(베이시스 포인트)</dt><dd>0.01%. 거래비용 편도 5bp는 사거나 팔 때마다 거래 금액의 0.05%를 낸다는 뜻입니다.</dd></div>
+          <div><dt>셔플 검정</dt><dd>실제 역사의 날들을 카드처럼 섞어 만든 '가짜 역사'에 같은 규칙을 돌려 보는 것. 우위가 시장의 어떤 구조에서 나오는지 확인합니다.</dd></div>
+          <div><dt>표본 외 점검</dt><dd>규칙을 만들 때 쓰지 않은 데이터(다른 지수, 다른 기간)에 그대로 적용해 보는 것. 과거에 맞춰 만든 규칙인지 가립니다.</dd></div>
+        </dl>
+      </div>
+    </section>
+
     <section class="slide" data-chap="개요" data-title="한 장 요약">
       <div class="frame">
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">요약</span><span>결론부터</span></div>
           <h2 class="reveal">규칙이 영상의 숫자를 만든다는 것은 사실입니다. 앞으로도 그만큼 번다는 근거는 약합니다.</h2>
         </div>
-        <div class="verdicts body">
+        <div class="verdicts">
           <div class="vcard reveal">
             <span class="chip good" data-ico="check">재현됨</span>
             <h3>핵심 성과가 나옵니다</h3>
@@ -368,6 +520,7 @@ pre.cmd span { color: var(--ink-3); }
             <p>1년 블록으로 섞은 경로와 S&amp;P500에서는 우위가 남고, 하루 단위로 섞으면 사라집니다. 수익 대부분은 250일선 하나에서 나옵니다.</p>
           </div>
         </div>
+        <p class="bottomline reveal"><b>한 줄로:</b> 공개된 규칙으로 영상의 35년 숫자는 거의 그대로 나옵니다. 다만 과거에 맞춰 고른 흔적과 세금·체결 같은 실전 조건을 감안하면, 앞으로 기대할 우위는 QQQ 보유보다 연 몇 %p 수준으로 보는 것이 안전합니다.</p>
       </div>
     </section>
 
@@ -442,6 +595,7 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">규칙</span><span>2018-01 ~ 2020-12 일별</span></div>
           <h2 class="reveal">완충 구간 안에서는 국면이 그대로 유지됩니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>진한 선이 나스닥100 종가, 옅은 회색 선이 250일 평균, 옅은 파란 띠가 완충 구간(평균의 ×0.95 ~ ×1.01)입니다. 지수가 띠 위로 나가면 상승 국면, 띠 아래로 나가면 하락 국면이고, 띠 안에서는 이전 국면이 이어집니다. 맨 아래 색 띠가 그날 실제로 들고 있던 상품입니다.</p>
         </div>
         <div class="cols-2 body">
           <div class="panel reveal">
@@ -457,11 +611,33 @@ pre.cmd span { color: var(--ink-3); }
       </div>
     </section>
 
+
+    <section class="slide" data-chap="규칙과 데이터" data-title="언제 사고파나">
+      <div class="frame">
+        <div class="head">
+          <div class="eyebrow reveal"><span class="tag">체결 시점</span><span>판정은 장 마감 뒤, 거래는 언제?</span></div>
+          <h2 class="reveal">같은 신호라도 언제 사고파느냐에 따라 35년 성과가 약 7%p 달라집니다</h2>
+          <p class="lede reveal">규칙은 그날 종가를 보고 장이 끝난 뒤에 판정합니다. 실제 거래를 언제 하느냐는 영상이 밝히지 않아, 세 가지를 모두 계산했습니다(1991~2026, 세전).</p>
+        </div>
+        <div class="exec body">
+          <div class="track reveal" aria-hidden="true">
+            <div class="pt judge"><b>D일 장 마감</b><span>종가 확인 → 판정</span></div>
+            <div class="pt"><b>D+1일 장 시작</b><span>시가 · 한국 시간 밤 10시 30분(서머타임)</span></div>
+            <div class="pt"><b>D+1일 장 마감</b><span>종가 · 한국 시간 새벽 5시(서머타임)</span></div>
+          </div>
+          <div class="opt reveal"><h3>당일 종가에 체결</h3><p>판정에 쓴 바로 그 종가로 거래했다고 가정. 종가를 본 뒤에는 그 가격으로 살 수 없어 현실에서는 마감 직전 가격으로 흉내 내야 합니다.</p><div class="res num">25.8%<small>CAGR</small></div></div>
+          <div class="opt reveal"><h3>다음 날 시가에 체결</h3><p>이튿날 장이 열리자마자 거래. 밤사이 가격 변동(갭)을 그대로 맞습니다. 1990년대 야후 시가는 복사본이라 2000년 이후로 판단해야 합니다.</p><div class="res num">27.1%<small>CAGR</small></div></div>
+          <div class="opt on reveal"><h3>다음 날 종가에 체결</h3><p>이튿날 장 마감 가격으로 거래. 장 마감가 주문으로 할 수 있고, 영상의 35년 성과(32.9%)와 맞는 유일한 방식입니다.</p><div class="res num">32.6%<small>CAGR</small></div></div>
+        </div>
+      </div>
+    </section>
+
     <section class="slide" data-chap="규칙과 데이터" data-title="데이터와 품질">
       <div class="frame">
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">데이터</span><span>data-src/tripod/ · 3.6MB</span></div>
           <h2 class="reveal">1990년대 야후 지수 시가는 전날 종가를 복사한 값입니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>막대가 높을수록 그해 시가 데이터가 실제 거래 가격이 아니라 전날 종가를 그대로 옮긴 값이었다는 뜻입니다.</p>
         </div>
         <div class="cols-2 body">
           <div class="panel reveal">
@@ -521,6 +697,7 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">비교 대상</span><span>영상 27:29 화면 표</span></div>
           <h2 class="reveal">QQQ·QLD·TQQQ 보유 성과가 영상 표와 거의 같습니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>규칙 없이 그냥 들고 있는 경우는 해석이 갈릴 여지가 없어서, 데이터와 비용 가정이 영상과 같은지 확인하는 기준이 됩니다. 굵은 숫자가 이 검증, 회색 숫자가 영상입니다.</p>
         </div>
         <div class="cols-2 body">
           <div class="panel fit reveal">
@@ -544,6 +721,7 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">그리드</span><span>체결 3 × 52주 고점 4 × 중간 구간 2</span></div>
           <h2 class="reveal">목표 범위에 들어오는 것은 다음 날 종가 체결뿐입니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>점 하나가 해석 조합 하나입니다. 가로는 언제 체결하느냐, 세로는 35년 연평균 수익률이고, 파란 띠가 영상 값 ±3%p 범위입니다. 점에 올리면 조합과 MDD가 보입니다.</p>
         </div>
         <div class="cols-2 body">
           <div class="panel reveal">
@@ -572,7 +750,7 @@ pre.cmd span { color: var(--ink-3); }
           <div class="tile reveal"><span class="k">울서 지수</span><span class="big" data-count="30.2" data-dec="1">30.2</span><span class="vs">영상 <b>29.9</b></span></div>
         </div>
         <div class="cols-2 body">
-          <div class="panel reveal">
+          <div class="panel fit reveal">
             <h3>판정 기준(명세 §7)</h3>
             <p class="sub">CAGR ±3%p, MDD ±5%p 안이면 재현으로 봅니다. 차이는 CAGR -0.3%p, MDD +0.6%p입니다.</p>
             <div class="chart h-m" data-chart="judge" aria-label="판정 범위 안의 위치"></div>
@@ -590,6 +768,7 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">자산 곡선</span><span>1달러 시작 · 로그 눈금 · 월말</span></div>
           <h2 class="reveal">35년 동안 레버리지 보유는 두 번 무너지고 규칙은 한 번 깊게 빠집니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>1달러로 시작해 몇 배가 됐는지를 그렸습니다. 세로축은 로그 눈금이라 같은 간격이 같은 배수(10배)를 뜻합니다. 아래 그래프는 그 시점에 직전 최고점보다 몇 % 아래에 있었는지입니다.</p>
         </div>
         <div class="stack body">
           <div class="panel reveal" style="flex:2">
@@ -609,6 +788,7 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">매매 리듬</span><span>영상 24:18 화면 표</span></div>
           <h2 class="reveal">35년 중 69%를 3배로, 나머지를 1.5배와 현금으로 보냈습니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>위 띠는 35년 동안 매일 무엇을 들고 있었는지를 색으로 칠한 것입니다. 아래 막대는 해마다 상품을 바꾼 횟수입니다.</p>
         </div>
         <div class="cols-2 body">
           <div class="stack">
@@ -646,6 +826,7 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">롤링 창</span><span>월말 진입 · 영상 29:01, 30:48</span></div>
           <h2 class="reveal">"단순 보유는 오래 들수록 떨어지고 규칙은 유지된다"는 모양이 그대로 나옵니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>'5년' 줄은 1991년 1월 말부터 매달 1억 원을 넣고 5년 뒤에 찾은 수백 번의 결과 가운데 값(중앙값)과, 그중 원금보다 적게 남은 비율입니다.</p>
         </div>
         <div class="cols-2e body">
           <div class="panel fit reveal">
@@ -666,11 +847,12 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">분포</span><span>1억 원 · 10년 보유 · 월말 진입 307개 · 세전</span></div>
           <h2 class="reveal">307번 모두 원금을 지켰지만, 최악의 시작월은 영상과 다릅니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>점 하나가 '그달 말에 1억 원을 넣고 10년 뒤에 찾았다면'의 결과입니다. 오른쪽일수록 많이 남았고, 가로축은 로그 눈금, 굵은 세로선은 원금 1억 원입니다. 짧은 선은 최악·25%·중간·최고, 마름모는 영상 값입니다.</p>
         </div>
         <div class="cols-2 body">
           <div class="panel reveal">
             <div class="legend"><span><i class="sw" style="background:var(--ink-2)"></i>재현 분위(최악·25%·중간·최고)</span><span><i class="sw" style="background:var(--surface);box-shadow:inset 0 0 0 2px var(--warn)"></i>영상 값</span></div>
-            <div class="chart" data-chart="dist10" aria-label="10년 보유 최종액 분포"></div>
+            <div class="chart tall" data-chart="dist10" aria-label="10년 보유 최종액 분포"></div>
           </div>
           <div class="notes">
             <p class="reveal">25%·중간값은 맞습니다. 트라이팟 중간값은 재현 <strong>13.33억</strong>, 영상 12.52억이고 25%는 4.74억 대 4.73억입니다.</p>
@@ -686,16 +868,17 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">체크포인트</span><span>2026-01 ~ 2026-08 일별</span></div>
           <h2 class="reveal">3월의 축소·복귀는 재현되고, 7월 말에는 영상이 말하지 않은 신호가 하나 나옵니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>위 그래프가 -9% 선 아래로 내려가면 3배를 1.5배로 줄이고, 다시 올라오면 3배로 돌아갑니다. 회색 음영이 실제로 1.5배였던 기간, 점이 실제 거래일입니다.</p>
         </div>
         <div class="cols-2 body">
           <div class="stack">
             <div class="panel reveal" style="flex:1.4">
               <h3>52주 고점 대비 낙폭(%)과 기준선 -9%</h3>
-              <div class="chart" data-chart="cpDD" aria-label="2026 52주 낙폭"></div>
+              <div class="chart mh-s" data-chart="cpDD" aria-label="2026 52주 낙폭"></div>
             </div>
             <div class="panel reveal" style="flex:1">
               <h3>VIX 10일 평균과 상승 국면 기준선 28</h3>
-              <div class="chart" data-chart="cpVIX" aria-label="2026 VIX10"></div>
+              <div class="chart mh-s" data-chart="cpVIX" aria-label="2026 VIX10"></div>
             </div>
           </div>
           <div class="notes">
@@ -731,6 +914,7 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">체결 시점</span><span>같은 신호, 반영 시차만 다르게</span></div>
           <h2 class="reveal">하루 늦게 체결하는 쪽이 6.8%p 높습니다. 영상 설명과 반대입니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>막대 하나가 같은 신호를 언제 체결했느냐에 따른 연평균 수익률입니다. 주황 선이 영상이 말한 두 값입니다.</p>
         </div>
         <div class="cols-2 body">
           <div class="stack">
@@ -759,6 +943,7 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">닷컴 붕괴</span><span>1999-07 ~ 2001-06 일별</span></div>
           <h2 class="reveal">2000년 4월부터 10월까지 1.5배로 버틴 것이 차이를 만듭니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>선과 띠는 앞의 밴드 그래프와 같습니다. 고점에서 지수가 크게 빠지는 동안에도 지수가 파란 띠 위에 있어 하락 국면으로 바뀌지 않는 모습이 보입니다.</p>
         </div>
         <div class="cols-2 body">
           <div class="panel reveal">
@@ -780,8 +965,9 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">강건성</span><span>한 번에 하나씩 · CAGR %</span></div>
           <h2 class="reveal">대부분 평탄하지만 VIX 28은 작은 봉우리이고 낙폭 7~8% 사이에 절벽이 있습니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>작은 그래프마다 규칙의 숫자 하나만 바꿔 본 35년 연평균 수익률입니다. 선이 평평하면 그 값을 조금 바꿔도 성과가 비슷하다는 뜻이고, 진한 점(영상의 값)만 튀어 있으면 과거에 맞춰 고른 흔적일 수 있습니다.</p>
         </div>
-        <div class="body" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); align-content: start;" id="nb-grid"></div>
+        <div class="body" style="grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); align-content: start;" id="nb-grid"></div>
         <p class="src reveal">진한 점이 영상의 값 · 세로 범위는 모든 작은 그래프에서 같음 · 점에 올리면 MDD도 보입니다</p>
       </div>
     </section>
@@ -791,6 +977,7 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">2차원</span><span>낙폭 한도 × 상승 국면 VIX 상한</span></div>
           <h2 class="reveal">절벽은 VIX 기준과 상관없이 낙폭 7%와 8% 사이에 있습니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>칸마다 두 숫자를 함께 바꿨을 때의 연평균 수익률입니다. 색이 진할수록 높고, 테두리 칸이 영상의 조합입니다.</p>
         </div>
         <div class="cols-2 body">
           <div class="panel reveal">
@@ -811,6 +998,7 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">표본 외</span><span>CAGR % · 세전</span></div>
           <h2 class="reveal">앞뒤 반기 성과가 비슷하고, 같은 규칙이 S&amp;P500에서도 1배 보유를 앞섭니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>막대는 기간별 연평균 수익률입니다. 0 아래 막대는 그 기간에 돈을 잃었다는 뜻이고, 맨 오른쪽은 같은 규칙을 S&amp;P500 지수에 적용한 결과입니다.</p>
         </div>
         <div class="cols-2 body">
           <div class="panel reveal">
@@ -831,6 +1019,7 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">셔플</span><span>하루(수익률·VIX·금리) 묶음을 블록 단위로 섞기 · 각 200회</span></div>
           <h2 class="reveal">일·월 단위로 섞으면 우위가 사라지고, 1년 블록으로 섞으면 남습니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>실제 1990~2026년의 날들을 카드처럼 섞어 '가짜 역사' 200개를 만들고 같은 규칙을 돌렸습니다. 하루 단위로 섞으면 추세가 사라지고, 1년 단위로 섞으면 1년 안의 추세는 남습니다. 막대는 트라이팟이 QLD 보유보다 연 몇 %p 더 벌었는지의 분포이고, 0보다 오른쪽이면 규칙이 이긴 경우입니다.</p>
         </div>
         <div class="cols-3 body" id="shuf-grid"></div>
         <p class="src reveal">값 = 트라이팟 CAGR − QLD 보유 CAGR(%p) · 세로선 0 · 진한 선 실제 경로 +12.9%p · 영상(18:21)의 정성적 결과와 같음. 영상은 섞은 데이터에서 설계 과정 전체를 다시 돌렸고, 여기서는 파라미터를 고정했습니다.</p>
@@ -875,6 +1064,7 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">세후</span><span>1991~2026 · 1억 원 시작 · 청산 후</span></div>
           <h2 class="reveal">세금은 트라이팟을 5.6%p, QQQ 보유를 0.8%p 깎습니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>왼쪽 끝이 세전 연평균 수익률, 옅은 막대가 세금 항목마다 줄어든 만큼, 오른쪽 끝이 모든 세금을 낸 뒤의 값입니다.</p>
         </div>
         <div class="cols-2 body">
           <div class="panel reveal">
@@ -895,10 +1085,11 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">QQQ n% + 현금</span><span>세후 · 매년 리밸런싱</span></div>
           <h2 class="reveal">같은 MDD에서 트라이팟이 연 16%p 앞섭니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>왼쪽 위로 갈수록 좋습니다(덜 잃고 더 벌기). 주황 곡선은 QQQ와 현금을 섞는 비율을 0~100%로 바꾼 결과이고, 파란 점이 트라이팟, 속이 빈 파란 점이 불리한 조건을 넣은 트라이팟입니다.</p>
         </div>
         <div class="cols-2 body">
           <div class="panel reveal">
-            <div class="legend"><span><i class="key" style="background:var(--s2t)"></i>QQQ n% + 현금(n = 0~100)</span><span><i class="sw" style="background:var(--s1)"></i>트라이팟 기본</span><span><i class="sw" style="background:var(--surface);box-shadow:inset 0 0 0 2px var(--s1)"></i>트라이팟 보수적 시나리오</span><span><i class="sw" style="background:var(--s3)"></i>QLD</span><span><i class="sw" style="background:var(--s4)"></i>TQQQ</span></div>
+            <div class="legend"><span><i class="key" style="background:var(--s2t)"></i>QQQ n% + 현금(n = 0~100)</span><span><i class="sw" style="background:var(--s1)"></i>트라이팟 기본</span><span><i class="sw" style="background:var(--surface);box-shadow:inset 0 0 0 2px var(--s1)"></i>트라이팟 보수적 시나리오</span><span><i class="sw" style="background:var(--s2)"></i>QQQ 100%</span><span><i class="sw" style="background:var(--s3)"></i>QLD</span><span><i class="sw" style="background:var(--s4)"></i>TQQQ</span></div>
             <div class="chart" data-chart="frontier" aria-label="세후 MDD와 CAGR 산점도"></div>
           </div>
           <div class="notes">
@@ -915,11 +1106,12 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">10년 창</span><span>월말 진입 307개 · 1억 원 새로 시작 · 청산 후</span></div>
           <h2 class="reveal">세후 중간값 8.72억, QQQ 보유는 2.77억입니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>앞의 10년 분포와 같은 그림을 세금을 낸 뒤 기준으로 다시 그렸습니다. 굵은 세로선이 원금 1억 원입니다.</p>
         </div>
         <div class="cols-2 body">
           <div class="panel reveal">
             <div class="legend"><span><i class="sw" style="background:var(--ink-2)"></i>분위(최악·25%·중간·최고)</span><span><i class="key" style="background:var(--ink-3)"></i>원금 1억</span></div>
-            <div class="chart" data-chart="win10" aria-label="10년 보유 세후 최종액 분포"></div>
+            <div class="chart tall" data-chart="win10" aria-label="10년 보유 세후 최종액 분포"></div>
           </div>
           <div class="notes">
             <p class="reveal">세후 트라이팟은 307개 창 중 <strong>97.7%</strong>에서 QQQ 100%보다, <strong>100%</strong>에서 QQQ 70% + 현금보다 많았습니다.</p>
@@ -935,11 +1127,12 @@ pre.cmd span { color: var(--ink-3); }
         <div class="head">
           <div class="eyebrow reveal"><span class="tag">실전 조건</span><span>세후 · 1991~2026</span></div>
           <h2 class="reveal">나쁜 조건을 겹치면 세후 17.0%, QQQ 보유와의 차이는 연 2~4%p로 줄어듭니다</h2>
+          <p class="howto reveal"><b>읽는 법</b>막대가 길수록 세후 연평균 수익률이 높습니다. 옅은 파란 막대는 실전에서 불리하게 바뀔 수 있는 조건을 하나씩(마지막은 한꺼번에) 넣은 경우입니다.</p>
         </div>
         <div class="cols-2 body">
           <div class="panel reveal">
             <div class="legend"><span><i class="sw" style="background:var(--s1)"></i>트라이팟</span><span><i class="sw" style="background:var(--h15)"></i>트라이팟 변형</span><span><i class="sw" style="background:var(--s2)"></i>QQQ 100%</span><span><i class="sw" style="background:var(--s2t)"></i>QQQ 70% + 현금</span></div>
-            <div class="chart" data-chart="scen" aria-label="시나리오별 세후 CAGR"></div>
+            <div class="chart tall" data-chart="scen" aria-label="시나리오별 세후 CAGR"></div>
           </div>
           <div class="stack">
             <div class="panel reveal">
@@ -1184,7 +1377,7 @@ const D = /*__DECK_DATA__*/null
   function frame(host, m = {}) {
     host.replaceChildren()
     const mm = { t: 14, r: 18, b: 26, l: 44, ...m }
-    const W = Math.max(260, host.clientWidth), H = Math.max(120, host.clientHeight)
+    const W = Math.max(160, host.clientWidth), H = Math.max(120, host.clientHeight)
     const svg = d3.select(host).append('svg').attr('width', W).attr('height', H).attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', host.getAttribute('aria-label') || '')
     const g = svg.append('g').attr('transform', `translate(${mm.l},${mm.t})`)
     return { svg, g, W, H, m: mm, iw: W - mm.l - mm.r, ih: H - mm.t - mm.b }
@@ -1196,7 +1389,13 @@ const D = /*__DECK_DATA__*/null
   }
   function axisX(f, x, ticks, fmt) {
     const a = f.g.append('g').attr('class', 'ax').attr('transform', `translate(0,${f.ih})`)
-    a.selectAll('text').data(ticks).join('text').attr('x', (d) => x(d)).attr('y', 16).attr('text-anchor', 'middle').text(fmt)
+    a.selectAll('text').data(ticks).join('text').attr('x', (d) => x(d)).attr('y', 16).attr('text-anchor', 'middle')
+      .each(function (d) {
+        const lines = String(fmt(d)).split('\n')
+        const t = d3.select(this)
+        if (lines.length === 1) { t.text(lines[0]); return }
+        lines.forEach((ln, i) => t.append('tspan').attr('x', x(d)).attr('dy', i ? '1.15em' : 0).text(ln))
+      })
   }
   const yearTicks = (x, step) => d3.utcYear.every(step).range(...x.domain().map((d, i) => (i ? d3.utcDay.offset(d, 1) : d)))
   function crosshair(f, xs, x, series, title) {
@@ -1211,6 +1410,23 @@ const D = /*__DECK_DATA__*/null
         showTip(ev, title(i), series.map((s) => ({ color: s.color, label: s.label, value: s.values[i] == null ? '—' : s.fmt(s.values[i]) })))
       })
       .on('pointerleave', () => { line.style('opacity', 0); dots.forEach((d) => d.style('opacity', 0)); hideTip() })
+  }
+  // 주석: 위쪽 줄에 글자를 두고 지시선으로 점과 잇는다(선과 글자가 겹치지 않게)
+  function annotTop(f, items) {
+    const rows = []
+    items.sort((a, b) => a.xx - b.xx).forEach((it) => {
+      const t = f.g.append('text').attr('class', 'lbl-b halo anim-fade').text(it.t)
+      const w = t.node().getComputedTextLength() + 8
+      const anchor = it.xx + w > f.iw ? 'end' : 'start'
+      const x0 = anchor === 'end' ? it.xx - w : it.xx, x1 = anchor === 'end' ? it.xx : it.xx + w
+      let r = 0
+      while (rows[r] && rows[r].some(([a, b]) => !(x1 < a || x0 > b))) r++
+      ;(rows[r] ||= []).push([x0, x1])
+      const ty = 12 + r * 18
+      t.attr('x', anchor === 'end' ? it.xx - 4 : it.xx + 4).attr('y', ty).attr('text-anchor', anchor)
+      f.g.insert('line', () => t.node()).attr('x1', it.xx).attr('x2', it.xx).attr('y1', ty + 5).attr('y2', it.yy - 6).attr('class', 'xhair anim-fade')
+      f.g.append('circle').attr('cx', it.xx).attr('cy', it.yy).attr('r', 4).attr('class', 'f1 ring anim-pop')
+    })
   }
   const drawPath = (g, data, gen, cls) => g.append('path').datum(data).attr('class', `ln ${cls} anim-draw`).attr('d', gen)
   function bar(g, x, y, w, h, cls, base) { // 끝 4px 둥글게, 기준선 쪽은 직각
@@ -1233,6 +1449,76 @@ const D = /*__DECK_DATA__*/null
   // ── 개별 차트 ──
   const CH = {}
 
+  CH.products = (host) => {
+    const f = frame(host, { l: 44, b: 40, t: 20 })
+    const groups = [['지수 +1%인 날', 1], ['지수 -10%인 날', -10]]
+    const x0 = d3.scaleBand().domain(groups.map((g) => g[0])).range([0, f.iw]).paddingInner(0.3)
+    const x1 = d3.scaleBand().domain([1, 2, 3]).range([0, x0.bandwidth()]).padding(0.18)
+    const y = d3.scaleLinear().domain([-38, 8]).range([f.ih, 0])
+    gridY(f, y, [-30, -20, -10, 0], (d) => `${d}%`)
+    const cls = { 1: 'f2', 2: 'f3', 3: 'f4' }, nm = { 1: 'QQQ', 2: 'QLD', 3: 'TQQQ' }
+    for (const [g, r] of groups) for (const L of [1, 2, 3]) {
+      const v = r * L, bw = Math.min(28, x1.bandwidth()), xx = x0(g) + x1(L) + (x1.bandwidth() - bw) / 2
+      bar(f.g, xx, null, bw, v >= 0 ? y(0) - y(v) : -(y(v) - y(0)), cls[L], y(0)).attr('class', `${cls[L]} anim-bar mark`)
+        .on('pointermove', (ev) => showTip(ev, g, [{ color: `--s${L + 1}`, label: nm[L], value: `${v > 0 ? '+' : ''}${v}%` }])).on('pointerleave', hideTip)
+      f.g.append('text').attr('x', xx + bw / 2).attr('y', v >= 0 ? y(v) - 6 : y(v) + 15).attr('text-anchor', 'middle').attr('class', 'lbl-b anim-fade').text(`${v > 0 ? '+' : ''}${v}%`)
+    }
+    f.g.append('line').attr('x1', 0).attr('x2', f.iw).attr('y1', y(0)).attr('y2', y(0)).attr('class', 'base')
+    axisX(f, (d) => x0(d) + x0.bandwidth() / 2, groups.map((g) => g[0]), (d) => d)
+  }
+
+  CH.decay = (host) => {
+    const f = frame(host, { l: 48, r: 150, t: 16, b: 30 })
+    const n = 40, one = [1], three = [1]
+    for (let i = 1; i <= n; i++) { const r = i % 2 ? 0.05 : -0.05; one.push(one[i - 1] * (1 + r)); three.push(three[i - 1] * (1 + 3 * r)) }
+    const x = d3.scaleLinear().domain([0, n]).range([0, f.iw])
+    const y = d3.scaleLinear().domain([0.55, 1.2]).range([f.ih, 0])
+    gridY(f, y, [0.6, 0.8, 1.0, 1.2], (d) => `${Math.round(d * 100)}`)
+    axisX(f, x, [0, 10, 20, 30, 40], (d) => `${d}일`)
+    f.g.append('line').attr('x1', 0).attr('x2', f.iw).attr('y1', y(1)).attr('y2', y(1)).attr('class', 'base')
+    drawPath(f.g, three, d3.line().x((_, i) => x(i)).y((v) => y(v)), 'c4')
+    drawPath(f.g, one, d3.line().x((_, i) => x(i)).y((v) => y(v)), 'c2')
+    const end = (arr, cls, name, dy) => {
+      const v = arr.at(-1), man = Math.floor(v * 10000)
+      f.g.append('circle').attr('cx', x(n)).attr('cy', y(v)).attr('r', 5).attr('class', `${cls} ring anim-pop`)
+      f.g.append('text').attr('x', f.iw + 10).attr('y', y(v) + dy).attr('class', 'lbl-b anim-fade').text(`${name} ${((v - 1) * 100).toFixed(1)}%`)
+      f.g.append('text').attr('x', f.iw + 10).attr('y', y(v) + dy + 16).attr('class', 'lbl-m anim-fade').text(`1억 → ${man.toLocaleString('ko-KR')}만 원`)
+    }
+    end(one, 'f2', '지수', -4)
+    end(three, 'f4', '3배', -4)
+    crosshair(f, d3.range(n + 1), x, [
+      { label: '지수', values: one, y, fmt: (v) => (v * 100).toFixed(1), color: '--s2', cls: '2' },
+      { label: '3배', values: three, y, fmt: (v) => (v * 100).toFixed(1), color: '--s4', cls: '4' },
+    ], (i) => `${i}일째`)
+  }
+
+  CH.mddDemo = (host) => {
+    const f = frame(host, { l: 48, r: 18, t: 20, b: 30 })
+    const all = D.curves.dates, i0 = all.indexOf('1998-01'), i1 = all.indexOf('2016-12')
+    const dates = all.slice(i0, i1 + 1).map(parseM), v = D.curves.qqq.slice(i0, i1 + 1)
+    let pk = 0, tr = 0, best = 0
+    for (let i = 0, p = 0; i < v.length; i++) { if (v[i] > v[p]) p = i; const d = v[i] / v[p] - 1; if (d < best) { best = d; pk = p; tr = i } }
+    let rc = v.findIndex((x, i) => i > tr && x >= v[pk])
+    const x = d3.scaleUtc().domain(d3.extent(dates)).range([0, f.iw])
+    const y = d3.scaleLog().domain([d3.min(v) * 0.8, d3.max(v) * 1.25]).range([f.ih, 0])
+    const ticks = [2, 5, 10, 20, 50].filter((t) => t > y.domain()[0] && t < y.domain()[1])
+    gridY(f, y, ticks, (d) => `${d}배`)
+    axisX(f, x, d3.utcYear.every(f.iw < 520 ? 6 : 3).range(d3.utcYear.ceil(dates[0]), dates.at(-1)), d3.utcFormat('%Y'))
+    f.g.append('rect').attr('x', x(dates[pk])).attr('width', x(dates[tr]) - x(dates[pk])).attr('y', 0).attr('height', f.ih).attr('class', 'washink anim-fade')
+    if (rc > 0) f.g.append('line').attr('x1', x(dates[pk])).attr('x2', x(dates[rc])).attr('y1', y(v[pk])).attr('y2', y(v[pk])).attr('class', 'ref anim-fade')
+    drawPath(f.g, v, d3.line().x((_, i) => x(dates[i])).y((d) => y(d)), 'c2')
+    f.g.append('circle').attr('cx', x(dates[pk])).attr('cy', y(v[pk])).attr('r', 5).attr('class', 'f2 ring anim-pop')
+    f.g.append('circle').attr('cx', x(dates[tr])).attr('cy', y(v[tr])).attr('r', 5).attr('class', 'f2 ring anim-pop')
+    f.g.append('text').attr('x', x(dates[pk]) + 8).attr('y', y(v[pk]) - 6).attr('class', 'lbl-b halo anim-fade').text(`고점 ${all[i0 + pk]}`)
+    f.g.append('text').attr('x', x(dates[tr]) + 8).attr('y', y(v[tr]) + 4).attr('class', 'lbl-b anim-fade').text(`저점 ${all[i0 + tr]}`)
+    f.g.append('text').attr('x', x(dates[tr]) + 8).attr('y', y(v[tr]) + 20).attr('class', 'lbl anim-fade').text(`최대낙폭 ${D.perf.qqq.mdd.toFixed(1)}%(일별 기준)`)
+    if (rc > 0) {
+      f.g.append('circle').attr('cx', x(dates[rc])).attr('cy', y(v[rc])).attr('r', 5).attr('class', 'fsurf anim-pop').style('stroke', 'var(--s2)').style('stroke-width', 2)
+      f.g.append('text').attr('x', (x(dates[tr]) + x(dates[rc])) / 2).attr('y', y(v[pk]) + 16).attr('text-anchor', 'middle').attr('class', 'ref-t halo anim-fade').text('전고점 회복까지 14.7년')
+    }
+    crosshair(f, dates, x, [{ label: 'QQQ 보유(1달러 시작)', values: v, y, fmt: (d) => `${d.toFixed(2)}배`, color: '--s2', cls: '2' }], (i) => all[i0 + i])
+  }
+
   CH.cover = (host) => {
     const f = frame(host, { t: 30, r: 0, b: 30, l: 0 })
     const xs = D.curves.dates.map(parseM)
@@ -1253,8 +1539,8 @@ const D = /*__DECK_DATA__*/null
     const stripH = 12, gap = 10, ph = f.ih - stripH - gap
     const x = d3.scaleUtc().domain(d3.extent(xs)).range([0, f.iw])
     const lo = d3.min(B.close.map((c, i) => Math.min(c, B.ma[i] * 0.95))), hi = d3.max(B.close.map((c, i) => Math.max(c, B.ma[i] * 1.01)))
-    const y = d3.scaleLinear().domain([lo * 0.97, hi * 1.02]).nice().range([ph, 0])
-    gridY(f, y, y.ticks(5), (d) => d3.format(',')(d))
+    const y = d3.scaleLinear().domain([lo * 0.97, hi * (f.iw < 520 ? 1.3 : 1.12)]).range([ph, 0])
+    gridY(f, y, y.ticks(5).filter((t) => y(t) > 40), (d) => d3.format(',')(d))
     f.g.append('path').datum(B.ma).attr('class', 'wash1 anim-fade')
       .attr('d', d3.area().x((_, i) => x(xs[i])).y0((v) => y(v * 0.95)).y1((v) => y(v * 1.01)))
     drawPath(f.g, B.ma, d3.line().x((_, i) => x(xs[i])).y((v) => y(v)), 'cmute').style('stroke-width', 1.5)
@@ -1270,15 +1556,8 @@ const D = /*__DECK_DATA__*/null
         s = i
       }
     }
-    const step = Math.max(1, Math.round((xs.at(-1) - xs[0]) / 864e5 / 365 / 6))
-    axisX({ ...f, ih: f.ih }, x, d3.utcMonth.every(step === 1 ? 6 : 12).range(xs[0], xs.at(-1)), d3.utcFormat('%Y-%m'))
-    for (const n of notes || []) {
-      const i = B.d.indexOf(n.d); if (i < 0) continue
-      const xx = x(xs[i]), yy = y(B.close[i])
-      f.g.append('line').attr('x1', xx).attr('x2', xx).attr('y1', yy + 6).attr('y2', ph + gap).attr('class', 'xhair anim-fade')
-      f.g.append('circle').attr('cx', xx).attr('cy', yy).attr('r', 4).attr('class', 'f1 ring anim-pop')
-      f.g.append('text').attr('x', Math.min(f.iw - 4, xx + 6)).attr('y', n.dy != null ? yy + n.dy : yy - 10).attr('text-anchor', xx > f.iw * 0.75 ? 'end' : 'start').attr('class', 'lbl-b anim-fade').text(n.t)
-    }
+    axisX({ ...f, ih: f.ih }, x, d3.utcMonth.every(f.iw < 640 ? 12 : 6).range(d3.utcMonth.ceil(xs[0]), xs.at(-1)), d3.utcFormat(f.iw < 640 ? '%Y' : '%Y-%m'))
+    annotTop(f, (notes || []).map((n) => { const i = B.d.indexOf(n.d); return i < 0 ? null : { xx: x(xs[i]), yy: y(B.close[i]), t: n.t } }).filter(Boolean))
     crosshair({ ...f, ih: ph }, xs, x, [
       { label: '종가', values: B.close, y, fmt: (v) => d3.format(',.0f')(v), color: '--ink-2', cls: 'mute' },
       { label: '250일선', values: B.ma, y, fmt: (v) => d3.format(',.0f')(v), color: '--ink-3', cls: 'mute' },
@@ -1288,8 +1567,8 @@ const D = /*__DECK_DATA__*/null
     const lg = $(id); if (!lg || lg.childElementCount) return
     lg.innerHTML = '<span><i class="key" style="background:var(--ink-2)"></i>나스닥100 종가</span><span><i class="key" style="background:var(--ink-3)"></i>250일선</span><span><i class="sw" style="background:var(--accent-wash)"></i>완충 구간(×0.95 ~ ×1.01)</span><span><i class="sw" style="background:var(--h3)"></i>3배</span><span><i class="sw" style="background:var(--h15)"></i>1.5배</span><span><i class="sw" style="background:var(--h0)"></i>현금</span>'
   }
-  CH.band2018 = (host) => { bandLegend('#lg-band'); bandChart(host, D.band2018, [{ d: '2018-11-20', t: '하락 국면 → 현금', dy: 26 }, { d: '2020-03-12', t: '코로나 급락 → 현금', dy: 30 }]) }
-  CH.path2000 = (host) => { bandLegend('#lg-2000'); bandChart(host, D.path2000, [{ d: '2000-04-10', t: '1.5배로 축소', dy: -12 }, { d: '2000-10-03', t: '밴드 아래 → 현금', dy: -40 }]) }
+  CH.band2018 = (host) => { bandLegend('#lg-band'); bandChart(host, D.band2018, [{ d: '2018-11-20', t: '하락 국면 → 현금' }, { d: '2020-03-12', t: '코로나 급락 → 현금' }]) }
+  CH.path2000 = (host) => { bandLegend('#lg-2000'); bandChart(host, D.path2000, [{ d: '2000-04-10', t: '1.5배로 축소' }, { d: '2000-10-03', t: '밴드 아래 → 현금' }]) }
 
   CH.openCopy = (host) => {
     const f = frame(host, { l: 40 })
@@ -1327,7 +1606,7 @@ const D = /*__DECK_DATA__*/null
     }
     if (ref) for (const [v, t] of ref.map((v, i) => [v, i ? 'TQQQ 16.4%' : 'QLD 19.7%'])) {
       f.g.append('line').attr('x1', 0).attr('x2', f.iw).attr('y1', y(v)).attr('y2', y(v)).attr('class', 'ref anim-fade')
-      f.g.append('text').attr('x', 4).attr('y', y(v) - 5).attr('class', 'ref-t').text(`영상 ${t}`)
+      if (f.iw >= 420) f.g.append('text').attr('x', f.iw - 4).attr('y', y(v) - 6).attr('text-anchor', 'end').attr('class', 'ref-t halo').text(`영상 ${t}`)
     }
   }
   CH.calibTrack = (host) => calibChart(host, (r, n) => r[`${n}track`], (d) => `${d > 0 ? '+' : ''}${d.toFixed(1)}`)
@@ -1353,7 +1632,7 @@ const D = /*__DECK_DATA__*/null
   }
 
   CH.judge = (host) => {
-    const f = frame(host, { t: 22, l: 70, r: 20, b: 10 })
+    const f = frame(host, { t: 24, l: 60, r: 26, b: 20 })
     const rows = [['CAGR', 32.9, 3, 32.6, '%p'], ['MDD', -62.0, 5, -61.4, '%p']]
     const rowH = f.ih / rows.length
     rows.forEach(([name, tgt, tol, ours], j) => {
@@ -1362,17 +1641,17 @@ const D = /*__DECK_DATA__*/null
       f.g.append('text').attr('x', -10).attr('y', cy).attr('dy', '0.32em').attr('text-anchor', 'end').attr('class', 'lbl-b').text(name)
       f.g.append('line').attr('x1', 0).attr('x2', f.iw).attr('y1', cy).attr('y2', cy).attr('class', 'gridline')
       f.g.append('rect').attr('x', x(tgt - tol)).attr('width', x(tgt + tol) - x(tgt - tol)).attr('y', cy - 9).attr('height', 18).attr('rx', 4).attr('class', 'wash1 anim-fade')
-      f.g.append('line').attr('x1', x(tgt)).attr('x2', x(tgt)).attr('y1', cy - 12).attr('y2', cy + 12).attr('class', 'ref')
-      f.g.append('text').attr('x', x(tgt)).attr('y', cy - 15).attr('text-anchor', 'middle').attr('class', 'ref-t').text(`영상 ${tgt.toFixed(1)}%`)
+      f.g.append('line').attr('x1', x(tgt)).attr('x2', x(tgt)).attr('y1', cy - 9).attr('y2', cy + 9).attr('class', 'ref')
+      f.g.append('text').attr('x', x(tgt)).attr('y', cy - 13).attr('text-anchor', 'middle').attr('class', 'ref-t').text(`영상 ${tgt.toFixed(1)}%`)
       f.g.append('circle').attr('cx', x(ours)).attr('cy', cy).attr('r', 7).attr('class', 'f1 ring anim-pop')
-      f.g.append('text').attr('x', x(ours)).attr('y', cy + 24).attr('text-anchor', 'middle').attr('class', 'lbl-b').text(`재현 ${ours.toFixed(1)}%`)
-      f.g.append('text').attr('x', x(tgt - tol)).attr('y', cy + 24).attr('text-anchor', 'middle').attr('class', 'lbl-m').text(`-${tol}${rows[j][4]}`)
-      f.g.append('text').attr('x', x(tgt + tol)).attr('y', cy + 24).attr('text-anchor', 'middle').attr('class', 'lbl-m').text(`+${tol}${rows[j][4]}`)
+      f.g.append('text').attr('x', x(ours)).attr('y', cy + 21).attr('text-anchor', 'middle').attr('class', 'lbl-b').text(`재현 ${ours.toFixed(1)}%`)
+      f.g.append('text').attr('x', x(tgt - tol)).attr('y', cy + 21).attr('text-anchor', 'middle').attr('class', 'lbl-m').text(`-${tol}${rows[j][4]}`)
+      f.g.append('text').attr('x', x(tgt + tol)).attr('y', cy + 21).attr('text-anchor', 'middle').attr('class', 'lbl-m').text(`+${tol}${rows[j][4]}`)
     })
   }
 
   CH.curves = (host) => {
-    const f = frame(host, { r: 96, l: 52 })
+    const f = frame(host, { r: 128, l: 52 })
     const xs = D.curves.dates.map(parseM)
     const x = d3.scaleUtc().domain(d3.extent(xs)).range([0, f.iw])
     const y = d3.scaleLog().domain([0.3, 50000]).range([f.ih, 0])
@@ -1387,7 +1666,9 @@ const D = /*__DECK_DATA__*/null
       labels.push({ k, yy: y(Math.max(0.3, v.at(-1))), t: `${NAMES[k]} ${mult(v.at(-1))}` })
     }
     labels.sort((a, b) => a.yy - b.yy)
-    for (let i = 1; i < labels.length; i++) if (labels[i].yy - labels[i - 1].yy < 15) labels[i].yy = labels[i - 1].yy + 15
+    for (let i = 1; i < labels.length; i++) if (labels[i].yy - labels[i - 1].yy < 18) labels[i].yy = labels[i - 1].yy + 18
+    const over = labels.at(-1).yy - (f.ih - 6)
+    if (over > 0) labels.forEach((l) => { l.yy -= over })
     for (const l of labels) {
       f.g.append('circle').attr('cx', f.iw).attr('cy', y(Math.max(0.3, D.curves[l.k].at(-1)))).attr('r', 4).attr('class', `f${CLS[l.k]} ring anim-pop`)
       f.g.append('text').attr('x', f.iw + 8).attr('y', l.yy).attr('dy', '0.32em').attr('class', l.k === 'tripod' ? 'lbl-b anim-fade' : 'lbl anim-fade').text(l.t)
@@ -1396,7 +1677,7 @@ const D = /*__DECK_DATA__*/null
   }
 
   CH.dd = (host) => {
-    const f = frame(host, { r: 96, l: 52 })
+    const f = frame(host, { r: 128, l: 52 })
     const xs = D.curves.dates.map(parseM)
     const x = d3.scaleUtc().domain(d3.extent(xs)).range([0, f.iw])
     const y = d3.scaleLinear().domain([-100, 0]).range([f.ih, 0])
@@ -1432,7 +1713,7 @@ const D = /*__DECK_DATA__*/null
     const bw = Math.min(24, x.bandwidth())
     for (const yr of years) {
       const v = D.tradesPerYear[yr]
-      if (v === 0) { f.g.append('text').attr('x', x(yr) + x.bandwidth() / 2).attr('y', f.ih - 4).attr('text-anchor', 'middle').attr('class', 'lbl-m').text('0'); continue }
+      if (v === 0) { if (x.bandwidth() < 10) continue; f.g.append('text').attr('x', x(yr) + x.bandwidth() / 2).attr('y', f.ih - 4).attr('text-anchor', 'middle').attr('class', 'lbl-m').text('0'); continue }
       bar(f.g, x(yr) + (x.bandwidth() - bw) / 2, null, bw, f.ih - y(v), 'f1', f.ih).attr('class', 'f1 anim-bar mark').on('pointermove', (ev) => showTip(ev, `${yr}년`, [{ color: '--s1', label: '매매', value: `${v}회` }])).on('pointerleave', hideTip)
     }
     const mx = years.reduce((a, b) => (D.tradesPerYear[b] > D.tradesPerYear[a] ? b : a))
@@ -1441,19 +1722,23 @@ const D = /*__DECK_DATA__*/null
   }
 
   function distChart(host, rows, opts) {
-    const f = frame(host, { l: 110, r: 16, b: 28, t: 8 })
+    const narrow = host.clientWidth < 560
+    const f = frame(host, { l: narrow ? 96 : 136, r: 16, b: 28, t: 10 })
     const x = d3.scaleLog().domain(opts.domain).range([0, f.iw]).clamp(true)
     const rowH = f.ih / rows.length
-    const ticks = opts.ticks
+    const ticks = f.iw < 420 ? [0.01, 1, 100] : opts.ticks
     const a = f.g.append('g').attr('class', 'ax')
     a.selectAll('line').data(ticks).join('line').attr('class', 'gridline').attr('x1', (d) => x(d)).attr('x2', (d) => x(d)).attr('y1', 0).attr('y2', f.ih)
-    a.selectAll('text').data(ticks).join('text').attr('x', (d) => x(d)).attr('y', f.ih + 16).attr('text-anchor', 'middle').text((d) => eok(d))
+    a.selectAll('text').data(ticks).join('text').attr('x', (d) => x(d)).attr('y', f.ih + 16).attr('text-anchor', (d, i) => (i === 0 ? 'start' : i === ticks.length - 1 ? 'end' : 'middle')).text((d) => (d < 0.1 ? '0.01억' : eok(d)))
     if (opts.principal) f.g.append('line').attr('x1', x(1)).attr('x2', x(1)).attr('y1', 0).attr('y2', f.ih).attr('class', 'base')
     rows.forEach((r, j) => {
-      const cy = j * rowH + rowH / 2
-      f.g.append('text').attr('x', -10).attr('y', cy).attr('dy', '0.32em').attr('text-anchor', 'end').attr('class', r.strong ? 'lbl-b' : 'lbl').text(r.label)
+      const spread = Math.min(rowH * 0.2, 16)
+      const cy = j * rowH + rowH * 0.58
+      const lt = f.g.append('text').attr('x', -10).attr('y', cy).attr('dy', '0.32em').attr('text-anchor', 'end').attr('class', r.strong ? 'lbl-b' : 'lbl')
+      const name = narrow && r.short ? r.short : r.label
+      if (narrow && name.includes(' ')) { const parts = name.split(' '); const half = Math.ceil(parts.length / 2); lt.attr('dy', '-0.25em'); lt.append('tspan').attr('x', -10).text(parts.slice(0, half).join(' ')); lt.append('tspan').attr('x', -10).attr('dy', '1.15em').text(parts.slice(half).join(' ')) }
+      else lt.text(name)
       const vals = r.values
-      const spread = Math.min(rowH * 0.34, 18)
       vals.forEach((v, i) => {
         const jit = ((Math.sin(i * 12.9898 + j * 78.233) * 43758.5453) % 1) // 결정적 흔들림
         f.g.append('circle').attr('cx', x(Math.max(opts.domain[0], v))).attr('cy', cy + jit * spread).attr('r', 2.4).attr('class', `f${r.cls} dot-swarm`).style('fill-opacity', 0.55)
@@ -1462,11 +1747,18 @@ const D = /*__DECK_DATA__*/null
       const q = [s[0], d3.quantileSorted(s, 0.25), d3.quantileSorted(s, 0.5), s.at(-1)]
       q.forEach((v, k) => {
         const xx = x(Math.max(opts.domain[0], v))
-        f.g.append('line').attr('x1', xx).attr('x2', xx).attr('y1', cy - spread - 4).attr('y2', cy + spread + 4).attr('class', 'cink anim-fade').style('stroke-width', k === 2 ? 3 : 1.5)
+        f.g.append('line').attr('x1', xx).attr('x2', xx).attr('y1', cy - spread - 3).attr('y2', cy + spread + 3).attr('class', 'cink anim-fade').style('stroke-width', k === 2 ? 3 : 1.5)
       })
-      f.g.append('text').attr('x', x(Math.max(opts.domain[0], q[2]))).attr('y', cy - spread - 8).attr('text-anchor', 'middle').attr('class', 'lbl-b anim-fade').text(eok(q[2]))
+      // 중간값 라벨: 점 무리 위, 원금선과 겹치면 옆으로 비킨다
+      const mx = x(Math.max(opts.domain[0], q[2]))
+      const ml = f.g.append('text').attr('y', cy - spread - 7).attr('class', 'lbl-b halo anim-fade').text(eok(q[2]))
+      const w = ml.node().getComputedTextLength()
+      let lx = mx, anc = 'middle'
+      if (opts.principal && Math.abs(mx - x(1)) < w / 2 + 4) { lx = x(1) + 6; anc = 'start' }
+      if (anc === 'middle') lx = Math.max(w / 2, Math.min(f.iw - w / 2, lx))
+      ml.attr('x', lx).attr('text-anchor', anc)
       if (r.video) r.video.forEach((v) => {
-        const xx = x(Math.max(opts.domain[0], v)), yy = cy + spread + 9
+        const xx = x(Math.max(opts.domain[0], v)), yy = cy + spread + 8
         f.g.append('path').attr('d', `M${xx},${yy - 5}L${xx + 5},${yy}L${xx},${yy + 5}L${xx - 5},${yy}Z`).attr('class', 'fsurf anim-pop').style('stroke', 'var(--warn)').style('stroke-width', 1.5)
       })
       f.g.append('rect').attr('x', 0).attr('y', j * rowH).attr('width', f.iw).attr('height', rowH).attr('class', 'hit')
@@ -1483,7 +1775,7 @@ const D = /*__DECK_DATA__*/null
     { label: '트라이팟 세전', values: D.aftertax.win10.tripodPre, cls: '1' },
     { label: '트라이팟 세후', values: D.aftertax.win10.tripod, cls: '1', strong: true },
     { label: 'QQQ 100% 세후', values: D.aftertax.win10.qqq, cls: '2' },
-    { label: 'QQQ 70%+현금 세후', values: D.aftertax.win10.mix70, cls: '2t' },
+    { label: 'QQQ 70%+현금 세후', short: 'QQQ70%+현금 세후', values: D.aftertax.win10.mix70, cls: '2t' },
     { label: 'QLD 세후', values: D.aftertax.win10.qld, cls: '3' },
     { label: 'TQQQ 세후', values: D.aftertax.win10.tqqq, cls: '4' },
   ], { domain: [0.01, 200], ticks: [0.01, 0.1, 1, 10, 100], principal: true })
@@ -1505,19 +1797,30 @@ const D = /*__DECK_DATA__*/null
     f.g.append('line').attr('x1', 0).attr('x2', f.iw).attr('y1', y(thr)).attr('y2', y(thr)).attr('class', 'ref')
     f.g.append('text').attr('x', 4).attr('y', y(thr) - 5).attr('class', 'ref-t').text(thrLabel)
     drawPath(f.g, C[key], d3.line().x((_, i) => x(xs[i])).y((d) => y(d)), 'c1')
-    if (key === 'dd') for (const [d, fr, to] of C.trades) {
-      const i = C.d.indexOf(d); if (i < 0) continue
-      f.g.append('circle').attr('cx', x(xs[i])).attr('cy', y(C.dd[i])).attr('r', 5).attr('class', `${to === 'T3' ? 'f1' : 'fsurf'} ring anim-pop`).style('stroke', to === 'T3' ? null : 'var(--s1)').style('stroke-width', to === 'T3' ? null : 2)
-      f.g.append('text').attr('x', x(xs[i])).attr('y', y(C.dd[i]) + (to === 'T3' ? -10 : 18)).attr('text-anchor', 'middle').attr('class', 'lbl-m').text(`${d.slice(5)} ${to === 'T3' ? '3배' : '1.5배'}`)
+    if (key === 'dd') {
+      for (const [d, , to] of C.trades) {
+        const i = C.d.indexOf(d); if (i < 0) continue
+        f.g.append('circle').attr('cx', x(xs[i])).attr('cy', y(C.dd[i])).attr('r', 5).attr('class', `${to === 'T3' ? 'f1' : 'fsurf'} ring anim-pop`).style('stroke', to === 'T3' ? null : 'var(--s1)').style('stroke-width', to === 'T3' ? null : 2)
+      }
+      // 축소~복귀 한 쌍을 그래프 아래쪽 빈 띠에 한 줄로
+      for (let k = 0; k + 1 < C.trades.length; k += 2) {
+        const [d1] = C.trades[k], [d2] = C.trades[k + 1]
+        const xm = (x(parseD(d1)) + x(parseD(d2))) / 2
+        const md = (d) => `${+d.slice(5, 7)}/${+d.slice(8)}`
+        const t = f.g.append('text').attr('y', f.ih - 6).attr('class', 'lbl-b halo anim-fade').text(f.iw < 520 ? `${md(d1)}~${md(d2)}` : `${d1.slice(5)} 축소 · ${d2.slice(5)} 복귀`)
+        const w = t.node().getComputedTextLength()
+        t.attr('x', Math.max(w / 2, Math.min(f.iw - w / 2, xm))).attr('text-anchor', 'middle')
+      }
     }
     crosshair(f, xs, x, [{ label: key === 'dd' ? '52주 낙폭' : 'VIX10', values: C[key], y, fmt: key === 'dd' ? (v) => `${v.toFixed(2)}%` : (v) => v.toFixed(1), color: '--s1', cls: '1' }], (i) => `${C.d[i]} · 판정 ${HOLD[C.target[i]] || '—'}`)
   }
-  CH.cpDD = (host) => cpChart(host, 'dd', -9, '기준선 -9%', [-14, 0], [-12, -9, -6, -3, 0], (d) => `${d}%`)
+  CH.cpDD = (host) => cpChart(host, 'dd', -9, '기준선 -9%', [-15, 0], [-12, -9, -6, -3, 0], (d) => `${d}%`)
   CH.cpVIX = (host) => cpChart(host, 'vix10', 28, '상승 국면 기준선 28', [10, 32], [10, 18, 28], (d) => d)
 
   function lagChart(host, L, refs) {
-    const f = frame(host, { l: 44, b: 40, r: refs ? 86 : 18 })
-    const narrow = f.iw < 430
+    const narrowHost = host.clientWidth < 520
+    const f = frame(host, { l: 40, b: narrowHost ? 46 : 32, r: refs && !narrowHost ? 112 : 12 })
+    const narrow = narrowHost
     const ex = [['peek', '미래 참조(실수)'], ['close0', '당일 종가'], ['open1', '다음 날 시가'], ['close1', '다음 날 종가'], ['close2', '이틀 뒤 종가']]
     const x = d3.scaleBand().domain(ex.map((e) => e[0])).range([0, f.iw]).padding(0.3)
     const max = Math.max(...ex.map((e) => L[e[0]].cagr), ...(refs || []).map((r) => r[0]))
@@ -1528,14 +1831,14 @@ const D = /*__DECK_DATA__*/null
       const v = L[k].cagr
       const cls = k === 'close1' ? 'f1' : 'fmute'
       bar(f.g, x(k) + (x.bandwidth() - bw) / 2, null, bw, f.ih - y(v), cls, f.ih).attr('class', `${cls} anim-bar mark`).style('fill-opacity', k === 'peek' ? 0.35 : null).on('pointermove', (ev) => showTip(ev, name, [{ color: '--s1', label: 'CAGR', value: pct(v) }, { label: 'MDD', value: pct(L[k].mdd) }])).on('pointerleave', hideTip)
-      f.g.append('text').attr('x', x(k) + x.bandwidth() / 2).attr('y', y(v) - 6).attr('text-anchor', 'middle').attr('class', k === 'close1' ? 'lbl-b' : 'lbl').text(pct(v))
+      f.g.append('text').attr('x', x(k) + x.bandwidth() / 2).attr('y', y(v) - 6).attr('text-anchor', 'middle').attr('class', k === 'close1' ? 'lbl-b' : 'lbl').style('font-size', narrow ? '10px' : null).text(narrow ? v.toFixed(1) : pct(v))
     }
-    const SH = { peek: '미래 참조', close0: '당일', open1: '다음 날 시가', close1: '다음 날 종가', close2: '이틀 뒤' }
+    const SH = { peek: '미래\n참조', close0: '당일\n종가', open1: '다음 날\n시가', close1: '다음 날\n종가', close2: '이틀 뒤\n종가' }
     axisX(f, (d) => x(d) + x.bandwidth() / 2, ex.map((e) => e[0]), (d) => (narrow ? SH[d] : ex.find((e) => e[0] === d)[1]))
     if (narrow) f.g.selectAll('.ax text').filter(function () { return this.parentNode.getAttribute('transform') }).style('font-size', '10px')
     for (const [v, t] of refs || []) {
-      f.g.append('line').attr('x1', 0).attr('x2', f.iw + 6).attr('y1', y(v)).attr('y2', y(v)).attr('class', 'ref anim-fade')
-      f.g.append('text').attr('x', f.iw + 10).attr('y', y(v)).attr('dy', '0.32em').attr('class', 'ref-t').text(t)
+      f.g.append('line').attr('x1', 0).attr('x2', narrow ? f.iw : f.iw + 6).attr('y1', y(v)).attr('y2', y(v)).attr('class', 'ref anim-fade')
+      if (!narrow) f.g.append('text').attr('x', f.iw + 10).attr('y', y(v)).attr('dy', '0.32em').attr('class', 'ref-t').text(t)
     }
   }
   CH.lagFull = (host) => lagChart(host, D.lag.full, [[44.3, '영상 당일 44.3'], [24.7, '영상 다음 날 24.7']])
@@ -1548,7 +1851,7 @@ const D = /*__DECK_DATA__*/null
     for (const nb of D.neighbors) {
       const p = el('div', { cls: 'panel reveal' })
       p.append(el('h3', { text: NAME[nb.key][0] }))
-      const c = el('div', { cls: 'chart h-m', 'data-chart': 'nb', 'data-key': nb.key, 'aria-label': NAME[nb.key][0] })
+      const c = el('div', { cls: 'chart h-nb', 'data-chart': 'nb', 'data-key': nb.key, 'aria-label': NAME[nb.key][0] })
       p.append(c); host.append(p)
       c._draw = () => {
         const f = frame(c, { l: 34, r: 12, t: 16, b: 22 })
@@ -1592,7 +1895,7 @@ const D = /*__DECK_DATA__*/null
   }
 
   CH.split = (host) => {
-    const f = frame(host, { l: 44, b: 40 })
+    const f = frame(host, { l: 44, b: host.clientWidth < 600 ? 46 : 32 })
     const groups = D.split.map((s) => ({ label: s.label, v: [s.tripod[0], ...s.bench.map((b) => b[0])], m: [s.tripod[1], ...s.bench.map((b) => b[1])] }))
     groups.push({ label: 'S&P500', v: [D.spx.tripod[0], ...D.spx.bench.map((b) => b[0])], m: [D.spx.tripod[1], ...D.spx.bench.map((b) => b[1])] })
     const x0 = d3.scaleBand().domain(groups.map((g) => g.label)).range([0, f.iw]).paddingInner(0.18)
@@ -1610,7 +1913,7 @@ const D = /*__DECK_DATA__*/null
       if (k === 0) f.g.append('text').attr('x', xx + bw / 2).attr('y', y(v) - 6).attr('text-anchor', 'middle').attr('class', 'lbl-b').text(v.toFixed(1))
     }
     f.g.append('line').attr('x1', 0).attr('x2', f.iw).attr('y1', y(0)).attr('y2', y(0)).attr('class', 'base')
-    axisX(f, (d) => x0(d) + x0.bandwidth() / 2, groups.map((g) => g.label), (d) => d)
+    axisX(f, (d) => x0(d) + x0.bandwidth() / 2, groups.map((g) => g.label), (d) => (f.iw < 560 ? d.replace('~', '~\n') : d))
   }
 
   function shuffleCharts() {
@@ -1646,7 +1949,8 @@ const D = /*__DECK_DATA__*/null
 
   CH.waterfall = (host) => {
     const f = frame(host, { l: 44, b: 44, t: 18 })
-    const T = D.aftertax.waterfall, Q = D.aftertax.waterfallQqq
+    const T = [...D.aftertax.waterfall, ['세후', D.aftertax.waterfall.at(-1)[1]]]
+    const Q = [...D.aftertax.waterfallQqq, ['세후', D.aftertax.waterfallQqq.at(-1)[1]]]
     const steps = T.map((s) => s[0])
     const x0 = d3.scaleBand().domain(steps).range([0, f.iw]).paddingInner(0.25)
     const x1 = d3.scaleBand().domain([0, 1]).range([0, x0.bandwidth()]).padding(0.12)
@@ -1656,9 +1960,9 @@ const D = /*__DECK_DATA__*/null
     ;[T, Q].forEach((S, k) => S.forEach(([name, v], i) => {
       const xx = x0(name) + x1(k) + (x1.bandwidth() - bw) / 2
       const cls = k === 0 ? 'f1' : 'f2'
-      if (i === 0 || i === S.length - 1) {
+      if (i === 0 || name === '세후') {
         bar(f.g, xx, null, bw, f.ih - y(v), cls, f.ih).attr('class', `${cls} anim-bar mark`).on('pointermove', (ev) => showTip(ev, name, [{ color: k ? '--s2' : '--s1', label: k ? 'QQQ 100%' : '트라이팟', value: pct(v, 2) }])).on('pointerleave', hideTip)
-        f.g.append('text').attr('x', xx + bw / 2).attr('y', y(v) - 6).attr('text-anchor', 'middle').attr('class', k === 0 ? 'lbl-b' : 'lbl').text(v.toFixed(1))
+        if (k === 0 || f.iw > 520) f.g.append('text').attr('x', xx + bw / 2).attr('y', y(v) - 6).attr('text-anchor', 'middle').attr('class', k === 0 ? 'lbl-b' : 'lbl').text(v.toFixed(1))
       } else {
         const prev = S[i - 1][1], drop = prev - v
         const top = y(prev), hh = Math.max(1.5, y(v) - y(prev))
@@ -1667,62 +1971,75 @@ const D = /*__DECK_DATA__*/null
         if (drop >= 0.3) f.g.append('text').attr('x', xx + bw / 2).attr('y', y(v) + 14).attr('text-anchor', 'middle').attr('class', 'lbl-b').text(`-${drop.toFixed(1)}`)
       }
     }))
-    const SHORT = { '세전': '세전', '양도세 22%': '양도세', '배당 원천 15%': '배당', '이자 15.4%': '이자', '금융소득 종합과세': '종합과세' }
+    const SHORT = { '세전': '세전', '양도세 22%': '양도세', '배당 원천 15%': '배당', '이자 15.4%': '이자', '금융소득 종합과세': '종합과세', '세후': '세후' }
     axisX(f, (d) => x0(d) + x0.bandwidth() / 2, steps, (d) => SHORT[d] || d)
   }
 
   CH.frontier = (host) => {
-    const f = frame(host, { l: 44, b: 40, r: 24 })
+    const narrow = host.clientWidth < 560
+    const f = frame(host, { l: 44, b: 40, r: narrow ? 16 : 84, t: 16 })
     const x = d3.scaleLinear().domain([0, 100]).range([0, f.iw])
     const y = d3.scaleLinear().domain([0, 30]).range([f.ih, 0])
     gridY(f, y, [0, 5, 10, 15, 20, 25, 30], (d) => `${d}%`)
-    axisX(f, x, [0, 20, 40, 60, 80, 100], (d) => `-${d}%`)
+    axisX(f, x, narrow ? [0, 25, 50, 75, 100] : [0, 20, 40, 60, 80, 100], (d) => `-${d}%`)
     f.g.append('text').attr('x', f.iw).attr('y', f.ih + 34).attr('text-anchor', 'end').attr('class', 'lbl-m').text('세후 MDD(오른쪽일수록 깊음)')
-    f.g.append('text').attr('x', 0).attr('y', -4).attr('class', 'lbl-m').text('세후 CAGR')
+    f.g.append('text').attr('x', 0).attr('y', -6).attr('class', 'lbl-m').text('세후 CAGR')
     const F = D.aftertax.frontier
     drawPath(f.g, F, d3.line().x((p) => x(-p[2])).y((p) => y(p[1])), 'c2t').style('stroke-width', 2.5)
     for (const p of F) f.g.append('circle').attr('cx', x(-p[2])).attr('cy', y(p[1])).attr('r', p[0] % 10 === 0 ? 3.5 : 2).attr('class', 'f2t anim-pop mark').on('pointermove', (ev) => showTip(ev, `QQQ ${p[0]}% + 현금`, [{ color: '--s2t', label: '세후 CAGR', value: pct(p[1]) }, { label: '세후 MDD', value: pct(p[2]) }])).on('pointerleave', hideTip)
-    const lab = (cx, cy, t, anchor = 'start', dx = 8, dy = 4, cls = 'lbl') => f.g.append('text').attr('x', cx + dx).attr('y', cy + dy).attr('text-anchor', anchor).attr('class', `${cls} anim-fade`).text(t)
-    const q100 = F.at(-1); f.g.append('circle').attr('cx', x(-q100[2])).attr('cy', y(q100[1])).attr('r', 6).attr('class', 'f2 ring anim-pop'); lab(x(-q100[2]), y(q100[1]), 'QQQ 100%', 'end', -10, -8)
-    const M = D.aftertax.matched.mdd
-    f.g.append('circle').attr('cx', x(-M.mdd)).attr('cy', y(M.cagr)).attr('r', 6).attr('class', 'f2t ring anim-pop')
-    lab(x(-M.mdd), y(M.cagr), `QQQ ${M.n.toFixed(1)}% + 현금 ${M.cagr.toFixed(1)}%`, 'start', 10, 16)
+    const lab = (cx, cy, t, anchor, dx, dy, cls = 'lbl') => f.g.append('text').attr('x', cx + dx).attr('y', cy + dy).attr('text-anchor', anchor).attr('class', `${cls} halo anim-fade`).text(t)
+    const P = (mdd, cagr) => [x(Math.min(100, -mdd)), y(cagr)]
+    // 시나리오 점(속 빈 파란 점)
+    for (const sc of D.aftertax.scenarios.filter((q) => ['risk', 'worst', 'ref'].includes(q.kind))) {
+      const [cx, cy] = P(sc.mdd, sc.cagr)
+      f.g.append('circle').attr('cx', cx).attr('cy', cy).attr('r', 4.5).attr('class', 'fsurf anim-pop mark').style('stroke', 'var(--s1)').style('stroke-width', 2)
+        .on('pointermove', (ev) => showTip(ev, sc.name, [{ color: '--s1', label: '세후 CAGR', value: pct(sc.cagr) }, { label: '세후 MDD', value: pct(sc.mdd) }, { label: '10년 중간', value: pct(sc.med10) }])).on('pointerleave', hideTip)
+    }
+    const worst = D.aftertax.scenarios.find((q) => q.kind === 'worst'), ref = D.aftertax.scenarios.find((q) => q.kind === 'ref')
     const tri = D.aftertax.rows.find((r) => r.id === 'tripod').post
-    f.g.append('line').attr('x1', x(-M.mdd)).attr('x2', x(-tri.mdd)).attr('y1', y(M.cagr) - 8).attr('y2', y(tri.cagr) + 10).attr('class', 'cink anim-fade').style('stroke-width', 1.5)
-    lab(x(-M.mdd), (y(M.cagr) + y(tri.cagr)) / 2, `+${(tri.cagr - M.cagr).toFixed(1)}%p`, 'end', -8, 4, 'lbl-b')
-    for (const s of D.aftertax.scenarios.filter((s) => ['risk', 'worst', 'ref'].includes(s.kind))) {
-      f.g.append('circle').attr('cx', x(-s.mdd)).attr('cy', y(s.cagr)).attr('r', 4.5).attr('class', 'fsurf anim-pop mark').style('stroke', 'var(--s1)').style('stroke-width', 2)
-        .on('pointermove', (ev) => showTip(ev, s.name, [{ color: '--s1', label: '세후 CAGR', value: pct(s.cagr) }, { label: '세후 MDD', value: pct(s.mdd) }, { label: '10년 중간', value: pct(s.med10) }])).on('pointerleave', hideTip)
-    }
-    const worst = D.aftertax.scenarios.find((s) => s.kind === 'worst'); lab(x(-worst.mdd), y(worst.cagr), '나쁜 쪽 겹침', 'start', 8, 4)
-    const ref = D.aftertax.scenarios.find((s) => s.kind === 'ref'); lab(x(-ref.mdd), y(ref.cagr), '250일선만', 'end', -8, -6)
-    f.g.append('circle').attr('cx', x(-tri.mdd)).attr('cy', y(tri.cagr)).attr('r', 8).attr('class', 'f1 ring anim-pop')
-    lab(x(-tri.mdd), y(tri.cagr), `트라이팟 ${tri.cagr.toFixed(1)}%`, 'end', -12, -10, 'lbl-b')
-    for (const [id, cls, name] of [['qld', '3', 'QLD'], ['tqqq', '4', 'TQQQ']]) {
+    const M = D.aftertax.matched.mdd
+    const q100 = F.at(-1)
+    const [mx, my] = P(M.mdd, M.cagr), [tx, ty] = P(tri.mdd, tri.cagr), [qx, qy] = P(q100[2], q100[1])
+    const [wx, wy] = P(worst.mdd, worst.cagr), [rx, ry] = P(ref.mdd, ref.cagr)
+    // 같은 MDD 연결선과 차이
+    f.g.append('line').attr('x1', mx).attr('x2', tx).attr('y1', my - 8).attr('y2', ty + 10).attr('class', 'cink anim-fade').style('stroke-width', 1.5)
+    lab(mx, y((M.cagr + 5)), `+${(+tri.cagr.toFixed(1) - +M.cagr.toFixed(1)).toFixed(1)}%p`, 'end', -8, 4, 'lbl-b')
+    f.g.append('circle').attr('cx', mx).attr('cy', my).attr('r', 6).attr('class', 'f2t ring anim-pop')
+    lab(mx, my, narrow ? `QQQ ${M.n.toFixed(1)}%` : `QQQ ${M.n.toFixed(1)}% + 현금 ${M.cagr.toFixed(1)}%`, 'start', 10, 18)
+    f.g.append('circle').attr('cx', qx).attr('cy', qy).attr('r', 6).attr('class', 'f2 ring anim-pop')
+    if (!narrow) lab(qx, qy, 'QQQ 100%', 'start', 10, 4)
+    lab(wx, wy, '나쁜 쪽 겹침', narrow ? 'end' : 'start', narrow ? -8 : 8, -9)
+    lab(rx, ry, '250일선만', 'middle', 0, 20)
+    for (const [id, cls, name, dy] of [['qld', '3', 'QLD', 4], ['tqqq', '4', 'TQQQ', 4]]) {
       const r = D.aftertax.rows.find((rr) => rr.id === id).post
-      f.g.append('circle').attr('cx', x(Math.min(100, -r.mdd))).attr('cy', y(r.cagr)).attr('r', 5.5).attr('class', `f${cls} ring anim-pop`)
-      lab(x(Math.min(100, -r.mdd)), y(r.cagr), name, 'end', -9, id === 'qld' ? -6 : 14)
+      const [cx, cy] = P(r.mdd, r.cagr)
+      f.g.append('circle').attr('cx', cx).attr('cy', cy).attr('r', 5.5).attr('class', `f${cls} ring anim-pop`)
+      if (!narrow) lab(cx, cy, name, 'start', 9, dy)
     }
+    f.g.append('circle').attr('cx', tx).attr('cy', ty).attr('r', 8).attr('class', 'f1 ring anim-pop')
+    lab(tx, ty, `트라이팟 ${tri.cagr.toFixed(1)}%`, narrow ? 'end' : 'start', narrow ? -12 : 12, -12, 'lbl-b')
   }
 
   CH.scen = (host) => {
     const S = D.aftertax.scenarios.slice().sort((a, b) => b.cagr - a.cagr)
     const narrow = host.clientWidth < 600
-    const f = frame(host, narrow ? { l: 4, r: 64, t: 14, b: 24 } : { l: 230, r: 70, t: 6, b: 24 })
-    const y = d3.scaleBand().domain(S.map((s) => s.name)).range([0, f.ih]).padding(0.28)
+    const SHORT = { '나쁜 쪽 겹침(당일 종가+25bp+VIX 25)': '나쁜 쪽 겹침', '250일선 규칙만(상승 TQQQ, 하락 현금)': '250일선 규칙만', '기본(다음 날 종가, 5bp)': '기본' }
+    const f = frame(host, narrow ? { l: 4, r: 48, t: 16, b: 24 } : { l: 250, r: 84, t: 6, b: 24 })
+    const y = d3.scaleBand().domain(S.map((q) => q.name)).range([0, f.ih]).padding(narrow ? 0.05 : 0.28)
     const x = d3.scaleLinear().domain([0, 30]).range([0, f.iw])
     const a = f.g.append('g').attr('class', 'ax')
     a.selectAll('line').data([0, 10, 20, 30]).join('line').attr('class', 'gridline').attr('x1', (d) => x(d)).attr('x2', (d) => x(d)).attr('y1', 0).attr('y2', f.ih)
-    a.selectAll('text').data([0, 10, 20, 30]).join('text').attr('x', (d) => x(d)).attr('y', f.ih + 16).attr('text-anchor', 'middle').text((d) => `${d}%`)
-    const cls = (s) => (s.kind === 'base' ? 'f1' : s.kind === 'qqq' ? 'f2' : s.kind === 'mix' ? 'f2t' : 'hs-B15')
-    const bh = Math.min(narrow ? 12 : 22, y.bandwidth() - (narrow ? 12 : 0))
-    for (const s of S) {
-      const yy = y(s.name) + (y.bandwidth() - bh) / 2 + (narrow ? 6 : 0)
-      hbar(f.g, 0, yy, x(s.cagr), bh, cls(s)).attr('class', `${cls(s)} anim-hbar mark`).on('pointermove', (ev) => showTip(ev, s.name, [{ label: '세후 CAGR', value: pct(s.cagr) }, { label: '세후 MDD', value: pct(s.mdd) }, { label: '10년 중간', value: pct(s.med10) }])).on('pointerleave', hideTip)
-      if (narrow) f.g.append('text').attr('x', 0).attr('y', yy - 4).attr('class', s.kind === 'base' ? 'lbl-b' : 'lbl').text(s.name)
-      else f.g.append('text').attr('x', -10).attr('y', yy + bh / 2).attr('dy', '0.32em').attr('text-anchor', 'end').attr('class', s.kind === 'base' ? 'lbl-b' : 'lbl').text(s.name)
-      f.g.append('text').attr('x', x(s.cagr) + 6).attr('y', yy + bh / 2).attr('dy', '0.32em').attr('class', 'lbl-b').text(`${s.cagr.toFixed(1)}%`)
-      f.g.append('text').attr('x', f.iw + 64).attr('y', yy + bh / 2).attr('dy', '0.32em').attr('text-anchor', 'end').attr('class', 'lbl-m').text(`MDD ${s.mdd.toFixed(0)}`)
+    a.selectAll('text').data([0, 10, 20, 30]).join('text').attr('x', (d) => x(d)).attr('y', f.ih + 16).attr('text-anchor', (d) => (d === 0 ? 'start' : d === 30 ? 'end' : 'middle')).text((d) => `${d}%`)
+    const cls = (q) => (q.kind === 'base' ? 'f1' : q.kind === 'qqq' ? 'f2' : q.kind === 'mix' ? 'f2t' : 'hs-B15')
+    const bh = narrow ? Math.min(10, y.bandwidth() * 0.4) : Math.min(22, y.bandwidth())
+    for (const q of S) {
+      const yy = narrow ? y(q.name) + y.bandwidth() - bh - 2 : y(q.name) + (y.bandwidth() - bh) / 2
+      hbar(f.g, 0, yy, x(q.cagr), bh, cls(q)).attr('class', `${cls(q)} anim-hbar mark`).on('pointermove', (ev) => showTip(ev, q.name, [{ label: '세후 CAGR', value: pct(q.cagr) }, { label: '세후 MDD', value: pct(q.mdd) }, { label: '10년 중간', value: pct(q.med10) }])).on('pointerleave', hideTip)
+      const name = narrow ? (SHORT[q.name] || q.name) : q.name
+      if (narrow) f.g.append('text').attr('x', 0).attr('y', yy - 4).attr('class', q.kind === 'base' ? 'lbl-b' : 'lbl').text(name)
+      else f.g.append('text').attr('x', -10).attr('y', yy + bh / 2).attr('dy', '0.32em').attr('text-anchor', 'end').attr('class', q.kind === 'base' ? 'lbl-b' : 'lbl').text(name)
+      f.g.append('text').attr('x', narrow ? f.iw + 4 : x(q.cagr) + 6).attr('y', yy + bh / 2).attr('dy', '0.32em').attr('class', 'lbl-b').text(`${q.cagr.toFixed(1)}%`)
+      if (!narrow) f.g.append('text').attr('x', f.iw + 78).attr('y', yy + bh / 2).attr('dy', '0.32em').attr('text-anchor', 'end').attr('class', 'lbl-m').text(`MDD ${q.mdd.toFixed(0)}%`)
     }
   }
 
