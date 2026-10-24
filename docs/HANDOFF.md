@@ -323,6 +323,10 @@
     - 실전 추적 시스템(같은 날): `scripts/tripod/live.mjs` + `.github/workflows/tripod-signal.yml`. 평일 UTC 22:20·01:40
       실행, 자체 검사 13건 후 판정, `signals/tripod/`(STATUS·state·log) 커밋, 신호 변경 시 GitHub 이슈(소유자 배정)와
       선택형 ntfy·텔레그램 알림. 2026-10-23 종가부터 후보 4개·QQQ 가상 추적. 봇이 main에 커밋하므로 푸시 전 pull.
+    - 홈페이지 트라이팟 탭(같은 날, 사용자 요청으로 앱 콘텐츠화): 메뉴 7번째(레일·하단 탭바 grid-cols-7),
+      `TripodView.tsx`+`tripodData.ts`. live.mjs가 `signals/tripod/dashboard.json`(최근 2년 흐름·조건·경계값·후보 추적)을
+      쓰고, 앱은 `/tripod-signal/:file` rewrite(GitHub raw)로 읽어 배포 없이 갱신. 실패 시 빌드 저장본
+      (`vite.config.ts` tripodSnapshot 플러그인 → `/data/tripod-dashboard.json`). 테스트 15건 추가(188), fullaudit 6개 뷰 flagged 0.
 
 ## 3. 도메인 규약 (어기면 수익률이 틀어지는 것들)
 

@@ -5,6 +5,7 @@
 - **지금 상태**: [STATUS.md](STATUS.md)
 - 매일 판정 기록(추가만 함, 한 번 기록한 판정은 고치지 않음): [log.csv](log.csv)
 - 상태·알림 기록: [state.json](state.json)
+- 홈페이지 대시보드 데이터: [dashboard.json](dashboard.json). 투자의 정석 사이트의 "트라이팟" 탭이 `/tripod-signal/dashboard.json`(이 파일의 GitHub 원본 프록시)으로 읽는다. 배포 없이도 매일 최신 상태가 보인다
 - 규칙 검증: [tripod-verification.md](../../docs/research/tripod-verification.md), 후보 평가: [tripod-alternatives.md](../../docs/research/tripod-alternatives.md)
 
 규칙을 기계적으로 판정한 결과이며 투자 권유가 아니다. 저장소가 공개라서 이 폴더와 알림 이슈도 공개된다. 판정은 공개 데이터에서 나오는 값만 담고 개인 보유 정보는 담지 않는다.

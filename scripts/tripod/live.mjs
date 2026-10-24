@@ -6,11 +6,13 @@
 //   --test-notify  알림 경로 시험 메시지 1건
 //   --offline      data-src/tripod 스냅숏으로 계산(네트워크 없음, 자체 검사용, 파일 쓰지 않음)
 //   --dry          파일을 쓰지 않고 화면에만 출력
-// 출력: signals/tripod/STATUS.md(현황), state.json(상태·알림 기록), log.csv(매일 판정 기록, 추가만 함)
+// 출력: signals/tripod/STATUS.md(현황), state.json(상태·알림 기록), log.csv(매일 판정 기록, 추가만 함),
+//       dashboard.json(홈페이지 트라이팟 탭이 읽는 데이터, 스키마는 src/ui/tripodData.ts)
 import fs from 'node:fs'
 import path from 'node:path'
 import { readBars, readDivs, sma, drawdown52 } from './lib.mjs'
 import { STRATEGIES, weightsOf, tripodExposure } from './strategies.mjs'
+import { RULE_DEFAULT } from './lib.mjs'
 import { nextTradingDay, isUsDst, closeInKst, withWeekday } from './calendar.mjs'
 
 const ARGS = new Set(process.argv.slice(2))
@@ -241,6 +243,66 @@ function statusMd(m, a, pp, warn) {
   return L.join('\n') + '\n'
 }
 
+/** 지금 목표가 나온 이유(변경이 없어도 보여 줄 판정 근거)와 조건별 충족 여부 */
+function currentWhy(d) {
+  const why = []
+  if (d.regime === 'UP') {
+    why.push(`상승 국면: 나스닥100이 250일선 × 1.01 위로 올라선 뒤 × 0.95 아래로 내려가지 않음(지금 × ${d.ratio.toFixed(3)})`)
+    why.push(d.vix10 < 28 ? `VIX 10일 평균 ${d.vix10.toFixed(2)} < 28` : `VIX 10일 평균 ${d.vix10.toFixed(2)} ≥ 28이라 1.5배`)
+    why.push(d.dd >= -0.09 ? `52주 고점 대비 ${pct(d.dd)}로 -9% 이내` : `52주 고점 대비 ${pct(d.dd)}로 -9%를 넘어 1.5배`)
+  } else if (d.regime === 'DOWN') {
+    why.push(`하락 국면: 나스닥100이 250일선 × 0.95 아래로 내려간 뒤 × 1.01 위로 올라서지 않음(지금 × ${d.ratio.toFixed(3)})`)
+    why.push(d.vix10 < 18 ? `VIX 10일 평균 ${d.vix10.toFixed(2)} < 18이라 1.5배` : `VIX 10일 평균 ${d.vix10.toFixed(2)} ≥ 18이라 현금`)
+  }
+  return {
+    why,
+    checks: { regime: d.regime, vixOk: d.regime === 'UP' ? d.vix10 < 28 : d.vix10 < 18, ddOk: d.regime === 'UP' ? d.dd >= -0.09 : null },
+  }
+}
+
+/** 홈페이지 트라이팟 탭용 데이터. 최근 2년 흐름과 가상 추적까지 담는다 */
+function dashboardJson(m, a, pp, warn) {
+  const d = a.trip, tr = a.st.tripod
+  const r2 = (x) => +x.toFixed(2), r4 = (x) => +x.toFixed(4)
+  const ma = sma(m.close, 250), dd = drawdown52(m, 'c252')
+  const from = Math.max(0, a.t - 503)
+  let rs = a.t
+  while (rs > 0 && d.sig.regime[rs - 1] === d.sig.regime[a.t]) rs--
+  const vixNeed = (thr) => r2(thr * 10 - m.vix.slice(d.t - 8, d.t + 1).reduce((s, x) => s + x, 0))
+  const { why, checks } = currentWhy(d)
+  return {
+    version: 1,
+    asOf: a.asOf,
+    nextTradingDay: a.exec,
+    nextCloseKst: closeInKst(a.exec),
+    generatedAt: new Date().toISOString(),
+    warnings: warn,
+    rule: { maWin: RULE_DEFAULT.maWin, upBand: RULE_DEFAULT.upBand, downBand: RULE_DEFAULT.downBand, vixWin: RULE_DEFAULT.vixWin, vixUp: RULE_DEFAULT.vixUp, vixDown: RULE_DEFAULT.vixDown, ddLimit: RULE_DEFAULT.ddLimit },
+    tripod: {
+      exposure: tr.now, holding: label(tr.now), weights: weightsOf(tr.now), since: tr.since, sinceExec: nextTradingDay(tr.since),
+      changed: tr.changed, prevHolding: label(tr.prev), reasons: tr.changed ? reasons(d) : [], why, checks,
+      regime: d.regime, regimeSince: m.dates[rs],
+      close: r2(d.close), ma250: r2(d.ma), ratio: r4(d.ratio), upPx: r2(d.upPx), downPx: r2(d.downPx),
+      vix: r2(d.vix), vix10: r2(d.vix10), vixNeed28: vixNeed(28), vixNeed18: vixNeed(18),
+      dd: r4(d.dd), high52: r2(d.hi), ddPx: r2(d.ddPx),
+    },
+    strategies: STRATEGIES.map((s) => {
+      const x = a.st[s.id]
+      return { id: s.id, name: s.name, desc: s.desc, exposure: +x.now.toFixed(3), holding: label(x.now), weights: weightsOf(x.now).map((w) => +w.toFixed(3)), since: x.since, changed: x.changed }
+    }),
+    paper: pp ? { start: PAPER_START, dates: m.dates.slice(pp.p0, a.t + 1), series: Object.fromEntries(Object.entries(pp.out).map(([k, v]) => [k, v.map(r4)])) } : null,
+    history: {
+      dates: m.dates.slice(from, a.t + 1),
+      close: m.close.slice(from, a.t + 1).map(r2),
+      ma250: Array.from(ma.slice(from, a.t + 1), r2),
+      vix10: Array.from(d.sig.vix10.slice(from, a.t + 1), r2),
+      dd: Array.from(dd.slice(from, a.t + 1), r4),
+      exposure: tr.L.slice(from, a.t + 1),
+    },
+    changes: tr.changes.map((c) => ({ d: c.d, from: c.from, to: c.to, fromLabel: label(c.from), toLabel: label(c.to), exec: c.exec })),
+  }
+}
+
 function appendLog(m, a) {
   const f = path.join(OUT, 'log.csv')
   const head = 'date,ndx,ma250,vix,vix10,dd52,regime,' + STRATEGIES.map((s) => s.id).join(',')
@@ -342,6 +404,11 @@ async function main() {
   const norm = (x) => x.replace(/ · 생성 [^·]+\(한국 시간\)/, '')
   if (!fs.existsSync(statusFile) || norm(fs.readFileSync(statusFile, 'utf8')) !== norm(md)) fs.writeFileSync(statusFile, md)
   appendLog(m, a)
+  // 대시보드 데이터: 생성 시각만 다르면 다시 쓰지 않는다
+  const dashFile = path.join(OUT, 'dashboard.json')
+  const dash = dashboardJson(m, a, pp, warn)
+  const strip = (o) => JSON.stringify({ ...o, generatedAt: null })
+  if (!fs.existsSync(dashFile) || strip(JSON.parse(fs.readFileSync(dashFile, 'utf8'))) !== strip(dash)) fs.writeFileSync(dashFile, JSON.stringify(dash) + '\n')
   state.asOf = a.asOf
   state.strategies = Object.fromEntries(STRATEGIES.map((s) => [s.id, { exposure: +a.st[s.id].now.toFixed(3), holding: label(a.st[s.id].now), since: a.st[s.id].since, changedToday: a.st[s.id].changed }]))
   state.nextExecution = a.exec
@@ -349,4 +416,4 @@ async function main() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main().catch((e) => { console.error(e); process.exit(1) })
-export { analyze, label, signalMessage }
+export { analyze, label, signalMessage, dashboardJson }

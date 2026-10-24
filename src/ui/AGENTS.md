@@ -19,6 +19,7 @@ JSX와 상태는 전부 .tsx**. 이 분리는 fast refresh 유지 목적도 있�
 | `tradingGuide.ts` | 가이드 1부(매매 습관 교정) 콘텐츠 (550줄). `TRADING_GUIDE_CHAPTERS` 7챕터 + `TRADING_GUIDE_GLOSSARY` 24항목. `docs/guides/trading-discipline.md`의 앱 포팅 — **3중 동기화 대상** |
 | `guideProgress.ts` | 가이드 학습 진도 (75줄). `GUIDE_PROGRESS_KEY`(`bt_guide_progress_v1`), `loadGuideProgress()`, `computePartProgress()`. GuideView가 쓰고 HomeView가 읽는 유일한 교차 뷰 키 |
 | `nowSignals.ts` | 신호 판정 순수 로직 (306줄). `assessNow(history, live?)` → 신호 5종(`market`/`valuation`/`inflation`/`realRate`/`curve`), `ok/watch/alert` 3단계. 테스트 가능성을 위해 의도적으로 순수 함수 |
+| `tripodData.ts` | 트라이팟 탭 데이터 (순수). `TripodDashboard` 스키마(생산자는 `scripts/tripod/live.mjs`의 `dashboardJson`), `loadTripodDashboard()`(실시간 `/tripod-signal/dashboard.json` → 실패 시 저장본 `/data/tripod-dashboard.json`), 표시 함수, `TRIPOD_FINDINGS`(연구 문서 수치 인용, `tests/tripod-dashboard.test.ts`가 문서와 대조). **판정 로직을 여기에 복제하지 말 것** |
 | `nowData.ts` | 신호용 라이브 데이터 수집 (154줄). `fetchLiveSnapshot()` — 소스별 독립 try/catch, 필드 단위 번들 폴백, 3시간 캐시(`bt_now_live_v2`) |
 | `eraTimelines.ts` | 역사 에피소드 국면별 연대기 (603줄). 국면 클릭 시 차트 음영의 데이터 원천 |
 | `eraStories.ts` | 에피소드별 "통념 vs 실제 구조" 내러티브 (215줄) + `STORY_EPISTEMICS` 면책 |
@@ -33,6 +34,7 @@ JSX와 상태는 전부 .tsx**. 이 분리는 fast refresh 유지 목적도 있�
 | `HistoryView.tsx` | 역사 연구 탭 (866줄, 최대 컴포넌트). 1900~ 차트, 에피소드 7종, 연대기 음영, 오버레이, 모달 2종 진입. **로컬 `SERIES_COLORS`는 자산 의미론 맵 — common.ts 전략 팔레트와 별개(의도된 분리)** |
 | `GuideView.tsx` | 가이드 탭 셸 (463줄). 파트 전환, TOC, `**bold**` 미니 렌더러, 인용/비유/함정/표/도해 블록, 용어 사전, 스크롤 진도 기록 |
 | `HomeView.tsx` | 홈 콕핏 (239줄). 체제 히어로 + 신호 5종 + 이어서 카드. **세 도메인(신호·학습·백테스트)을 모두 잇는 유일한 허브** |
+| `TripodView.tsx` | 트라이팟 국면 현황 탭. 지금 비중·판정 흐름·조건 3카드(게이지·경계값)·최근 흐름 차트(보유 상태 음영)·신호 이력·후보 가상 추적·검증 요약 |
 | `NowView.tsx` | 현재 신호 탭 (341줄). 체크리스트 + 신호별 1900~ 추이 차트(역사 임계선) |
 | `ResultsSection.tsx` | 백테스트 결과 (507줄). 비교 차트 브러시, 지표 표, 세전/세후 토글, 규칙 에피소드 음영 |
 | `StrategyCard.tsx` | 전략 편집기 (322줄). 슬리브·적립 배분·리밸런싱 규칙 DSL |

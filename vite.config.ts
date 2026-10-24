@@ -2,9 +2,31 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
+import fs from 'node:fs'
+import type { Plugin } from 'vite'
+
+/**
+ * 트라이팟 탭의 저장본: 빌드 시점의 signals/tripod/dashboard.json을 /data/tripod-dashboard.json으로 내보낸다.
+ * 탭은 실시간 기록(/tripod-signal/dashboard.json, GitHub 원본 프록시)을 먼저 읽고, 실패하면 이 저장본을 쓴다.
+ */
+function tripodSnapshot(): Plugin {
+  const src = path.resolve(__dirname, 'signals/tripod/dashboard.json')
+  return {
+    name: 'tripod-snapshot',
+    configureServer(server) {
+      server.middlewares.use('/data/tripod-dashboard.json', (_req, res) => {
+        res.setHeader('Content-Type', 'application/json')
+        res.end(fs.readFileSync(src))
+      })
+    },
+    generateBundle() {
+      if (fs.existsSync(src)) this.emitFile({ type: 'asset', fileName: 'data/tripod-dashboard.json', source: fs.readFileSync(src, 'utf8') })
+    },
+  }
+}
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), tripodSnapshot()],
   // @ts-expect-error vitest 필드 — vite 타입에는 없지만 vitest가 읽는다
   test: {
     // .claude/worktrees/ 안의 병렬 세션 워크트리가 테스트를 이중 발견하는 것 방지
@@ -43,6 +65,12 @@ export default defineConfig({
         target: 'https://fred.stlouisfed.org',
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/fred/, '/graph'),
+      },
+      // 트라이팟 실시간 기록: 프로덕션은 vercel.json rewrite가 GitHub 원본으로 연결
+      '/tripod-signal': {
+        target: 'https://raw.githubusercontent.com',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/tripod-signal/, '/khskblue-ui/portfolio-backtester/main/signals/tripod'),
       },
       // Yahoo Finance: 프로덕션은 Cloudflare Pages Function(functions/yf)이 담당 —
       // dev 서버에서도 동일한 /yf/* 경로가 동작하도록 프록시

@@ -1,4 +1,4 @@
-// UI 오버플로 전수 검사: 5개 뷰 × 390/1280/1440 뷰포트에서 뷰포트를 벗어나는
+// UI 오버플로 전수 검사: 6개 뷰 × 390/1280/1440 뷰포트에서 뷰포트를 벗어나는
 // 요소(의도된 가로 스크롤 컨테이너 제외)와 페이지 가로 스크롤을 검출하고,
 // 백테스트는 -HIST 자산으로 실제 실행까지 수행한다. flagged 0이 통과 기준.
 // 선행: npm run build, staticserver.mjs 실행, npm i -D playwright(+install chromium)
@@ -84,6 +84,11 @@ async function auditViewport(width, height, tag) {
   await nav('신호')
   await page.waitForTimeout(1200)
   await overflow(page, `${tag}/now`)
+  // 트라이팟: 정적 서버가 실시간 경로를 막으므로 저장본으로 그려진다
+  await nav('트라이팟')
+  await page.getByText('지금 들고 있어야 할 비중').waitFor({ timeout: 15000 })
+  await page.waitForTimeout(500)
+  await overflow(page, `${tag}/tripod`)
   // 백테스트
   await nav('백테스트')
   await page.waitForTimeout(500)

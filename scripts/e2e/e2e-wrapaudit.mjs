@@ -64,6 +64,7 @@ async function sweep(width, height, tag) {
   const eraCard = page.getByText('1929', { exact: false }).first()
   if (await eraCard.count()) { await eraCard.click().catch(() => {}); await page.waitForTimeout(900); await wrapCheck(page, `${tag}/history-detail`) }
   await nav('신호'); await page.waitForTimeout(1400); await wrapCheck(page, `${tag}/now`)
+  await nav('트라이팟'); await page.waitForTimeout(1400); await wrapCheck(page, `${tag}/tripod`)
   await nav('백테스트'); await page.waitForTimeout(500); await wrapCheck(page, `${tag}/backtest-step1`)
   if (mobile) {
     await page.getByRole('button', { name: '다음: 가정 확인' }).click(); await page.waitForTimeout(300); await wrapCheck(page, `${tag}/backtest-step2`)

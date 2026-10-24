@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, X, FileText, BarChart3, Landmark, Activity, GraduationCap, Check, Home, Newspaper } from 'lucide-react'
+import { Plus, Play, RefreshCw, Sun, Moon, Download, Upload, X, FileText, BarChart3, Landmark, Activity, GraduationCap, Check, Home, Newspaper, Radar } from 'lucide-react'
 import {
   loadDataBundle,
   runComparison,
@@ -30,6 +30,7 @@ import { ResultsSection } from '@/ui/ResultsSection'
 import { ReportView } from '@/ui/ReportView'
 import { HistoryView } from '@/ui/HistoryView'
 import { NowView } from '@/ui/NowView'
+import { TripodView } from '@/ui/TripodView'
 import { GuideView } from '@/ui/GuideView'
 import { HomeView, type HomeHistoryData } from '@/ui/HomeView'
 import { HomeHero } from '@/ui/HomeHero'
@@ -39,7 +40,7 @@ import { TRADING_GUIDE_CHAPTERS } from '@/ui/tradingGuide'
 import { GUIDE_CHAPTERS } from '@/ui/guideContent'
 
 type Theme = 'light' | 'dark'
-type View = 'home' | 'guide' | 'history' | 'now' | 'backtest'
+type View = 'home' | 'guide' | 'history' | 'now' | 'tripod' | 'backtest'
 
 /**
  * 전역 내비 항목 — 데스크톱 좌측 레일 + 모바일 하단 탭바 공용 (A안).
@@ -50,6 +51,7 @@ const NAV_ITEMS = [
   { key: 'guide', label: '가이드북', Icon: GraduationCap },
   { key: 'history', label: '역사', Icon: Landmark },
   { key: 'now', label: '신호', Icon: Activity },
+  { key: 'tripod', label: '트라이팟', Icon: Radar },
   { key: 'backtest', label: '백테스트', Icon: BarChart3 },
   { key: 'daily', label: '데일리 리포트', Icon: Newspaper, href: 'https://report.tujajungseok.com/' },
 ] as const
@@ -135,7 +137,7 @@ export default function App() {
       .catch((e) => setHistoryError(e instanceof Error ? e.message : '로드 실패'))
   }, [])
 
-  // 유기체 문법(홈·가이드북·역사·신호): 최상단 근처(스크롤 80px 미만)에서는 헤더·레일이
+  // 유기체 문법(홈·가이드북·역사·신호·트라이팟): 최상단 근처(스크롤 80px 미만)에서는 헤더·레일이
   // 투명(곡선 배경 위에 떠 있음), 조금만 내려도 유리(blur) 바탕으로. 백테스트(도구 UI)는
   // 늘 불투명. 같은 값 setState는 리렌더를 만들지 않아 스크롤 비용은 없다
   const organic = view !== 'backtest'
@@ -444,6 +446,8 @@ export default function App() {
 
         {view === 'now' && <NowView theme={theme} />}
 
+        {view === 'tripod' && <TripodView theme={theme} />}
+
         {view === 'history' && (
           <HistoryView
             theme={theme}
@@ -654,11 +658,11 @@ export default function App() {
       </div>
 
       {/* 모바일 하단 탭바 (A안) */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 grid grid-cols-6 bg-white dark:bg-[#1e222d] border-t border-[#e0e3eb] dark:border-[#2a2e39]">
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 grid grid-cols-7 bg-white dark:bg-[#1e222d] border-t border-[#e0e3eb] dark:border-[#2a2e39]">
         {NAV_ITEMS.map((item) => {
           const { key, label, Icon } = item
           const active = !('href' in item) && view === key
-          // 6칸이라 칸폭이 좁다. 두 어절 라벨은 keep-all 규칙에 따라 어절 단위로 두 줄이 된다
+          // 7칸이라 칸폭이 좁다. 두 어절 라벨은 keep-all 규칙에 따라 어절 단위로 두 줄이 된다
           const tabCls = `flex flex-col items-center justify-center gap-0.5 px-1 ${
             active ? 'text-[#2962ff] dark:text-[#5b8aff]' : 'text-zinc-400 dark:text-zinc-500'
           }`

@@ -33,11 +33,11 @@
 npx tsc --noEmit && npx eslint <변경 파일> && npx vitest run && npm run build
 # UI 변경 시 추가로 (Playwright 필요 — scripts/e2e/README 참조):
 node scripts/e2e/staticserver.mjs &        # dist를 4175 포트로 서빙 (/yf,/fred는 404)
-node scripts/e2e/e2e-fullaudit.mjs         # 5개 뷰 × 390/1280/1440 오버플로 검사
+node scripts/e2e/e2e-fullaudit.mjs         # 6개 뷰 × 390/1280/1440 오버플로 검사
 node scripts/e2e/e2e-wrapaudit.mjs         # 괄호 줄바꿈 품질 검사 (허용 잔존: 22자+ 본문 괄호)
 ```
 
-테스트는 현재 170개(엔진 골든·가이드/도해 무결성·연대기·신호·광기의 해부 앵커).
+테스트는 현재 188개(엔진 골든·가이드/도해 무결성·연대기·신호·광기의 해부·트라이팟 대시보드 앵커).
 콘텐츠 수치를 바꾸면 tests/의 must-contain 앵커도 함께 갱신해야 한다.
 
 ## 아키텍처 지도
@@ -48,6 +48,8 @@ node scripts/e2e/e2e-wrapaudit.mjs         # 괄호 줄바꿈 품질 검사 (허
 - `src/ui/` — App.tsx(셸: 좌측 레일/하단 탭바, 워크벤치 분할+모바일 위저드),
   HomeView(콕핏), GuideView+guideContent/tradingGuide(가이드 1·2부)+GuideFigure(도해)+
   guideProgress(학습 진도), HistoryView+eraTimelines/eraStories, NowView+nowSignals,
+  TripodView+tripodData(트라이팟 국면 대시보드: 판정 로직 없이 signals/tripod/dashboard.json만 표시.
+  실시간은 /tripod-signal/* rewrite → GitHub 원본, 실패 시 빌드 저장본 /data/tripod-dashboard.json),
   StrategyCard/SettingsPanel/ResultsSection/ReportView, maniaStory(특집 컬럼)
 - `docs/guides/trading-discipline.md` — 1부 원문(수치 변경 시 tradingGuide.ts·
   scripts/verify-timing-math.mjs와 3중 동기화)

@@ -4,11 +4,16 @@
   "rewrites": [
     { "source": "/yf/:path*", "destination": "https://query1.finance.yahoo.com/:path*" },
     { "source": "/fred/fredgraph.csv", "destination": "https://fred.stlouisfed.org/graph/fredgraph.csv" },
+    { "source": "/tripod-signal/:file", "destination": "https://raw.githubusercontent.com/khskblue-ui/portfolio-backtester/main/signals/tripod/:file" },
     { "source": "/stooq/q/d/l/", "destination": "/api/stooq" },
     { "source": "/stooq/q/d/l", "destination": "/api/stooq" },
     { "source": "/stooq/:path*", "destination": "/api/stooq" }
   ],
   "headers": [
+    {
+      "source": "/tripod-signal/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=300" }]
+    },
     {
       "source": "/yf/(.*)",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }]
