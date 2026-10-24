@@ -135,4 +135,43 @@ t('실데이터 교차 구현: 고정 비중·무비용이면 Σ w·r 직접 곱
   }
 })
 
+// ── 실전 추적(live.mjs) 검사 ──
+const { readBars } = await import('./lib.mjs')
+const { isTradingDay, isWeekend, SPECIAL_CLOSURES, nextTradingDay } = await import('./calendar.mjs')
+const { buildMarket } = await import('./live.mjs')
+const { STRATEGIES, weightsOf, tripodExposure } = await import('./strategies.mjs')
+
+t('거래소 달력: 1990~2026 정규 휴장 + 과거 임시 휴장 = 실제 거래일 데이터와 정확히 일치', () => {
+  const have = new Set(readBars('NDX').map((x) => x.d)), special = new Set(SPECIAL_CLOSURES)
+  for (let ms = Date.parse('1990-01-01'); ms <= Date.parse('2026-10-20'); ms += 864e5) {
+    const d = new Date(ms).toISOString().slice(0, 10)
+    assert.equal(have.has(d), isTradingDay(d) && !special.has(d) && !isWeekend(d), d)
+  }
+  assert.equal(nextTradingDay('2026-11-25'), '2026-11-27') // 추수감사절
+  assert.equal(nextTradingDay('2027-03-25'), '2027-03-29') // 성금요일
+})
+
+t('노출 → 비중: 3배 = TQQQ 100%, 1.5배 = QQQ 50% + QLD 50%, 0 = 현금 (트라이팟 목표와 같음)', () => {
+  assert.deepEqual(weightsOf(3), TARGETS.T3)
+  assert.deepEqual(weightsOf(1.5), TARGETS.B15)
+  assert.deepEqual(weightsOf(0), TARGETS.CASH)
+})
+
+t('실전 추적 데이터 구성 = 백테스트 데이터 구성, 모든 전략의 판정이 같다', () => {
+  const live = buildMarket(readBars('NDX'), readBars('VIX'), readBars('IRX'))
+  const bt = loadMarket({ end: '2026-08-28' })
+  const n = bt.dates.length
+  for (let i = 0; i < n; i++) {
+    assert.equal(live.dates[i], bt.dates[i])
+    assert.equal(live.close[i], bt.close[i])
+    assert.ok(live.vix[i] === bt.vix[i] || (Number.isNaN(live.vix[i]) && Number.isNaN(bt.vix[i])), `vix ${bt.dates[i]}`)
+  }
+  for (const st of STRATEGIES) {
+    const a = st.exposure(live), b = st.exposure(bt)
+    for (let i = 0; i < n - 1; i++) assert.equal(a[i], b[i], `${st.id} ${bt.dates[i]}`)
+  }
+  const { L, sig } = tripodExposure(bt, 3)
+  sig.target.forEach((x, i) => assert.equal(L[i], x === null ? null : { T3: 3, B15: 1.5, CASH: 0 }[x]))
+})
+
 console.log(`\n${pass}개 통과`)

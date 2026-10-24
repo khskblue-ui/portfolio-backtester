@@ -23,7 +23,7 @@ eslint 대상 밖). 철학: **앱이 말하는 모든 역사 수치는 여기서
 | 디렉토리 | 목적 |
 |----------|------|
 | `e2e/` | Playwright UI 검수 2종 — 오버플로·괄호 줄바꿈 (`e2e/AGENTS.md` 참조) |
-| `tripod/` | 외부 매매법(송팀장 트라이팟) 독립 재현 검증. 앱 엔진과 독립 구현(lib.mjs), `selftest.mjs`(exit 1 on fail)·`calibrate`·`run`·`detail`·`robust`·`aftertax`(한국 세후 비교, 세금 근사는 src/core/tax.ts 기본값과 같게 유지)·`critique`(비판적 점검: 기여 분해·워크포워드·CSCV·Reality Check·다른 시장·꼬리 위험·공개 규칙 발표 후 성과)·`vsqqq`(QQQ 대비 우위 지속성: 실제 ETF·보유 기간 승률·샤프 부트스트랩·환경 악화 손익분기·10년 블록 부트스트랩)·`build-deck`(발표 자료 `docs/research/tripod/tripod-deck.html`과 라이브러리를 내장한 단독 사본 `tripod-deck-standalone.html`을 템플릿 `deck.template.html`에서 다시 생성). 입력 `data-src/tripod/`, 결과 `docs/research/tripod-verification.md`. 비용 모델(`COST_DEFAULT`)은 비교 대상으로만 보정해 동결한 값이라 트라이팟 결과를 보고 바꾸지 말 것 |
+| `tripod/` | 외부 매매법(송팀장 트라이팟) 독립 재현 검증. 앱 엔진과 독립 구현(lib.mjs), `selftest.mjs`(exit 1 on fail)·`calibrate`·`run`·`detail`·`robust`·`aftertax`(한국 세후 비교, 세금 근사는 src/core/tax.ts 기본값과 같게 유지)·`critique`(비판적 점검: 기여 분해·워크포워드·CSCV·Reality Check·다른 시장·꼬리 위험·공개 규칙 발표 후 성과)·`vsqqq`(QQQ 대비 우위 지속성: 실제 ETF·보유 기간 승률·샤프 부트스트랩·환경 악화 손익분기·10년 블록 부트스트랩)·`strategies`(트라이팟과 사전 등록 후보 규칙의 단일 정의)·`alternatives`(후보 평가, 명세 `docs/research/tripod/candidates-spec.md`)·`calendar`(뉴욕증권거래소 휴장일)·`live`(실전 추적: 매일 판정·`signals/tripod/` 기록·알림, GitHub Actions `tripod-signal`이 실행)·`build-deck`(발표 자료 `docs/research/tripod/tripod-deck.html`과 라이브러리를 내장한 단독 사본 `tripod-deck-standalone.html`을 템플릿 `deck.template.html`에서 다시 생성). 입력 `data-src/tripod/`, 결과 `docs/research/tripod-verification.md`. 비용 모델(`COST_DEFAULT`)은 비교 대상으로만 보정해 동결한 값이라 트라이팟 결과를 보고 바꾸지 말 것 |
 
 ## AI 에이전트 지침
 

@@ -51,4 +51,7 @@ node scripts/e2e/e2e-wrapaudit.mjs         # 괄호 줄바꿈 품질 검사 (허
   StrategyCard/SettingsPanel/ResultsSection/ReportView, maniaStory(특집 컬럼)
 - `docs/guides/trading-discipline.md` — 1부 원문(수치 변경 시 tradingGuide.ts·
   scripts/verify-timing-math.mjs와 3중 동기화)
-- `scripts/` — build-history.mjs(데이터 번들 생성), verify-*.mjs(수치 재검증), e2e/
+- `scripts/` — build-history.mjs(데이터 번들 생성), verify-*.mjs(수치 재검증), e2e/, tripod/(외부 매매법 검증·실전 추적)
+- `signals/tripod/` — 트라이팟 실전 추적 기록. GitHub Actions(`.github/workflows/tripod-signal.yml`)가
+  매 거래일 main에 직접 커밋하므로 **푸시 전에 항상 `git pull`**. 손으로 고치지 말 것(기록은 추가만).
+  이 폴더만 바뀐 커밋은 `vercel.json`의 `ignoreCommand`로 배포를 건너뛴다

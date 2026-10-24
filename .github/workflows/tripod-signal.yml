@@ -1,0 +1,55 @@
+# 트라이팟 실전 추적: 매 거래일 미국 장 마감 뒤 국면·목표 비중을 판정하고 신호가 바뀌면 알린다.
+# 안내: signals/tripod/README.md
+name: tripod-signal
+
+on:
+  schedule:
+    - cron: '20 22 * * 1-5' # 미국 장 마감 뒤(UTC 22:20 = 한국 07:20, 서머타임 해제 뒤 기준 마감 1시간 20분 뒤)
+    - cron: '40 1 * * 2-6' # 재실행(데이터 지연 대비). 같은 판정은 두 번 알리지 않는다
+  workflow_dispatch:
+    inputs:
+      test_notify:
+        description: '알림 경로 시험 메시지 보내기'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: tripod-signal
+  cancel-in-progress: false
+
+jobs:
+  signal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 규칙 자체 검사
+        run: node scripts/tripod/selftest.mjs
+      - name: 판정·기록·알림
+        run: node scripts/tripod/live.mjs --notify ${{ inputs.test_notify && '--test-notify' || '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTIFY_ASSIGNEE: ${{ github.repository_owner }}
+          NOTIFY_STRATEGIES: ${{ vars.NOTIFY_STRATEGIES }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - name: 기록 커밋
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add signals/tripod
+          if git diff --cached --quiet; then echo '변경 없음'; exit 0; fi
+          git commit -m "트라이팟 신호 기록 $(jq -r .asOf signals/tripod/state.json)"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep 10
+          done
+          exit 1

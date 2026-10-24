@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "[ -n \"$VERCEL_GIT_PREVIOUS_SHA\" ] && git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- . ':(exclude)signals'",
   "rewrites": [
     { "source": "/yf/:path*", "destination": "https://query1.finance.yahoo.com/:path*" },
     { "source": "/fred/fredgraph.csv", "destination": "https://fred.stlouisfed.org/graph/fredgraph.csv" },
