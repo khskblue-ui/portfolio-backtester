@@ -328,6 +328,9 @@
       쓰고, 앱은 `/tripod-signal/:file` rewrite(GitHub raw)로 읽어 배포 없이 갱신. 실패 시 빌드 저장본
       (`vite.config.ts` tripodSnapshot 플러그인 → `/data/tripod-dashboard.json`). 테스트 15건 추가(188), fullaudit 6개 뷰 flagged 0.
       **사이트(트라이팟 탭)에는 GitHub 링크를 두지 않는다**(2026-10-24 사용자 지시). 외부 링크는 원본 영상만.
+    - 가상 추적 세전·세후 병기(같은 날 사용자 지시): live.mjs `paper()`가 aftertax.mjs `simTax`로 1억 원 시작·청산 기준
+      세전·세후를 계산(`dashboard.json` paper.items). 비교 기준 QQQ 보유·QQQ 70%+현금·QQQ 50%+현금(매년 첫 거래일
+      리밸런싱) 추가. 탭 물음표에 매매법별 설명(`tripodData.ts` PAPER_INFO). 테스트 190.
 
 ## 3. 도메인 규약 (어기면 수익률이 틀어지는 것들)
 

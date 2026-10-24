@@ -46,10 +46,21 @@ export interface TripodDashboard {
     ddPx: number
   }
   strategies: { id: string; name: string; desc: string; exposure: number; holding: string; weights: number[]; since: string; changed: boolean }[]
-  paper: { start: string; dates: string[]; series: Record<string, number[]> } | null
+  paper: {
+    start: string
+    /** 세후 계산의 시작 금액(원) */
+    initialKrw?: number
+    dates: string[]
+    /** 세전 평가액 경로(시작 1) */
+    series: Record<string, number[]>
+    /** 청산 기준 시작 이후 수익률(세전·세후). 2026-10-24 이전 기록에는 없음 */
+    items?: PaperItem[]
+  } | null
   history: { dates: string[]; close: number[]; ma250: number[]; vix10: number[]; dd: number[]; exposure: number[] }
   changes: { d: string; from: number; to: number; fromLabel: string; toLabel: string; exec: string }[]
 }
+
+export interface PaperItem { id: string; name: string; holding: string; exposure: number; weights: number[]; pre: number; post: number | null }
 
 export type TripodSource = 'live' | 'snapshot'
 
@@ -98,7 +109,10 @@ const WD = ['일', '월', '화', '수', '목', '금', '토']
 export const withWeekday = (s: string) => `${s}(${WD[new Date(`${s}T00:00:00Z`).getUTCDay()]})`
 export const fmtNum = (x: number, d = 2) => x.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 /** 부호 붙은 퍼센트(U+2212 마이너스): -0.0726 → −7.3% */
-export const fmtRate = (x: number, d = 1) => `${x < 0 ? '−' : x > 0 ? '+' : ''}${Math.abs(x * 100).toFixed(d)}%`
+export const fmtRate = (x: number, d = 1) => {
+  const v = Number((x * 100).toFixed(d)) // 반올림 뒤 0이면 부호 없이 0.0%
+  return `${v < 0 ? '−' : v > 0 ? '+' : ''}${Math.abs(v).toFixed(d)}%`
+}
 export const fmtLev = (L: number) => `${+L.toFixed(2)}배`
 
 /** 생성 시각(ISO) → 한국 시간 "MM-DD HH:MM" */
@@ -144,6 +158,33 @@ export function conditionLevels(t: TripodDashboard['tripod'], rule: TripodDashbo
 export function paperReturn(series: number[] | undefined): number | null {
   if (!series || series.length === 0) return null
   return series[series.length - 1] / series[0] - 1
+}
+
+/** 비교 기준(단순 보유) 행의 id. 나머지는 사전 등록 후보와 트라이팟 */
+export const PAPER_BENCH_IDS = ['qqq', 'qqq70', 'qqq50']
+
+/** 가상 추적 표의 행. 새 기록은 items(세전·세후), 예전 기록은 series로 세전만 */
+export function paperRows(d: TripodDashboard): PaperItem[] {
+  const p = d.paper
+  if (p?.items?.length) return p.items
+  const pre = (id: string) => paperReturn(p?.series[id]) ?? NaN
+  return [
+    ...d.strategies.map((x) => ({ id: x.id, name: x.name, holding: x.holding, exposure: x.exposure, weights: x.weights, pre: pre(x.id), post: null })),
+    { id: 'qqq', name: 'QQQ 보유', holding: 'QQQ 100%', exposure: 1, weights: [1, 0, 0, 0], pre: pre('qqq'), post: null },
+  ]
+}
+
+/** 가상 추적 표의 물음표 설명: 매매법별 규칙(명세 docs/research/tripod/candidates-spec.md와 같은 내용) */
+export const PAPER_INFO: Record<string, string> = {
+  tripod:
+    '영상에서 공개된 규칙입니다. 나스닥100이 250일선 × 1.01 위로 마감하면 상승 국면, × 0.95 아래로 마감하면 하락 국면으로 보고, 그 사이에서는 직전 국면을 유지합니다. 상승 국면에서 VIX 10일 평균이 28 미만이고 52주 고점 대비 낙폭이 9% 이내면 TQQQ 100%, 아니면 QQQ 50% + QLD 50%입니다. 하락 국면에서는 VIX 10일 평균이 18 미만이면 QQQ 50% + QLD 50%, 아니면 현금 100%입니다.',
+  t2: '판정은 트라이팟과 같고, TQQQ 100% 자리에 QLD 100%를 넣어 최대 노출을 2배로 낮췄습니다. 결과를 보기 전에 기준을 고정한 대안 평가에서 유일하게 기준을 통과했습니다.',
+  te3: '100·150·200·250·300일 이동평균 5개 가운데 나스닥100 종가가 위에 있는 비율만큼 3배를 싣습니다. 5개 모두 위면 3배, 4개면 2.4배, 하나도 없으면 현금입니다. 기간 하나에 걸지 않으려고 평균을 낸 방식입니다.',
+  tev3: '추세 앙상블 노출에 변동성 상한을 씌웁니다. 상한은 3배 × (최근 5년 20일 변동성의 중앙값 ÷ 최근 20일 변동성)이고 월말에만 바꿉니다. 둘 중 작은 값을 0.5배 단위로 내리므로, 평소보다 출렁임이 크면 덜 싣게 됩니다.',
+  tev2: '추세 앙상블 + 상대 변동성과 같은 규칙에서 최대 노출만 2배로 낮췄습니다.',
+  qqq: 'QQQ(나스닥100 1배)를 사서 계속 들고 있습니다.',
+  qqq70: 'QQQ 70%와 현금 30%로 시작해 매년 첫 거래일에 7:3으로 되돌립니다. 현금은 미국 3개월 국채 금리를 받는다고 봅니다.',
+  qqq50: 'QQQ 50%와 현금 50%로 시작해 매년 첫 거래일에 5:5로 되돌립니다.',
 }
 
 /**

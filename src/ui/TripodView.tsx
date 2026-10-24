@@ -13,7 +13,9 @@ import {
   exposureSpans,
   meterPos,
   conditionLevels,
-  paperReturn,
+  paperRows,
+  PAPER_BENCH_IDS,
+  PAPER_INFO,
   TRIPOD_FINDINGS,
   VIDEO_URL,
   type TripodDashboard,
@@ -218,6 +220,7 @@ export function TripodView({ theme }: { theme: Theme }) {
   const up = t.regime === 'UP'
   const colors = holdColors(theme)
   const hardVix = (v: number) => v > 80 || v < 9
+  const rows = paperRows(data)
 
   return (
     <div className="space-y-5">
@@ -487,37 +490,49 @@ export function TripodView({ theme }: { theme: Theme }) {
             <span className="flex items-center gap-1.5">
               <FlaskConical className="w-4 h-4 text-zinc-400" />
               후보 전략 가상 추적
-              <HelpTip title="가상 추적이란" align="right">
-                결과를 보기 전에 규칙과 판정 기준을 고정한(사전 등록) 후보 4개를 트라이팟·QQQ 보유와 함께 {data.paper?.start ?? '2026-10-23'} 종가부터
-                실제 ETF 수정종가로 매일 기록합니다(세전, 편도 0.05% 비용). 백테스트가 아니라 앞으로 쌓이는 기록이라 몇 년 뒤의 판단 근거가 됩니다.
+              <HelpTip title="가상 추적과 매매법" align="right">
+                <span className="block">
+                  {data.paper?.start ?? '2026-10-23'} 종가에 {((data.paper?.initialKrw ?? 1e8) / 1e8).toFixed(0)}억 원으로 시작해 실제 ETF 수정종가로 매일 계산합니다.
+                  오늘 전부 판다고 보고 매매 비용(편도 0.05%)을 뺀 값입니다. 세후는 한국 거주자 기준 양도세 22%(연 250만 원 공제, 손실 이월 없음,
+                  해마다 연말에 낸다고 봄), 배당 원천징수 15%, 현금 이자 15.4%, 환율 1,400원 고정을 넣었습니다. 결과를 보기 전에 기준을 고정한
+                  후보 4개를 몇 년 기록해 판단하려는 표입니다.
+                </span>
+                {rows.map((x) => (
+                  <span key={x.id} className="block mt-2">
+                    <b className="text-zinc-900 dark:text-zinc-100">{x.name}</b>: {tidy(PAPER_INFO[x.id] ?? '')}
+                  </span>
+                ))}
               </HelpTip>
             </span>
           </h3>
-          <ul className="mt-3 divide-y divide-[#e0e3eb] dark:divide-[#2a2e39]">
-            {[
-              ...data.strategies.map((x) => ({ id: x.id, name: x.name, holding: x.holding, weights: x.weights, exposure: x.exposure })),
-              { id: 'qqq', name: 'QQQ 보유', holding: 'QQQ 100%', weights: [1, 0, 0, 0], exposure: 1 },
-            ].map((x) => {
-              const ret = paperReturn(data.paper?.series[x.id])
-              return (
-                <li key={x.id} className="py-2 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-[12.5px] text-zinc-800 dark:text-zinc-100">{x.name}</div>
-                    <div className="mt-0.5 flex items-center gap-1 text-[11.5px] text-zinc-500 dark:text-zinc-400">
-                      {x.weights.map((w, k) => (w > 1e-9 ? <span key={k} className="w-1.5 h-3 rounded-sm flex-shrink-0" style={{ background: colors[k], opacity: 0.35 + 0.65 * w }} /> : null))}
-                      <span className="ml-1">{x.holding} · {fmtLev(x.exposure)}</span>
+          <div className="mt-3 flex items-center justify-end gap-3 text-[10px] text-zinc-400 border-b border-[#e0e3eb] dark:border-[#2a2e39] pb-1">
+            <span className="w-14 text-right">세전</span>
+            <span className="w-14 text-right">세후</span>
+          </div>
+          {[rows.filter((x) => !PAPER_BENCH_IDS.includes(x.id)), rows.filter((x) => PAPER_BENCH_IDS.includes(x.id))].map((group, gi) => (
+            <div key={gi}>
+              {gi === 1 && <div className="mt-2 pt-2 text-[10px] font-mono tracking-[0.18em] text-zinc-400">단순 보유 비교</div>}
+              <ul className="divide-y divide-[#e0e3eb] dark:divide-[#2a2e39]">
+                {group.map((x) => (
+                  <li key={x.id} className="py-2 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[12.5px] text-zinc-800 dark:text-zinc-100">{x.name}</div>
+                      <div className="mt-0.5 flex items-center gap-1 text-[11.5px] text-zinc-500 dark:text-zinc-400">
+                        {x.weights.map((w, k) => (w > 1e-9 ? <span key={k} className="w-1.5 h-3 rounded-sm flex-shrink-0" style={{ background: colors[k], opacity: 0.35 + 0.65 * w }} /> : null))}
+                        <span className="ml-1">{x.holding} · {fmtLev(x.exposure)}</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <div className="text-[12.5px] font-mono text-zinc-800 dark:text-zinc-100">{ret == null ? '—' : fmtRate(ret)}</div>
-                    <div className="text-[10px] text-zinc-400">시작 이후</div>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
+                    <div className="flex gap-3 flex-shrink-0 text-[12.5px] font-mono">
+                      <span className="w-14 text-right text-zinc-600 dark:text-zinc-300">{Number.isFinite(x.pre) ? fmtRate(x.pre) : '—'}</span>
+                      <span className="w-14 text-right font-semibold text-zinc-900 dark:text-zinc-100">{x.post == null ? '—' : fmtRate(x.post)}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
           <p className="mt-2 text-[11px] text-zinc-400">
-            {data.paper ? `${withWeekday(data.paper.start)} 종가 시작 · 기록 ${data.paper.dates.length}거래일` : '가상 추적 기록 없음'}
+            {data.paper ? `${withWeekday(data.paper.start)} 종가 시작 · 기록 ${data.paper.dates.length}거래일 · 오늘 전부 판다고 본 시작 이후 수익률` : '가상 추적 기록 없음'}
           </p>
         </div>
       </div>

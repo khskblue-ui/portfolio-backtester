@@ -7,6 +7,9 @@ import {
   meterPos,
   conditionLevels,
   paperReturn,
+  paperRows,
+  PAPER_INFO,
+  PAPER_BENCH_IDS,
   fmtRate,
   withWeekday,
   TRIPOD_FINDINGS,
@@ -55,6 +58,23 @@ describe('트라이팟 대시보드 기록(signals/tripod/dashboard.json)', () =
     for (let i = 1; i < h.dates.length; i++) expect(h.dates[i] > h.dates[i - 1]).toBe(true)
     expect(h.dates.at(-1)).toBe(dash.asOf)
   })
+  it('가상 추적: 후보 5개 + 단순 보유 3개, 세후 ≤ 세전, 매매법 설명이 모두 있다', () => {
+    const items = dash.paper?.items ?? []
+    expect(items.map((x) => x.id).sort()).toEqual(['qqq', 'qqq50', 'qqq70', 't2', 'te3', 'tev2', 'tev3', 'tripod'])
+    for (const x of items) {
+      expect(x.post).not.toBeNull()
+      expect(x.post as number).toBeLessThanOrEqual(x.pre + 1e-9)
+      expect(PAPER_INFO[x.id]?.length).toBeGreaterThan(10)
+    }
+    expect(PAPER_BENCH_IDS.every((id) => items.some((x) => x.id === id))).toBe(true)
+    expect(dash.paper?.initialKrw).toBe(1e8)
+  })
+  it('가상 추적 예전 형식(items 없음)도 세전만으로 보여 준다', () => {
+    const old = { ...dash, paper: dash.paper ? { ...dash.paper, items: undefined } : null }
+    const rows = paperRows(old)
+    expect(rows.map((x) => x.id)).toEqual([...dash.strategies.map((x) => x.id), 'qqq'])
+    expect(rows.every((x) => x.post === null)).toBe(true)
+  })
   it('사전 등록 후보 4개와 트라이팟이 모두 있다', () => {
     expect(dash.strategies.map((s) => s.id).sort()).toEqual(['t2', 'te3', 'tev2', 'tev3', 'tripod'])
     expect(dash.nextTradingDay > dash.asOf).toBe(true)
@@ -85,6 +105,7 @@ describe('트라이팟 표시 함수', () => {
     expect(paperReturn([1, 1.1])).toBeCloseTo(0.1)
     expect(paperReturn(undefined)).toBeNull()
     expect(fmtRate(-0.0726)).toBe('−7.3%')
+    expect(fmtRate(-0.00025)).toBe('0.0%')
     expect(withWeekday('2026-10-23')).toBe('2026-10-23(금)')
   })
 })

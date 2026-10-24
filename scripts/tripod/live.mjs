@@ -11,20 +11,22 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { readBars, readDivs, sma, drawdown52 } from './lib.mjs'
-import { STRATEGIES, weightsOf, tripodExposure } from './strategies.mjs'
+import { STRATEGIES, weightsOf, tripodExposure, planOf } from './strategies.mjs'
 import { RULE_DEFAULT } from './lib.mjs'
+import { simTax, TAX, holdPlan, mixPlan, yearlyRebal } from './aftertax.mjs'
 import { nextTradingDay, isUsDst, closeInKst, withWeekday } from './calendar.mjs'
 
 const ARGS = new Set(process.argv.slice(2))
 const OFFLINE = ARGS.has('--offline'), DRY = ARGS.has('--dry') || OFFLINE
 const OUT = path.resolve(import.meta.dirname, '../../signals/tripod')
-export const PAPER_START = '2026-10-23' // 가상 추적 시작(이 날 종가 기준)
+// 가상 추적 시작(이 날 종가 기준). TRIPOD_PAPER_START는 계산 검사용(기록 파일은 쓰지 말 것: --dry와 함께)
+export const PAPER_START = process.env.TRIPOD_PAPER_START || '2026-10-23'
 const NOTIFY = (process.env.NOTIFY_STRATEGIES || 'tripod').split(',').map((s) => s.trim()).filter(Boolean)
 const REPO = process.env.GITHUB_REPOSITORY || 'khskblue-ui/portfolio-backtester'
 const STATUS_URL = `https://github.com/${REPO}/blob/main/signals/tripod/STATUS.md`
 const log = (...a) => console.log(...a)
 const fmt = (x, d = 2) => x.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
-const pct = (x, d = 1) => `${(x * 100).toFixed(d)}%`
+const pct = (x, d = 1) => `${(Math.abs(x * 100) < 0.5 * 10 ** -d ? 0 : x * 100).toFixed(d)}%`
 
 // ── 데이터 ────────────────────────────────────────────────────────────────
 
@@ -163,35 +165,48 @@ function analyze(m) {
   return { t, asOf, exec, st, trip: tripodDetail(m) }
 }
 
-/** 실제 ETF 수정종가로 PAPER_START 종가부터 가상 추적(세전, 편도 5bp) */
+/** 비교용 단순 보유(후보와 함께 가상 추적). QQQ+현금은 매년 첫 거래일에 비중을 되돌린다(검증 §8과 같음) */
+export const PAPER_BENCH = [
+  { id: 'qqq', name: 'QQQ 보유', exposure: 1, plan: () => holdPlan(0), rebalance: () => () => false },
+  { id: 'qqq70', name: 'QQQ 70% + 현금 30%', exposure: 0.7, plan: () => mixPlan(0.7), rebalance: yearlyRebal },
+  { id: 'qqq50', name: 'QQQ 50% + 현금 50%', exposure: 0.5, plan: () => mixPlan(0.5), rebalance: yearlyRebal },
+]
+export const PAPER_KRW = 1e8 // 세후 계산의 시작 금액(연 250만 원 공제가 금액에 따라 달라지므로 고정)
+
+/**
+ * 실제 ETF 수정종가로 PAPER_START 종가부터 가상 추적. 세전·세후 모두 aftertax.mjs의 simTax로 계산하고
+ * "오늘 전부 판다"고 본 청산 기준 값을 낸다(편도 5bp, 세후는 1억 원 시작·한국 세금 모델).
+ * QQQ 분배금은 수정종가에 들어 있고, 원천징수 15%를 매기려고 분배 비율을 따로 넣는다.
+ */
 function paper(m, etf, a) {
   if (!['QQQ', 'QLD', 'TQQQ'].every((n) => etf[n])) return null
-  const adj = ['QQQ', 'QLD', 'TQQQ'].map((n) => new Map(etf[n].bars.map((x) => [x.d, x.a])))
   const p0 = m.dates.indexOf(PAPER_START)
   if (p0 < 0 || p0 > a.t) return null
-  const out = {}
-  const run = (Lfn) => {
-    let V = weightsOf(Lfn(p0)).slice(), cur = Lfn(p0)
-    const path = [1]
-    for (let i = p0 + 1; i <= a.t; i++) {
-      const d = m.dates[i], dp = m.dates[i - 1]
-      const r = adj.map((mp) => (mp.has(d) && mp.has(dp) ? mp.get(d) / mp.get(dp) : 1))
-      const rf = 1 + (m.irx[i - 1] / 100) * ((Date.parse(d) - Date.parse(dp)) / 864e5) / 365
-      V = V.map((v, k) => v * (k < 3 ? r[k] : rf))
-      const want = Lfn(i)
-      if (String(want) !== String(cur)) {
-        const tot = V.reduce((s, x) => s + x, 0), w = weightsOf(want)
-        const turn = w.reduce((s, x, k) => s + Math.abs(x - V[k] / tot), 0)
-        const post = tot * (1 - 5e-4 * turn)
-        V = w.map((x) => x * post)
-        cur = want
-      }
-      path.push(V.reduce((s, x) => s + x, 0))
-    }
-    return path
+  const adj = ['QQQ', 'QLD', 'TQQQ'].map((n) => new Map(etf[n].bars.map((x) => [x.d, x.a])))
+  const n = m.dates.length
+  const full = [0, 1, 2, 3].map(() => new Float64Array(n).fill(1))
+  for (let i = p0 + 1; i <= a.t; i++) {
+    const d = m.dates[i], dp = m.dates[i - 1]
+    adj.forEach((mp, k) => { if (mp.has(d) && mp.has(dp)) full[k][i] = mp.get(d) / mp.get(dp) })
+    full[3][i] = 1 + (m.irx[i - 1] / 100) * ((Date.parse(d) - Date.parse(dp)) / 864e5) / 365
   }
-  for (const s of STRATEGIES) out[s.id] = run((i) => a.st[s.id].L[i - 1] ?? 0)
-  out.qqq = run(() => 1)
+  const qb = etf.QQQ.bars
+  const divYield = new Map()
+  for (const dv of etf.QQQ.divs ?? []) {
+    const j = qb.findIndex((x) => x.d >= dv.d)
+    if (j > 0) divYield.set(qb[j].d, dv.amt / qb[j - 1].c)
+  }
+  const mt = { ...m, etfStart: qb[0].d, divYield }
+  const prod = { full }
+  const run = (plan, rebalance) => {
+    const opts = { startIdx: p0, endIdx: a.t, plan, rebalance, initialKrw: PAPER_KRW }
+    const pre = simTax(mt, prod, { ...opts, tax: { ...TAX, enabled: false } })
+    const post = simTax(mt, prod, { ...opts, tax: TAX })
+    return { path: Array.from(pre.path, (v) => v / PAPER_KRW), pre: pre.final / PAPER_KRW - 1, post: post.final / PAPER_KRW - 1 }
+  }
+  const out = {}
+  for (const s of STRATEGIES) out[s.id] = run(planOf(a.st[s.id].L), () => false)
+  for (const b of PAPER_BENCH) out[b.id] = run(b.plan(), b.rebalance(mt))
   return { p0, out }
 }
 
@@ -230,13 +245,14 @@ function statusMd(m, a, pp, warn) {
     L.push(`- VIX가 **${vixNeed(18).toFixed(2)}** ${d.vix10 < 18 ? '이상으로 마감하면 10일 평균이 18 이상(현금으로)' : '미만으로 마감하면 10일 평균이 18 미만(1.5배로)'}`)
   }
   L.push('', '## 후보 전략 (사전 등록, 가상 추적)', '')
-  L.push(`${PAPER_START} 종가부터 실제 ETF 수정종가로 추적한다(세전, 편도 5bp). 판정 근거: [candidates-spec.md](../../docs/research/tripod/candidates-spec.md)`, '')
-  L.push('| 전략 | 지금 비중 | 노출 | 마지막 변경(판정일) | 시작 이후 |', '|---|---|---|---|---|')
+  L.push(`${PAPER_START} 종가에 1억 원으로 시작해 실제 ETF 수정종가로 추적한다(편도 5bp, 오늘 전부 판다고 본 청산 기준). 세후는 한국 세금 모델(양도세 22%·연 250만 원 공제, 배당 15%, 이자 15.4%). 판정 근거: [candidates-spec.md](../../docs/research/tripod/candidates-spec.md)`, '')
+  L.push('| 전략 | 지금 비중 | 노출 | 마지막 변경(판정일) | 시작 이후 세전 | 세후 |', '|---|---|---|---|---|---|')
+  const ret = (id, k) => (pp ? pct(pp.out[id][k]) : '—')
   for (const s of STRATEGIES) {
-    const x = a.st[s.id], ret = pp ? pct(pp.out[s.id].at(-1) - 1) : '—'
-    L.push(`| ${s.name} | ${label(x.now)}${x.changed ? ' (오늘 변경)' : ''} | ${lev(x.now)} | ${x.since} | ${ret} |`)
+    const x = a.st[s.id]
+    L.push(`| ${s.name} | ${label(x.now)}${x.changed ? ' (오늘 변경)' : ''} | ${lev(x.now)} | ${x.since} | ${ret(s.id, 'pre')} | ${ret(s.id, 'post')} |`)
   }
-  L.push(`| QQQ 보유 | QQQ 100% | 1배 | — | ${pp ? pct(pp.out.qqq.at(-1) - 1) : '—'} |`)
+  for (const b of PAPER_BENCH) L.push(`| ${b.name} | ${label(b.exposure)} | ${lev(b.exposure)} | — | ${ret(b.id, 'pre')} | ${ret(b.id, 'post')} |`)
   L.push('', '## 최근 신호 (트라이팟)', '', '| 판정일 | 변경 | 체결일(종가) |', '|---|---|---|')
   for (const c of tr.changes) L.push(`| ${withWeekday(c.d)} | ${label(c.from)} → ${label(c.to)} | ${withWeekday(c.exec)} |`)
   if (warn.length) L.push('', '## 데이터 경고', '', ...warn.map((w) => `- ${w}`))
@@ -290,7 +306,19 @@ function dashboardJson(m, a, pp, warn) {
       const x = a.st[s.id]
       return { id: s.id, name: s.name, desc: s.desc, exposure: +x.now.toFixed(3), holding: label(x.now), weights: weightsOf(x.now).map((w) => +w.toFixed(3)), since: x.since, changed: x.changed }
     }),
-    paper: pp ? { start: PAPER_START, dates: m.dates.slice(pp.p0, a.t + 1), series: Object.fromEntries(Object.entries(pp.out).map(([k, v]) => [k, v.map(r4)])) } : null,
+    paper: pp
+      ? {
+          start: PAPER_START,
+          initialKrw: PAPER_KRW,
+          dates: m.dates.slice(pp.p0, a.t + 1),
+          // 세전 평가액 경로(시작 1). 청산 기준 수익률은 items의 pre·post
+          series: Object.fromEntries(Object.entries(pp.out).map(([k, v]) => [k, v.path.map(r4)])),
+          items: [
+            ...STRATEGIES.map((s) => ({ id: s.id, name: s.name, holding: label(a.st[s.id].now), exposure: +a.st[s.id].now.toFixed(3), weights: weightsOf(a.st[s.id].now).map((w) => +w.toFixed(3)), pre: r4(pp.out[s.id].pre), post: r4(pp.out[s.id].post) })),
+            ...PAPER_BENCH.map((b) => ({ id: b.id, name: b.name, holding: label(b.exposure), exposure: b.exposure, weights: weightsOf(b.exposure), pre: r4(pp.out[b.id].pre), post: r4(pp.out[b.id].post) })),
+          ],
+        }
+      : null,
     history: {
       dates: m.dates.slice(from, a.t + 1),
       close: m.close.slice(from, a.t + 1).map(r2),
