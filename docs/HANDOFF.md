@@ -327,6 +327,7 @@
       `TripodView.tsx`+`tripodData.ts`. live.mjs가 `signals/tripod/dashboard.json`(최근 2년 흐름·조건·경계값·후보 추적)을
       쓰고, 앱은 `/tripod-signal/:file` rewrite(GitHub raw)로 읽어 배포 없이 갱신. 실패 시 빌드 저장본
       (`vite.config.ts` tripodSnapshot 플러그인 → `/data/tripod-dashboard.json`). 테스트 15건 추가(188), fullaudit 6개 뷰 flagged 0.
+      **사이트(트라이팟 탭)에는 GitHub 링크를 두지 않는다**(2026-10-24 사용자 지시). 외부 링크는 원본 영상만.
 
 ## 3. 도메인 규약 (어기면 수익률이 틀어지는 것들)
 

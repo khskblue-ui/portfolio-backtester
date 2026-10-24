@@ -15,7 +15,6 @@ import {
   conditionLevels,
   paperReturn,
   TRIPOD_FINDINGS,
-  REPO_URL,
   VIDEO_URL,
   type TripodDashboard,
   type TripodSource,
@@ -537,18 +536,9 @@ export function TripodView({ theme }: { theme: Theme }) {
             </li>
           ))}
         </ul>
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[12px]">
-          {[
-            ['검증 보고서', `${REPO_URL}/blob/main/docs/research/tripod-verification.md`],
-            ['대안 전략 평가', `${REPO_URL}/blob/main/docs/research/tripod-alternatives.md`],
-            ['매일 판정 기록', `${REPO_URL}/blob/main/signals/tripod/STATUS.md`],
-            ['원본 영상', VIDEO_URL],
-          ].map(([label, href]) => (
-            <a key={label} href={href} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[#2962ff] dark:text-[#5b8aff] hover:underline">
-              {label} <ExternalLink className="w-3 h-3" />
-            </a>
-          ))}
-        </div>
+        <a href={VIDEO_URL} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1 text-[12px] text-[#2962ff] dark:text-[#5b8aff] hover:underline">
+          원본 영상 <ExternalLink className="w-3 h-3" />
+        </a>
       </div>
 
       <p className="text-[11px] text-zinc-400 leading-relaxed">

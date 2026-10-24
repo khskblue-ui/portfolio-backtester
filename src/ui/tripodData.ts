@@ -55,7 +55,6 @@ export type TripodSource = 'live' | 'snapshot'
 
 export const LIVE_URL = '/tripod-signal/dashboard.json'
 export const SNAPSHOT_URL = '/data/tripod-dashboard.json'
-export const REPO_URL = 'https://github.com/khskblue-ui/portfolio-backtester'
 export const VIDEO_URL = 'https://youtu.be/lLdRKcBSKDM'
 
 /** 최소 구조 검사 — 깨진 파일이나 HTML 폴백 응답을 걸러 낸다 */
