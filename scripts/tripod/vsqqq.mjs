@@ -3,7 +3,7 @@
 //
 // A 실제 ETF 가격(2010-02~2026-10)  B 보유 기간별 승률과 시기별 추이  C 연 수익 구간별 승패
 // D 샤프 차이 부트스트랩  E 파라미터 576개 세후  F 수익률·금리·변동성이 나빠지는 가정과 손익분기
-// G 블록 부트스트랩 10년 가상 경로
+// G 블록 부트스트랩 10년 가상 경로(+ 5년: 2배판·30% 넘는 손실 확률·QQQ MDD 포함)
 // 비용 모델·체결(다음 날 종가)·수수료(편도 5bp)·세금 모델은 앞 단계와 같다.
 import {
   loadMarket, buildProducts, holdCurve, computeSignals, simulate, COST_DEFAULT, RULE_DEFAULT,
@@ -257,9 +257,12 @@ log('   세후는 배당을 가격 수익에 넣어 양도세로 처리(배당 �
     const div = mkt.dates[i] < mkt.etfStart ? 0 : (mkt.divYield.get(mkt.dates[i]) ?? 0) + (COST_DEFAULT.etfFee / 100) * dt
     recs.push({ r: mkt.close[i] / mkt.close[i - 1] - 1 + div, vix: mkt.vix[i], irx: mkt.irx[i - 1] })
   }
-  const WARM = 262, LEN = 2520 + WARM
-  const dates = mkt.dates.slice(i0, i0 + LEN + 1)
-  const run = (L, haircut, paths = 1000) => {
+  const WARM = 262
+  // 2배판: 트라이팟 규칙, TQQQ 100% 자리에 QLD 100% (tripod-alternatives.md T2)
+  const t2Plan = (sig) => (i) => { const t = sig.target[i - 1] ?? 'CASH'; return { key: t, w: t === 'T3' ? [0, 1, 0, 0] : t === 'B15' ? [0.5, 0.5, 0, 0] : [0, 0, 0, 1] } }
+  const run = (L, haircut, horizon = 10, paths = 1000) => {
+    const LEN = 252 * horizon + WARM
+    const dates = mkt.dates.slice(i0, i0 + LEN + 1)
     const rnd = rng(L * 31 + Math.round(haircut * 1000))
     const out = []
     for (let k = 0; k < paths; k++) {
@@ -282,13 +285,33 @@ log('   세후는 배당을 가격 수익에 넣어 양도세로 처리(배당 �
       const yrs = years(m, WARM, LEN)
       const f = (plan, tax) => simTax(m, p, { startIdx: WARM, endIdx: LEN, plan, tax })
       const tA = f(tripodPlan(s), TAX), qA = f(holdPlan(0), TAX), tP = f(tripodPlan(s), NOTAX), qP = f(holdPlan(0), NOTAX)
-      out.push({ ex: (tA.final / 1e8) ** (1 / yrs) - (qA.final / 1e8) ** (1 / yrs), win: tA.final > qA.final, winP: tP.final > qP.final, tLoss: tA.final < 1e8, qLoss: qA.final < 1e8, tMdd: maxDD(tP.path), qC: (qP.final / 1e8) ** (1 / yrs) - 1 })
+      const row = { ex: (tA.final / 1e8) ** (1 / yrs) - (qA.final / 1e8) ** (1 / yrs), win: tA.final > qA.final, winP: tP.final > qP.final, tLoss: tA.final < 1e8, qLoss: qA.final < 1e8, tMdd: maxDD(tP.path), qC: (qP.final / 1e8) ** (1 / yrs) - 1 }
+      if (horizon !== 10) {
+        const wA = f(t2Plan(s), TAX), wP = f(t2Plan(s), NOTAX)
+        Object.assign(row, { wEx: (wA.final / 1e8) ** (1 / yrs) - (qA.final / 1e8) ** (1 / yrs), wWin: wA.final > qA.final, wLoss: wA.final < 1e8,
+          tBig: tA.final < 0.7e8, qBig: qA.final < 0.7e8, wBig: wA.final < 0.7e8, wMdd: maxDD(wP.path), qMdd: maxDD(qP.path) })
+      }
+      out.push(row)
     }
     const ex = out.map((o) => o.ex).sort((p, q) => p - q)
     const md = out.map((o) => o.tMdd).sort((p, q) => p - q), qc = out.map((o) => o.qC).sort((p, q) => p - q)
     const fr = (key) => pct(out.filter((o) => o[key]).length / out.length)
-    log(`  L=${String(L).padStart(3)}일${haircut ? `, 나스닥100 연 -${pct(haircut, 0)}%p` : '              '}: QQQ 세전 10년 CAGR 중간 ${pct(quantile(qc, 0.5))}% | 트라이팟이 QQQ보다 많이 남긴 경로 세전 ${fr('winP')}% · 세후 ${fr('win')}% | 세후 연 초과 10% ${sgn(quantile(ex, 0.1))} / 중간 ${sgn(quantile(ex, 0.5))} / 90% ${sgn(quantile(ex, 0.9))}%p | 원금 손실 트라이팟 ${fr('tLoss')}% · QQQ ${fr('qLoss')}% | 트라이팟 MDD 중간 ${pct(quantile(md, 0.5), 0)}%`)
+    const head = `  L=${String(L).padStart(3)}일${haircut ? `, 나스닥100 연 -${pct(haircut, 0)}%p` : '              '}`
+    if (horizon === 10) {
+      log(`${head}: QQQ 세전 10년 CAGR 중간 ${pct(quantile(qc, 0.5))}% | 트라이팟이 QQQ보다 많이 남긴 경로 세전 ${fr('winP')}% · 세후 ${fr('win')}% | 세후 연 초과 10% ${sgn(quantile(ex, 0.1))} / 중간 ${sgn(quantile(ex, 0.5))} / 90% ${sgn(quantile(ex, 0.9))}%p | 원금 손실 트라이팟 ${fr('tLoss')}% · QQQ ${fr('qLoss')}% | 트라이팟 MDD 중간 ${pct(quantile(md, 0.5), 0)}%`)
+      return
+    }
+    const q = (key, p) => quantile(out.map((o) => o[key]).sort((a, b) => a - b), p)
+    const row = (name, w, e, lo, big, mdd) =>
+      `    ${name} ${w ? `QQQ보다 많이 남김(세후) ${fr(w)}% | 세후 연 초과 10% / 중간 / 90% ${sgn(q(e, 0.1))} / ${sgn(q(e, 0.5))} / ${sgn(q(e, 0.9))}%p | ` : ''}원금 손실 ${fr(lo)}% · 30% 넘는 손실 ${fr(big)}% | 세전 MDD 중간 ${pct(q(mdd, 0.5), 0)}%`
+    log(`${head}: QQQ 세전 ${horizon}년 CAGR 중간 ${pct(quantile(qc, 0.5))}%`)
+    log(row('트라이팟', 'win', 'ex', 'tLoss', 'tBig', 'tMdd'))
+    log(row('2배판   ', 'wWin', 'wEx', 'wLoss', 'wBig', 'wMdd'))
+    log(row('QQQ     ', null, null, 'qLoss', 'qBig', 'qMdd'))
   }
   for (const L of [21, 63, 126, 252]) run(L, 0)
   for (const L of [63, 252]) run(L, 0.04)
+  log('\n── G2. 같은 방법의 5년 가상 경로 1,000개 (1억 원 목돈, 세후 청산 기준, 2배판과 QQQ의 손실 쪽 지표 포함)')
+  for (const L of [21, 63, 126, 252]) run(L, 0, 5)
+  for (const L of [63, 252]) run(L, 0.04, 5)
 }
