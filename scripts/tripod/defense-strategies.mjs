@@ -129,7 +129,9 @@ export function defenseExposure(m, kind) {
   for (let i = 0; i < n; i++) {
     if (i > 0) {
       const dt = (Date.parse(m.dates[i]) - Date.parse(m.dates[i - 1])) / 864e5 / 365
-      const rf = (m.irx[i - 1] / 100) * dt
+      // 금리 자료가 없는 날(1984년 이전 ^IRX, 일부 시장 첫날)은 0으로 둔다. 첫 평가에서 NaN이 그림자 순자산 전체로
+      // 번져 나스닥 종합·FTSE100의 D2가 계산되지 않은 것을 고친 것이다(규칙 값은 그대로)
+      const rf = Number.isFinite(m.irx[i - 1]) ? (m.irx[i - 1] / 100) * dt : 0
       const r = m.close[i] / m.close[i - 1] - 1
       const h = i >= 2 ? (L[i - 2] ?? 0) : 0
       W[i] = W[i - 1] * (1 + h * (r - rf) + rf)
@@ -152,3 +154,50 @@ export const DEFENSE = [
   { id: 'd3', name: '분산 조절 2배', desc: '국면 없이 min(2, (기준 변동성 ÷ 보수적 변동성)²)' },
   { id: 'd4', name: '추세 국면 1배', desc: '250일선 밴드 상승 국면이면 1배, 하락이면 현금' },
 ].map((s) => ({ ...s, exposure: (m) => defenseExposure(m, s.id) }))
+
+// ── 2차 후보 (명세 §6, 1차 결과를 본 뒤 등록) ────────────────────────────
+
+/** 반켈리 비율 (분수 켈리 관례값, 결과를 보고 바꾸지 말 것) */
+export const KELLY_FRACTION = 0.5
+
+/**
+ * 초과수익 추정 μ̂: 데이터 첫날부터 그날까지 일간 (지수 종가 수익률 − ^IRX 일할)의 산술평균 × 252.
+ * 월말 종가에만 갱신해 다음 월말까지 유지, 표본 refMin개 이상부터 유효. 금리 결측일은 금리 0
+ */
+export function excessMean(m, refMin = DEF.refMin) {
+  const n = m.close.length
+  const out = new Array(n).fill(null)
+  let s = 0, k = 0, cur = null
+  for (let i = 1; i < n; i++) {
+    const dt = (Date.parse(m.dates[i]) - Date.parse(m.dates[i - 1])) / 864e5 / 365
+    const rf = Number.isFinite(m.irx[i - 1]) ? (m.irx[i - 1] / 100) * dt : 0
+    s += m.close[i] / m.close[i - 1] - 1 - rf
+    k++
+    const monthEnd = i < n - 1 ? m.dates[i].slice(0, 7) !== m.dates[i + 1].slice(0, 7) : !!m.lastIsMonthEnd
+    if (monthEnd && k >= refMin) cur = (s / k) * 252
+    out[i] = cur
+  }
+  return out
+}
+
+/** 반켈리 노출 K = min(2, max(0, 0.5 × μ̂ / σ²)) (반올림 전) */
+export function kellyRaw(m) {
+  const vol = conservativeVol(m.close), mu = excessMean(m)
+  return vol.map((s, i) => (s === null || mu[i] === null ? null : Math.min(DEF.lmax, Math.max(0, (KELLY_FRACTION * mu[i]) / (s * s)))))
+}
+
+/** K1: 반켈리 분산 조절, K2: + 추세 국면(하락이면 현금) */
+export function kellyExposure(m, trend) {
+  const K = kellyRaw(m)
+  const reg = trend ? bandRegime(m.close) : null
+  return K.map((x, i) => {
+    if (x === null || (trend && reg[i] === null)) return null
+    if (trend && reg[i] !== 'UP') return 0
+    return roundStep(x)
+  })
+}
+
+export const DEFENSE2 = [
+  { id: 'k1', name: '반켈리 분산 조절', desc: 'min(2, 0.5 × 과거 초과수익 평균 ÷ 보수적 변동성²), 0.5배 단위', exposure: (m) => kellyExposure(m, false) },
+  { id: 'k2', name: '반켈리 분산 조절 + 추세 국면', desc: 'K1을 250일선 밴드 상승 국면에서만, 하락이면 현금', exposure: (m) => kellyExposure(m, true) },
+]

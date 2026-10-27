@@ -2,6 +2,7 @@
 // 사용: node scripts/tripod/defense-selftest.mjs
 import {
   DEF, ewmaVol, conservativeVol, referenceVol, bandRegime, varianceExposure, defenseExposure, DEFENSE,
+  excessMean, kellyRaw, DEFENSE2, KELLY_FRACTION,
 } from './defense-strategies.mjs'
 import { weightsOf, planOf } from './strategies.mjs'
 
@@ -129,6 +130,15 @@ function market(logRets, start = '2000-01-03', irx = 3) {
   ok(near(g(0), 1) && near(g(0.1), 2 / 3, 1e-9) && near(g(0.2), 0.25, 1e-9) && near(g(0.25), 0, 1e-9), '여유 계수: 고점 1, -10% 0.667, -20% 0.25, -25% 0')
 }
 
+// 6b) 금리 결측: ^IRX가 없는 날은 금리 0으로 보고 노출이 NaN이 되지 않는다(1984년 이전 나스닥 종합, FTSE100 첫날)
+{
+  const r = rng(5)
+  const m = market(Array.from({ length: 2000 }, () => 0.0004 + (r() - 0.5) * 0.02))
+  m.irx = m.irx.map((x, i) => (i < 300 ? NaN : x))
+  const L2 = defenseExposure(m, 'd2')
+  ok(L2.every((x) => x === null || Number.isFinite(x)) && L2.some((x) => x !== null && x > 0), '금리 결측 구간이 있어도 낙폭 예산 노출이 숫자로 계산된다')
+}
+
 // 7) 미래 참조 없음: 앞부분만 준 데이터로 계산한 노출이 전체 데이터로 계산한 같은 날까지의 노출과 같다
 {
   const r = rng(3)
@@ -148,6 +158,42 @@ function market(logRets, start = '2000-01-03', irx = 3) {
   ok(good, '네 후보 모두 앞부분만 준 데이터와 전체 데이터의 노출이 같은 날까지 일치(미래 참조 없음)')
   const vals = new Set(DEFENSE.flatMap((s) => s.exposure(full)).filter((x) => x !== null))
   ok([...vals].every((x) => [0, 0.5, 1, 1.5, 2].includes(x)), `노출 값은 0~2배, 0.5배 단위(${[...vals].sort().join(', ')})`)
+}
+
+// 7b) 2차 후보: 초과수익 추정(월말 갱신·확장 창 평균)과 반켈리 노출, 미래 참조 없음
+{
+  const r = rng(9)
+  const rets = Array.from({ length: 3000 }, () => 0.0005 + (r() - 0.5) * 0.03)
+  const m = market(rets, '2000-01-03', 2)
+  const mu = excessMean(m)
+  // 손으로 다시 계산: 첫 유효 월말의 평균
+  const first = mu.findIndex((x) => x !== null)
+  let s = 0
+  for (let i = 1; i <= first; i++) {
+    const dt = (Date.parse(m.dates[i]) - Date.parse(m.dates[i - 1])) / 864e5 / 365
+    s += m.close[i] / m.close[i - 1] - 1 - (2 / 100) * dt
+  }
+  ok(first >= DEF.refMin && near(mu[first], (s / first) * 252, 1e-12), `초과수익 추정 = 첫날부터 그날까지 일간 초과수익 평균 × 252 (표본 ${first}개부터)`)
+  let monthOnly = true
+  for (let i = first + 1; i < mu.length - 1; i++) if (mu[i] !== mu[i - 1] && m.dates[i].slice(0, 7) === m.dates[i + 1].slice(0, 7)) monthOnly = false
+  ok(monthOnly, '초과수익 추정은 월말에만 바뀐다')
+  const vol = conservativeVol(m.close), K = kellyRaw(m)
+  const j = mu.length - 10
+  ok(near(K[j], Math.min(2, Math.max(0, (KELLY_FRACTION * mu[j]) / vol[j] ** 2)), 1e-12), '반켈리 노출 = min(2, max(0, 0.5 × μ̂ / σ²))')
+  const neg = market(Array.from({ length: 2000 }, () => -0.0008 + (r() - 0.5) * 0.02))
+  ok(kellyRaw(neg).filter((x) => x !== null).every((x) => x === 0), '초과수익 추정이 음수면 노출 0')
+  let good = true
+  for (const st of DEFENSE2) {
+    const Lf = st.exposure(m)
+    for (const k of [1500, 2200, 2999 - 1]) {
+      const part = { dates: m.dates.slice(0, k + 1), close: m.close.slice(0, k + 1), irx: m.irx.slice(0, k + 1) }
+      part.lastIsMonthEnd = m.dates[k].slice(0, 7) !== m.dates[k + 1].slice(0, 7)
+      const Lp = st.exposure(part)
+      for (let i = 0; i <= k; i++) if (Lp[i] !== Lf[i]) { good = false; break }
+    }
+    if (!Lf.filter((x) => x !== null).every((x) => [0, 0.5, 1, 1.5, 2].includes(x))) good = false
+  }
+  ok(good, '2차 후보도 미래 참조 없음, 노출은 0~2배 0.5배 단위')
 }
 
 // 8) 노출 → 상품 비중, 다음 날 체결
