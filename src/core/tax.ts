@@ -115,6 +115,7 @@ export function defaultTaxConfig(): TaxConfig {
       assumedOtherFinancialIncomeKrw: 0,
       assumedMarginalRatePct: 26.4,
     },
+    interestWithholdingPct: 15.4,
     crypto: {
       enabled: false,
       ratePct: 22,

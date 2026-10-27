@@ -93,7 +93,7 @@ export function buildLeveragedSeries(
  * 합성이 d0를 포함하지 않으면 d0 직전 합성 값에 맞춘다(그 하루는 수익률 0으로 근사).
  */
 export function spliceSeries(ticker: string, real: DailySeries, synthetic: DailySeries): DailySeries {
-  if (real.dates.length === 0) throw new Error(`${ticker} — 실물 데이터 없음`)
+  if (real.dates.length === 0) throw new Error(`${ticker}: 실물 데이터가 없습니다`)
   const d0 = real.dates[0]
   const pre = synthetic.dates.filter((d) => d < d0).length
   const exact = synthetic.dates[pre] === d0
@@ -103,12 +103,45 @@ export function spliceSeries(ticker: string, real: DailySeries, synthetic: Daily
   const k = real.close[0] / synthetic.close[anchor]
   // 실물 adjClose는 이후 배당만큼 낮게 조정돼 있으므로 같은 비율로 합성 구간 adjClose를 맞춘다
   const adjK = k * (real.adjClose[0] / real.close[0])
+  // 연결일 시가: 실물 첫 시가를 그대로 쓰면 합성 전일 종가와의 간격이 합성·실물 차이를 담아 튄다.
+  // 합성 시가를 같은 비율로 옮겨 연결일의 밤사이·장중 수익률을 합성과 같게 한다
+  const realOpen = exact ? [synthetic.open[anchor] * k, ...real.open.slice(1)] : real.open
   return {
     ticker,
     dates: [...synthetic.dates.slice(0, pre), ...real.dates],
-    open: [...synthetic.open.slice(0, pre).map((x) => x * k), ...real.open],
+    open: [...synthetic.open.slice(0, pre).map((x) => x * k), ...realOpen],
     close: [...synthetic.close.slice(0, pre).map((x) => x * k), ...real.close],
     adjClose: [...synthetic.close.slice(0, pre).map((x) => x * adjK), ...real.adjClose],
     dividends: { ...real.dividends },
   }
+}
+
+/**
+ * 지수 총수익 재구성 — 지수 가격수익 + proxy ETF 분배금 수익률(배당락일, 전일 proxy 종가 대비) + proxy 상장 뒤 보수 되돌림.
+ * 트라이팟 연구 buildProducts의 총수익(gross) 정의와 같다. proxy 상장 전은 배당을 넣지 않는다(가격지수 그대로).
+ * 결과의 close·open은 지수 그대로, adjClose가 총수익 지수다(buildLeveragedSeries가 adjClose 비율로 기초 수익을 읽음).
+ * 분배금 날짜가 지수 달력에 없으면 그 뒤 첫 지수 거래일에 붙인다(유실 방지)
+ */
+export function buildIndexTotalReturn(ticker: string, index: DailySeries, proxy: DailySeries, proxyFeePct: number): DailySeries {
+  if (index.dates.length < 2) throw new Error(`${ticker}: 지수 데이터가 부족합니다`)
+  const divYield = new Map<string, number>()
+  for (const [d, amt] of Object.entries(proxy.dividends)) {
+    // proxy 달력에서 배당락일(이후 첫 거래일)과 그 전일 종가
+    const j = proxy.dates.findIndex((x) => x >= d)
+    if (j <= 0) continue
+    const y = amt / proxy.close[j - 1]
+    // 지수 달력의 그날(없으면 다음 거래일)로
+    const k = index.dates.findIndex((x) => x >= proxy.dates[j])
+    if (k < 0) continue
+    divYield.set(index.dates[k], (divYield.get(index.dates[k]) ?? 0) + y)
+  }
+  const listStart = proxy.dates[0]
+  const adj = [index.close[0]]
+  for (let i = 1; i < index.dates.length; i++) {
+    const dt = (Date.parse(index.dates[i]) - Date.parse(index.dates[i - 1])) / 86_400_000
+    const feeBack = index.dates[i] >= listStart ? (proxyFeePct / 100) * (dt / 365) : 0
+    const r = index.close[i] / index.close[i - 1] - 1 + (divYield.get(index.dates[i]) ?? 0) + feeBack
+    adj.push(adj[i - 1] * (1 + r))
+  }
+  return { ticker, dates: [...index.dates], open: [...index.open], close: [...index.close], adjClose: adj, dividends: {} }
 }

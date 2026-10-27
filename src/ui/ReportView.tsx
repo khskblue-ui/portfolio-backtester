@@ -117,7 +117,7 @@ export function ReportView({
             <span>월 적립 {fmtUsd(shared.monthlyUsd)}</span>
             <span>수수료 {shared.feeBps}bps</span>
             <span>슬리피지 {shared.spreadBps}bps</span>
-            <span>유휴현금 금리 {shared.cashYieldMode === 'tbill' ? '미국 단기국채(^IRX) 실제 금리' : `${shared.cashYieldPct}%/년 고정`}</span>
+            <span>유휴현금 금리 {shared.cashYieldMode === 'tbill' ? '미국 단기국채(^IRX) 실제 금리' : `${shared.cashYieldPct}%/년 고정`}{shared.taxEnabled ? ' (이자 15.4% 원천징수)' : ''}</span>
             <span>가정 환율 ₩{shared.assumedUsdKrw.toLocaleString()}/$</span>
             <span>한국 세금 {shared.taxEnabled ? '반영' : '미반영'}</span>
             <span>분수주 {shared.fractionalShares ? '허용' : '불가(정수주)'}</span>
@@ -247,7 +247,7 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
     { label: '총 납입', post: fmtUsd(post.metrics.totalContributions), pre: fmtUsd(pre.metrics.totalContributions) },
     { label: '총 수익금', post: fmtSignedUsd(post.metrics.finalValue - post.metrics.totalContributions), pre: fmtSignedUsd(pre.metrics.finalValue - pre.metrics.totalContributions) },
     { label: '배당 (총 / 원천징수)', post: `${fmtUsd(post.result.dividendsGrossUsd)} / ${fmtUsd(post.result.dividendsWithheldUsd)}`, pre: `${fmtUsd(pre.result.dividendsGrossUsd)} / $0` },
-    { label: '세금 (양도세 + 원천, 기간 중 납부)', post: fmtUsd(post.result.totalTaxesUsd + post.result.dividendsWithheldUsd), pre: '$0' },
+    { label: '세금 (양도세 + 배당·이자 원천, 기간 중 납부)', post: fmtUsd(post.result.totalTaxesUsd + post.result.dividendsWithheldUsd + (post.result.interestWithheldUsd ?? 0)), pre: '$0' },
     { label: '청산 시 추가 양도세', post: fmtUsd(post.result.liquidation?.taxUsd ?? 0), pre: '$0' },
     { label: '거래 비용', post: fmtUsd(post.result.totalFeesUsd), pre: fmtUsd(pre.result.totalFeesUsd) },
     { label: '거래 횟수', post: String(post.result.trades.length), pre: String(pre.result.trades.length) },

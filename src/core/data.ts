@@ -16,7 +16,7 @@ import { fetchWithTimeout } from '../fetchUtil'
 import type { DailySeries, AlignedDataBundle, AlignedSeries } from './types'
 import { CASH_TICKER } from './types'
 import { ASSET_CATALOG, isBundleTicker } from './catalog'
-import { buildLeveragedSeries, spliceSeries, RATE_TICKER } from './synthetic'
+import { buildLeveragedSeries, buildIndexTotalReturn, spliceSeries, RATE_TICKER } from './synthetic'
 import {
   isTripodTicker,
   tripodComponentsFor,
@@ -318,7 +318,12 @@ export function alignToCommonCalendar(
   const startDate = options?.startDate && options.startDate > latestStart ? options.startDate : latestStart
   const endDate = options?.endDate ?? '9999-12-31'
   const dates = [...calendar].filter((d) => d >= startDate && d <= endDate).sort()
-  if (dates.length < 2) throw new Error('공통 거래일이 부족합니다 (자산 시작일·종료일 범위를 확인하세요)')
+  const bindingTickers = seriesList.filter((s) => s.dates[0] === latestStart).map((s) => s.ticker)
+  if (dates.length < 2)
+    throw new Error(
+      `공통 거래일이 부족합니다. 모든 자산의 데이터가 함께 있는 기간은 ${latestStart}부터입니다(${bindingTickers.join(', ')}). ` +
+        '시작일·종료일 범위를 확인하세요'
+    )
 
   // 히스토리가 가장 짧은 자산이 비교 시작일을 결정 — 원인 자산을 지목해 설명 (§3.3)
   const clipWarnings: string[] = []
@@ -339,9 +344,10 @@ export function alignToCommonCalendar(
         '변동성·MDD는 월간 데이터 기준(일간 낙폭보다 완만하게 표기)입니다. 수치는 명목(인플레이션 미반영)'
     )
   }
-  const bindingTickers = seriesList.filter((s) => s.dates[0] === latestStart).map((s) => s.ticker)
   const someClipped = seriesList.some((s) => s.dates[0] < latestStart)
-  if (someClipped && !(options?.startDate && options.startDate >= latestStart)) {
+  // 지정한 시작일이 자산 데이터보다 앞서면(자산이 하나뿐이어도) 늦춰진 이유를 알린다
+  const startTooEarly = !!options?.startDate && options.startDate < latestStart
+  if ((someClipped && !options?.startDate) || startTooEarly) {
     const head = options?.startDate
       ? `지정한 시작일(${options.startDate})보다 늦은 ${dates[0]}부터 비교합니다`
       : `비교 기간은 ${dates[0]}부터입니다`
@@ -491,7 +497,7 @@ const INTER_FETCH_DELAY_MS = 400
  */
 export async function loadDataBundle(
   tickers: string[],
-  options?: { startDate?: string; endDate?: string; forceRefresh?: boolean; cashRate?: boolean }
+  options?: { startDate?: string; endDate?: string; forceRefresh?: boolean; cashRate?: boolean; now?: Date }
 ): Promise<AlignedDataBundle> {
   const requested = [...new Set(tickers.map((t) => t.trim().toUpperCase()))].filter(
     (t) => t !== '' && t !== CASH_TICKER
@@ -508,7 +514,7 @@ export async function loadDataBundle(
         // 고정 금리 전제 안내를 실제 금리 안내로 교체
         cashOnly.clipWarnings = cashOnly.clipWarnings.map((w) =>
           w.startsWith('현금 100% 실행')
-            ? '현금 100% 실행: 시장 데이터 없이 유휴현금 이자만으로 복리 계산합니다 — 이자는 그날의 미국 단기국채(^IRX) 금리를 씁니다'
+            ? '현금 100% 실행: 시장 데이터 없이 유휴현금 이자만으로 복리 계산합니다. 이자는 그날의 미국 단기국채(^IRX) 금리를 씁니다'
             : w
         )
       } catch (e) {
@@ -527,38 +533,48 @@ export async function loadDataBundle(
   const bundleTickers = unique.filter((t) => isBundleTicker(t))
   const dailyTickers = unique.filter((t) => !isBundleTicker(t))
   if (bundleTickers.length > 0 && dailyTickers.length > 0) {
+    // 오류에는 사용자가 넣은 이름을 쓴다 (트라이팟 구성 상품 대신 TRIPOD)
+    const dailyNames = requested.filter((t) => !isBundleTicker(t))
     throw new Error(
-      `역사 월간 자산(${bundleTickers.join(', ')})은 일별 자산(${dailyTickers.join(', ')})과 함께 실행할 수 없습니다 ` +
-        '— 해상도가 달라 공통 캘린더가 성립하지 않습니다. 전 전략의 주식을 SPX-HIST, 채권을 UST10-HIST, ' +
+      `역사 월간 자산(${bundleTickers.join(', ')})은 일별 자산(${dailyNames.join(', ')})과 함께 실행할 수 없습니다. ` +
+        '해상도가 달라 공통 캘린더가 성립하지 않습니다. 전 전략의 주식을 SPX-HIST, 채권을 UST10-HIST, ' +
         '금을 GOLD-HIST로 바꾸거나, 역사 자산을 빼세요'
     )
   }
   const monthlyExpected = bundleTickers.length > 0
 
-  // 합성 레버리지(-SIM)·연결(-EXT) 해석: 실제 조회 대상 = 원본 티커 + 합성의 기초 + 금리(^IRX)
+  // 합성(-SIM)·연결(-EXT)·트라이팟 해석: 실제 조회 대상 = 원본 티커 + 합성의 기초 + 금리(^IRX) + 판정 원천(^NDX·^VIX)
   const entryOf = (t: string) => ASSET_CATALOG.find((e) => e.ticker === t)
   const toFetch = new Set<string>()
-  let anySynthetic = false
-  const planFetch = (t: string) => {
+  /** 조회 대상 → 그것을 필요로 하는 사용자 자산 (조회 실패 안내용) */
+  const neededBy = new Map<string, Set<string>>()
+  const need = (t: string, owner: string) => {
+    toFetch.add(t)
+    if (!neededBy.has(t)) neededBy.set(t, new Set())
+    neededBy.get(t)!.add(owner)
+  }
+  const planFetch = (t: string, owner: string) => {
     const e = entryOf(t)
     if (e?.splice) {
-      toFetch.add(e.splice.real)
-      planFetch(e.splice.synthetic)
+      planFetch(e.splice.real, owner)
+      planFetch(e.splice.synthetic, owner)
+    } else if (e?.indexTotalReturn) {
+      planFetch(e.indexTotalReturn.index, owner)
+      planFetch(e.indexTotalReturn.proxy, owner)
     } else if (e?.synthetic) {
-      anySynthetic = true
-      toFetch.add(e.synthetic.base.toUpperCase())
-    } else {
-      toFetch.add(t)
-    }
+      planFetch(e.synthetic.base.toUpperCase(), owner)
+      need(RATE_TICKER, owner)
+    } else need(t, owner)
   }
-  for (const t of unique) planFetch(t)
+  for (const t of requested) {
+    if (isTripodTicker(t)) {
+      for (const c of tripodComponentsFor(t)) planFetch(c, t)
+      need(TRIPOD_SIGNAL_INDEX, t)
+      need(TRIPOD_SIGNAL_VIX, t)
+    } else planFetch(t, t)
+  }
   // 역사 월간(-HIST) 모드는 네트워크 없이 도는 번들이라 현금 금리를 고정값으로 둔다(아래 경고)
   const wantRate = !!options?.cashRate && !monthlyExpected
-  if (anySynthetic) toFetch.add(RATE_TICKER)
-  if (tripodSleeves.length > 0) {
-    toFetch.add(TRIPOD_SIGNAL_INDEX)
-    toFetch.add(TRIPOD_SIGNAL_VIX)
-  }
 
   const raw = new Map<string, DailySeries>()
   const net = { fetched: false }
@@ -568,7 +584,15 @@ export async function loadDataBundle(
       raw.set(t, await fetchBundleSeries(t))
       continue
     }
-    raw.set(t, await fetchCached(t, options, net))
+    try {
+      raw.set(t, await fetchCached(t, options, net))
+    } catch (e) {
+      const owners = [...(neededBy.get(t) ?? [])]
+      // 사용자가 직접 넣은 티커면 원래 오류(심볼 확인 안내 포함)를 그대로 보여 준다
+      if (owners.includes(t)) throw e
+      const status = (e instanceof Error ? e.message : String(e)).match(/HTTP \d+/)?.[0]
+      throw new Error(`${owners.join(', ')} 계산에 필요한 ${t} 자료를 받지 못했습니다${status ? `(${status})` : ''}. 잠시 후 다시 실행하세요`)
+    }
   }
   // 현금 금리만을 위한 ^IRX는 실패해도 실행을 막지 않는다 — 고정 금리로 대체하고 경고
   let rateError: string | null = null
@@ -580,24 +604,57 @@ export async function loadDataBundle(
     }
   }
 
+  const built = new Map<string, DailySeries>()
   const build = (t: string): DailySeries => {
+    const hit = built.get(t)
+    if (hit) return hit
     const e = entryOf(t)
-    if (e?.splice) return spliceSeries(t, raw.get(e.splice.real)!, build(e.splice.synthetic))
-    if (e?.synthetic) return buildLeveragedSeries(t, raw.get(e.synthetic.base.toUpperCase())!, raw.get(RATE_TICKER)!, e.synthetic)
-    return raw.get(t)!
+    const out = e?.splice
+      ? spliceSeries(t, build(e.splice.real), build(e.splice.synthetic))
+      : e?.indexTotalReturn
+        ? buildIndexTotalReturn(t, build(e.indexTotalReturn.index), build(e.indexTotalReturn.proxy), e.indexTotalReturn.proxyFeePct)
+      : e?.synthetic
+        ? buildLeveragedSeries(t, build(e.synthetic.base.toUpperCase()), raw.get(RATE_TICKER)!, e.synthetic)
+        : raw.get(t)!
+    built.set(t, out)
+    return out
   }
   const seriesList: DailySeries[] = unique.map(build)
 
-  const bundle = alignToCommonCalendar(seriesList, { ...options, monthlyExpected })
+  // 트라이팟 판정 — 백테스트 달력과 무관하게 지수 전 기간으로 계산한다 (미국 장중에 받은 오늘 봉은 제외)
+  let tripodSig: { sig: ReturnType<typeof computeTripodSignals>; firstReady: string; vixStart: string; lastDate: string } | null = null
   if (tripodSleeves.length > 0) {
-    const ndx = raw.get(TRIPOD_SIGNAL_INDEX)!
-    const vix = raw.get(TRIPOD_SIGNAL_VIX)!
+    const now = options?.now ?? new Date()
+    const ndx = dropUnsettledBar(raw.get(TRIPOD_SIGNAL_INDEX)!, now)
+    const vix = dropUnsettledBar(raw.get(TRIPOD_SIGNAL_VIX)!, now)
     const sig = computeTripodSignals(ndx.dates, ndx.close, alignVixToIndex(ndx.dates, vix.dates, vix.close))
-    bundle.tripod = { target: alignTripodTargets(sig, bundle.dates), lastSignalDate: ndx.dates[ndx.dates.length - 1] }
+    const readyIdx = sig.target.findIndex((t) => t !== null)
+    if (readyIdx < 0) throw new Error('트라이팟 판정에 필요한 나스닥100(^NDX)·VIX 자료가 부족합니다. 잠시 후 다시 실행하세요')
+    tripodSig = { sig, firstReady: sig.dates[readyIdx], vixStart: vix.dates[0], lastDate: ndx.dates[ndx.dates.length - 1] }
+    if (options?.endDate && options.endDate < tripodSig.firstReady) {
+      throw new Error(
+        `트라이팟은 VIX 10일 평균과 250일선이 모두 준비되는 ${tripodSig.firstReady}부터 계산할 수 있습니다(VIX 자료 시작 ${tripodSig.vixStart}). ` +
+          '종료일을 그 뒤로 정하세요'
+      )
+    }
+  }
+
+  const alignOpts = { startDate: options?.startDate, endDate: options?.endDate, monthlyExpected }
+  let bundle = alignToCommonCalendar(seriesList, alignOpts)
+  if (tripodSig) {
+    // 판정이 준비되기 전 구간은 트라이팟이 현금으로만 남아 결과를 왜곡하므로 비교 시작을 판정 준비일로 늦춘다
+    if (bundle.dates[0] < tripodSig.firstReady) {
+      bundle = alignToCommonCalendar(seriesList, { ...alignOpts, startDate: tripodSig.firstReady })
+      bundle.clipWarnings.push(
+        `트라이팟 판정은 VIX 10일 평균과 250일선이 모두 준비되는 ${tripodSig.firstReady}부터 가능해서 비교를 그날부터 시작합니다` +
+          `(VIX 자료 시작 ${tripodSig.vixStart})`
+      )
+    }
+    bundle.tripod = { target: alignTripodTargets(tripodSig.sig, bundle.dates), lastSignalDate: tripodSig.lastDate }
     const last = bundle.dates[bundle.dates.length - 1]
     if (bundle.tripod.lastSignalDate < last) {
       bundle.clipWarnings.push(
-        `트라이팟 신호: 나스닥100 지수 데이터가 ${bundle.tripod.lastSignalDate}까지라 그 뒤 거래일(~${last})은 마지막 판정을 이어 씁니다`
+        `트라이팟 신호: 나스닥100 지수의 확정 종가가 ${bundle.tripod.lastSignalDate}까지라 그 뒤 거래일(~${last})은 마지막 판정을 이어 씁니다`
       )
     }
   }
@@ -614,6 +671,34 @@ export async function loadDataBundle(
   }
   bundle.snapshotHash = hashBundle(bundle)
   return bundle
+}
+
+/**
+ * 미국 정규장 마감(동부 16:00) 20분 뒤 전에 받은 오늘 봉은 확정 종가가 아니므로 뺀다 (트라이팟 판정용).
+ * 실전 추적(scripts/tripod/live.mjs)과 같은 기준이다
+ */
+export function dropUnsettledBar(s: DailySeries, now: Date): DailySeries {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now)
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+  const etDate = `${get('year')}-${get('month')}-${get('day')}`
+  const minutes = Number(get('hour')) * 60 + Number(get('minute'))
+  const last = s.dates.length - 1
+  if (last < 1 || s.dates[last] !== etDate || minutes >= 16 * 60 + 20) return s
+  return {
+    ...s,
+    dates: s.dates.slice(0, last),
+    open: s.open.slice(0, last),
+    close: s.close.slice(0, last),
+    adjClose: s.adjClose.slice(0, last),
+  }
 }
 
 /** 캐시 우선 조회 (네트워크 조회 사이에 간격을 둔다 — Yahoo 429 회피) */

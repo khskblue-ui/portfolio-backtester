@@ -40,10 +40,10 @@ describe('판정 이식 = 연구 computeSignals', () => {
   })
 })
 
-/** 연구 가상 상품 계수 → 앱 번들 (QQQ·QLD-EXT·TQQQ-EXT, 시작가 100, 배당은 계수에 내재) */
+/** 연구 가상 상품 계수 → 앱 번들 (QQQ-EXT·QLD-EXT·TQQQ-EXT, 시작가 100, 배당은 계수에 내재) */
 function bundleFrom(prod: Prod, s: number, e: number, top: 2 | 3 = 3): AlignedDataBundle {
   const series: Record<string, AlignedSeries> = {}
-  const keys = ['QQQ', 'QLD-EXT', 'TQQQ-EXT']
+  const keys = ['QQQ-EXT', 'QLD-EXT', 'TQQQ-EXT']
   keys.forEach((ticker, k) => {
     const kk = top === 2 && k === 2 ? 1 : k // 2배판 대조용: 3배 자리에 2배 상품을 둔다
     const close = [100]

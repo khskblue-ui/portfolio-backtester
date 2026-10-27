@@ -26,7 +26,7 @@ JSON을 직접 읽기 위함 (history-bundle.test.ts 주석 참조). 따라서 *
 | `history-bundle.test.ts` | `public/data/history.json` (~5케이스) | 1900-01=100, 시리즈 길이 동일, 에피소드 깊이 하드코딩(−50.1, −47.1), PE 밴드 |
 | `history-extra.test.ts` | 나스닥 오버레이 파서 (~11케이스) | 합성 CSV로 실패 경로·무결성 가드 집중 |
 | `tripod-backtest.test.ts` | 앱 트라이팟 = 연구 코드 (~5케이스) | `scripts/tripod/lib.mjs`를 직접 불러 1985~2026 판정 배열 일치, 같은 가상 상품에서 엔진 자산곡선 = 연구 simulate(close1·open1·2배판, 1e-9), 5bp는 현금 다리 이중 계상 보정 후 일치 |
-| `tripod-realdata.test.ts` | 실데이터 통합 (~3케이스) | 저장소 스냅숏 실제 ETF로 앱 파이프라인 전체 → 연구 §10.1 표(트라이팟 30.5%·세후 25.1%, QQQ 19.3%·세후 17.5%, QLD 32.5%, TQQQ 41.9%) |
+| `tripod-realdata.test.ts` | 실데이터 통합 (~6케이스) | 저장소 스냅숏을 야후 형식으로 돌려주는 fetch 스텁 + 실제 `loadDataBundle` → 엔진. 2010~2026 실제 ETF로 연구 §10.1 표(트라이팟 30.5%·세후 25.1%, QQQ 19.3%·세후 17.5%, QLD 32.5%, TQQQ 41.9%), 1991~2026 연결 상품으로 §2.3(32.6% / −61.4%)·§8.2 세후 27.0% |
 | `shared-settings.test.ts` | 공통 설정 정규화 (~3케이스) | 유휴현금 금리 원천 기본값(tbill)과 이전 저장본 이전 규칙 |
 | `audit-regressions.test.ts` | 2026-07 감사 회귀 (~3케이스) | 중복 전략 라벨(`uniqueRunLabels`), 에피소드 메타 커버리지, 전액 손실 TWRR |
 

@@ -42,11 +42,12 @@ export function SettingsPanel({
             유휴현금 금리
             <HelpTip title="유휴현금 금리">
               투자되지 않은 현금(현금 슬리브, 트라이팟의 현금 국면, 매수 대기 현금)이 버는 이자입니다.
-              <br />· <b>단기국채 실제 금리</b>(기본): 그날 관측된 미국 13주 국채 금리(^IRX)를 씁니다. 금리가 0%에 가까웠던
-              2009~2015년과 2020~2021년, 5% 안팎이던 2000년·2007년·2023년이 그대로 반영됩니다.
+              <br />· <b>단기국채 실제 금리</b>(기본): 그날 관측된 미국 13주 국채 금리(^IRX)를 씁니다. ^IRX는 할인율이라 실제로
+              보유했을 때의 수익률(13주마다 다시 사는 연복리)로 바꿔 계산합니다. 금리가 0%에 가까웠던 2009~2015년과 2020~2021년,
+              5% 안팎이던 2000년·2007년·2023년이 그대로 반영됩니다. 오른쪽 % 값은 금리 자료가 없는 구간(역사 월간 모드, 조회 실패)에만 쓰입니다.
               <br />· <b>고정 %/년</b>: 입력한 금리를 전 기간에 똑같이 씁니다. 긴 기간을 한 값으로 고정하면 현금 비중이 큰 전략의
               수익이 실제보다 부풀거나 줄어듭니다.
-              <br />이자에는 세금을 매기지 않습니다(근사).
+              <br />한국 세금을 반영하면 이자에서 15.4%를 원천징수하고, 이자는 배당과 함께 금융소득 종합과세 판정에 합산합니다.
             </HelpTip>
           </label>
           <div className="flex flex-wrap gap-1.5">
@@ -59,14 +60,14 @@ export function SettingsPanel({
               <option value="tbill">단기국채 실제 금리</option>
               <option value="fixed">고정 %/년</option>
             </select>
-            {shared.cashYieldMode === 'fixed' && (
-              <NumberInput
-                value={shared.cashYieldPct}
-                onChange={(v) => onChange((p) => ({ ...p, cashYieldPct: v }))}
-                allowDecimal
-                className={`${inputCls} !w-16`}
-              />
-            )}
+            <NumberInput
+              value={shared.cashYieldPct}
+              onChange={(v) => onChange((p) => ({ ...p, cashYieldPct: v }))}
+              allowDecimal
+              aria-label={shared.cashYieldMode === 'fixed' ? '고정 금리 (%/년)' : '금리 자료가 없을 때 쓸 고정 금리 (%/년)'}
+              title={shared.cashYieldMode === 'fixed' ? '고정 금리 (%/년)' : '금리 자료가 없을 때만 쓰는 대체 금리 (%/년)'}
+              className={`${inputCls} !w-16 ${shared.cashYieldMode === 'tbill' ? 'text-zinc-400 dark:text-zinc-500' : ''}`}
+            />
           </div>
         </div>
         {num('assumedUsdKrw', '가정 환율 (₩/$, 세금 근사용)', false, '양도세 250만원 공제·금융소득 2,000만원 임계를 USD 손익에 적용하기 위한 고정 환율 가정. 실제 세금은 거래일 환율 기준이라 근사입니다.')}

@@ -14,7 +14,7 @@ import {
 import { NumberInput } from './NumberInput'
 import { assetCautionList, executionTiming, TRIPOD_SLEEVES, type StrategyRun, type AlignedDataBundle, type TripodState } from '@/core'
 import { HelpTip } from './HelpTip'
-import { cardCls, fmtUsd, fmtSignedUsd, fmtPct, fmtSignedPct , uniqueRunLabels, SERIES_COLORS_LIGHT, SERIES_COLORS_DARK } from './common'
+import { cardCls, fmtUsd, fmtSignedUsd, fmtPct, fmtSignedPct , uniqueRunLabels } from './common'
 
 /**
  * 결과 섹션 (§7) — TWRR 기준 정렬 비교표 + growth-of-$1 오버레이 +
@@ -120,10 +120,25 @@ export function ResultsSection({
 
   // 트라이팟 슬리브가 있는 전략 (신호 요약 카드)
   const tripodRuns = useMemo(() => runs.filter((r) => r.postTax.result.tripod), [runs])
-  const stateColors = useMemo(() => {
-    const p = theme === 'dark' ? SERIES_COLORS_DARK : SERIES_COLORS_LIGHT
-    return { T3: p[5], B15: p[4], CASH: theme === 'dark' ? '#6b7280' : '#9ca3af' } as Record<TripodState, string>
-  }, [theme])
+  // 보유 상태 색: 전략 팔레트와 겹치지 않게 무채색 농도로(진할수록 레버리지가 큼)
+  const stateColors = useMemo(
+    () =>
+      (theme === 'dark'
+        ? { T3: '#e4e4e7', B15: '#8b8f9a', CASH: '#3f4451' }
+        : { T3: '#27272a', B15: '#8b8f9a', CASH: '#d4d7de' }) as Record<TripodState, string>,
+    [theme]
+  )
+
+  // 결과 해석 안내: 단기국채 금리 사용, 1년 미만 기간의 연환산 왜곡
+  const infoNotes = useMemo(() => {
+    const notes: string[] = []
+    if (runs.some((r) => r.config.execution.cashYieldSource === 'tbill') && bundle.cashRate?.some((x) => Number.isFinite(x)))
+      notes.push('유휴현금 이자는 그날의 미국 단기국채(^IRX) 할인율을 실제 보유 수익률로 바꿔 계산했습니다. 고정 금리로 보려면 공통 설정에서 바꾸세요')
+    const spanDays = (Date.parse(bundle.dates[bundle.dates.length - 1]) - Date.parse(bundle.dates[0])) / 86_400_000
+    if (spanDays < 365)
+      notes.push('기간이 1년보다 짧아 연환산 값(TWRR/년·MWRR/년)이 실제보다 크게 부풀거나 줄어 보입니다. 누적 수익률 곡선과 최종 가치로 비교하세요')
+    return notes
+  }, [runs, bundle])
 
   const years = useMemo(() => {
     const set = new Set<number>()
@@ -166,8 +181,11 @@ export function ResultsSection({
       </div>
 
       {/* 데이터·엔진 경고 */}
-      {(bundle.clipWarnings.length > 0 || engineWarnings.length > 0 || assetCautions.length > 0) && (
+      {(bundle.clipWarnings.length > 0 || engineWarnings.length > 0 || assetCautions.length > 0 || infoNotes.length > 0) && (
         <div className="bg-[#f3f5f9] dark:bg-[#171c28] border-l-4 border-zinc-400 dark:border-zinc-600 rounded-lg p-3 text-xs text-zinc-600 dark:text-zinc-300 space-y-1">
+          {infoNotes.map((n) => (
+            <p key={n}>· {n}</p>
+          ))}
           {assetCautions.map(([ticker, caution]) => (
             <p key={`caution-${ticker}`}>⚠ [{ticker}] {caution}</p>
           ))}
@@ -374,8 +392,8 @@ export function ResultsSection({
               <th className="text-right px-3 py-3 font-medium">
                 세금
                 <HelpTip title="세금 — 기간 중 실제로 낸 세금" align="right">
-                  기간 동안 낸 양도세(연말 정산)와 배당 원천징수 합계입니다. 기간 끝까지 팔지 않은 평가이익의 세금은 들어 있지
-                  않고, "청산 후 가치"에서 따로 뺍니다.
+                  기간 동안 낸 양도세(연말 정산)와 배당 원천징수(15%)·현금 이자 원천징수(15.4%) 합계입니다. 기간 끝까지 팔지 않은
+                  평가이익의 세금은 들어 있지 않고, "청산 후 가치"에서 따로 뺍니다.
                 </HelpTip>
               </th>
               <th className="text-right px-3 py-3 font-medium">비용</th>
@@ -401,9 +419,9 @@ export function ResultsSection({
                   <td className="text-right px-3 py-2.5 font-semibold">{fmtUsd(m.liquidatedValue)}</td>
                   <td className="text-right px-3 py-2.5">{fmtPct(m.liquidatedMwrrAnnualPct)}</td>
                   <td className="text-right px-3 py-2.5">{fmtUsd(m.totalContributions)}</td>
-                  {/* 세금 = 연말 정산분 + 배당 원천징수 (원천도 실제 납부 세금) */}
+                  {/* 세금 = 연말 정산분 + 배당·이자 원천징수 (원천도 실제 납부 세금) */}
                   <td className="text-right px-3 py-2.5">
-                    {fmtUsd(r.postTax.result.totalTaxesUsd + r.postTax.result.dividendsWithheldUsd)}
+                    {fmtUsd(r.postTax.result.totalTaxesUsd + r.postTax.result.dividendsWithheldUsd + (r.postTax.result.interestWithheldUsd ?? 0))}
                   </td>
                   <td className="text-right px-3 py-2.5">{fmtUsd(res.totalFeesUsd)}</td>
                   <td className="text-right px-3 py-2.5">{res.trades.length}</td>
@@ -459,10 +477,31 @@ export function ResultsSection({
                       </span>
                     ))}
                   </div>
+                  <TripodTimeline
+                    switches={t.switches}
+                    start={bundle.dates[0]}
+                    end={lastDate}
+                    colors={stateColors}
+                  />
                   <div className="text-[11px] text-gray-400 leading-relaxed">
                     체결 {executionTiming(r.config) === 'next_close' ? '다음 거래일 종가' : '다음 거래일 시가'} · 마지막 판정{' '}
                     <span className="whitespace-nowrap">({lastDate} 종가)</span> {t.lastTarget ? name[t.lastTarget] : '판정 없음'}
                   </div>
+                  {t.switches.length > 1 && (
+                    <details className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      <summary className="cursor-pointer select-none hover:text-[#2962ff]">전환 기록 보기 ({t.switches.length - 1}건)</summary>
+                      <ol className="mt-1 max-h-48 overflow-y-auto pr-1 space-y-0.5 font-mono">
+                        {t.switches.slice(1).map((x) => (
+                          <li key={x.date} className="flex justify-between gap-2">
+                            <span>{x.date}</span>
+                            <span className="whitespace-nowrap">
+                              {x.from ? name[x.from] : ''} → {name[x.to]}
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
+                  )}
                 </div>
               )
             })}
@@ -497,7 +536,8 @@ export function ResultsSection({
                   </div>
                   <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100">−{drag.toFixed(2)}%p/년</div>
                   <div className="text-xs text-gray-400 mt-0.5">
-                    양도세 {fmtUsd(res.totalTaxesUsd)} + 배당 원천 {fmtUsd(res.dividendsWithheldUsd)} — 실현익 과세와 원천징수가 만드는 복리 드래그
+                    양도세 {fmtUsd(res.totalTaxesUsd)} + 배당 원천 {fmtUsd(res.dividendsWithheldUsd)}
+                    {(res.interestWithheldUsd ?? 0) > 0 && <> + 이자 원천 {fmtUsd(res.interestWithheldUsd ?? 0)}</>}. 실현익 과세와 원천징수가 만드는 복리 드래그
                   </div>
                   {res.liquidation && (
                     <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
@@ -549,6 +589,42 @@ export function ResultsSection({
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  )
+}
+
+// ─── 트라이팟 보유 상태 타임라인 — 전환 기록을 기간 위 띠로 ────────────────────
+
+function TripodTimeline({
+  switches,
+  start,
+  end,
+  colors,
+}: {
+  switches: { date: string; to: TripodState }[]
+  start: string
+  end: string
+  colors: Record<TripodState, string>
+}) {
+  const t0 = Date.parse(start)
+  const span = Math.max(1, Date.parse(end) - t0)
+  const pos = (d: string) => Math.min(100, Math.max(0, ((Date.parse(d) - t0) / span) * 100))
+  const segs = switches.map((s, k) => {
+    const from = pos(s.date)
+    const to = k + 1 < switches.length ? pos(switches[k + 1].date) : 100
+    return { left: from, width: Math.max(0, to - from), state: s.to, key: `${s.date}-${k}` }
+  })
+  return (
+    <div>
+      <div className="relative h-3 rounded bg-[#f3f5f9] dark:bg-[#171c28] overflow-hidden" role="img" aria-label={`보유 상태 타임라인 ${start}~${end}`}>
+        {segs.map((g) => (
+          <div key={g.key} className="absolute inset-y-0" style={{ left: `${g.left}%`, width: `${g.width}%`, backgroundColor: colors[g.state] }} />
+        ))}
+      </div>
+      <div className="flex justify-between text-[10px] text-gray-400 mt-0.5 font-mono">
+        <span>{start.slice(0, 4)}</span>
+        <span>{end.slice(0, 4)}</span>
       </div>
     </div>
   )

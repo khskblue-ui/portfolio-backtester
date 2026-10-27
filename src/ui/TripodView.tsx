@@ -251,6 +251,14 @@ export function TripodView({ theme, onBacktest }: { theme: Theme; onBacktest?: (
         <p className="mt-1 text-[12.5px] leading-relaxed text-zinc-600 dark:text-zinc-300">
           매 거래일 미국 장 마감 뒤 규칙대로 판정한 결과입니다. 신호가 바뀌면 다음 거래일 종가에 체결하는 것이 검증에서 영상 수치를 재현한 해석입니다.
         </p>
+        {onBacktest && (
+          <button
+            onClick={onBacktest}
+            className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-[#2962ff] dark:text-[#5b8aff] hover:underline"
+          >
+            <BarChart3 className="w-3.5 h-3.5" /> 이 규칙을 백테스트에서 직접 비교하기
+          </button>
+        )}
         {data.warnings.filter((w) => !w.startsWith('오프라인')).length > 0 && (
           <ul className="mt-2 text-[11px] text-amber-700 dark:text-amber-400 space-y-0.5">
             {data.warnings.filter((w) => !w.startsWith('오프라인')).map((w) => <li key={w}>{w}</li>)}

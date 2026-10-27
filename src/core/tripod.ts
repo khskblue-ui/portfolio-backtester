@@ -29,8 +29,8 @@ export const TRIPOD_RULE = {
 export const TRIPOD_SIGNAL_INDEX = '^NDX'
 export const TRIPOD_SIGNAL_VIX = '^VIX'
 
-/** 트라이팟 슬리브가 사고파는 상품 [1배, 2배, 3배] — 상장 전 구간은 합성으로 이어 붙인 -EXT */
-export const TRIPOD_PRODUCTS = ['QQQ', 'QLD-EXT', 'TQQQ-EXT'] as const
+/** 트라이팟 슬리브가 사고파는 상품 [1배, 2배, 3배] — 상장 전 구간은 합성으로 이어 붙인 -EXT (1985-10~) */
+export const TRIPOD_PRODUCTS = ['QQQ-EXT', 'QLD-EXT', 'TQQQ-EXT'] as const
 
 /** 가상 슬리브 티커 → 최대 노출. 2배판은 3배 자리에 QLD 100%를 쓴다 */
 export const TRIPOD_SLEEVES: Record<string, { top: 2 | 3; label: string }> = {
@@ -54,6 +54,15 @@ export function tripodComponentsFor(ticker: string): string[] {
   const top = TRIPOD_SLEEVES[ticker.trim().toUpperCase()]?.top
   if (top == null) return []
   return top === 3 ? [...TRIPOD_PRODUCTS] : [TRIPOD_PRODUCTS[0], TRIPOD_PRODUCTS[1]]
+}
+
+/**
+ * 같은 전략에 따로 넣을 수 없는 티커 — 구성 상품과 그 실물(상장 후 같은 증권). 한 계좌의 같은 증권은
+ * 이동평균 원가가 하나로 합쳐져야 하는데 슬리브별로 따로 들고 있으면 양도세가 어긋나므로 검증에서 막는다
+ */
+export function tripodConflictsFor(ticker: string): string[] {
+  const real: Record<string, string> = { 'QQQ-EXT': 'QQQ', 'QLD-EXT': 'QLD', 'TQQQ-EXT': 'TQQQ' }
+  return tripodComponentsFor(ticker).flatMap((c) => [c, real[c]])
 }
 
 /** 상태의 노출 배수 (요약 표시용) */

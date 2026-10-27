@@ -152,6 +152,8 @@ export interface RebalanceConfig {
   /** 상대 밴드 (%): |현재/목표 − 1| ≥ bandRelPct/100 */
   bandRelPct?: number
   mode: SellMode
+  /** 트라이팟 신호가 바뀌는 날에도 바깥 비중을 목표로 되돌린다 (트리거와 별개로 추가 — 매도 정책은 그대로 적용) */
+  onTripodSwitch?: boolean
 }
 
 export interface CostConfig {
@@ -207,6 +209,11 @@ export interface TaxConfig {
     /** 가정 한계세율 (%) — 임계 초과 시 (한계세율 − 원천세율) 추가 과세 근사 */
     assumedMarginalRatePct: number
   }
+  /**
+   * 유휴현금 이자 원천징수율 (%) — 국내 이자소득 15.4% 근사. 생략하면 0(이자 비과세 — 이전 동작).
+   * 이자는 금융소득 종합과세 판정에 배당과 합산된다
+   */
+  interestWithholdingPct?: number
   /** 5.4 가상자산 — 과세 반복 유예 중. 기본 비활성 + "현행법 확인" 플래그 */
   crypto: {
     enabled: boolean
@@ -269,7 +276,7 @@ export interface DailyPoint {
 
 export interface EngineWarning {
   date: string
-  code: 'no_sell_overweight' | 'negative_cash_tax' | 'negative_cash_retry' | 'band_unclosable' | 'reconciliation' | 'dd_rule'
+  code: 'no_sell_overweight' | 'negative_cash_tax' | 'negative_cash_retry' | 'band_unclosable' | 'reconciliation' | 'dd_rule' | 'data_caveat'
   message: string
 }
 
@@ -316,6 +323,8 @@ export interface BacktestResult {
   taxes: TaxLogEntry[]
   dividendsGrossUsd: number
   dividendsWithheldUsd: number
+  /** 유휴현금 이자 원천징수 합계 (세금 반영 시, 손으로 만든 결과 객체를 위해 선택 필드) */
+  interestWithheldUsd?: number
   totalFeesUsd: number
   totalTaxesUsd: number
   warnings: EngineWarning[]

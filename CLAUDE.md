@@ -40,14 +40,14 @@ FIXTURES=1 PORT=4176 node scripts/e2e/staticserver.mjs &
 node scripts/e2e/e2e-tripodrun.mjs         # 트라이팟 탭 → 비교 세트 실행 → 결과·보고서, 혼합·적립·기간 지정
 ```
 
-테스트는 현재 233개(엔진 골든·트라이팟 슬리브·연구 코드 대조·실데이터 통합·가이드/도해 무결성·연대기·신호·광기의 해부·트라이팟 대시보드 앵커).
+테스트는 현재 245개(엔진 골든·트라이팟 슬리브·연구 코드 대조·실데이터 통합·가이드/도해 무결성·연대기·신호·광기의 해부·트라이팟 대시보드 앵커).
 콘텐츠 수치를 바꾸면 tests/의 must-contain 앵커도 함께 갱신해야 한다.
 
 ## 아키텍처 지도
 
 - `src/core/` — engine.ts(결정론 시뮬레이터: t 종가 관측 → t+1 시가 체결(전략별로 t+1 종가 선택 가능),
   낙폭 규칙, ruleEpisodes, TRIPOD 신호 슬리브, 기간 끝 청산 기준), data.ts(야후 v8 파싱·달력 정렬·-HIST 번들·
-  -EXT 연결 상품·트라이팟 신호·^IRX 현금 금리), tripod.ts(트라이팟 판정 — 연구 `scripts/tripod/lib.mjs`와
+  -EXT 연결 상품(상장 전은 ^NDX 총수익 합성)·트라이팟 신호(판정 준비일 1990-01-15부터)·^IRX 현금 금리), tripod.ts(트라이팟 판정 — 연구 `scripts/tripod/lib.mjs`와
   같은 배열을 `tests/tripod-backtest.test.ts`가 강제하므로 규칙은 두 곳을 같이 바꿀 것), tax.ts(한국 세금 근사),
   metrics.ts(TWRR/MWRR/MDD·청산 기준 MWRR), types.ts
 - `src/ui/` — App.tsx(셸: 좌측 레일/하단 탭바, 워크벤치 분할+모바일 위저드),

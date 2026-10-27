@@ -3,6 +3,7 @@ import {
   CASH_TICKER,
   isTripodTicker,
   executionTiming,
+  tripodConflictsFor,
   TRIPOD_SLEEVES,
   type StrategyConfig,
   type AllocationPolicy,
@@ -37,6 +38,8 @@ export function StrategyCard({
   const triSleeve = strategy.sleeves.find((x) => isTripodTicker(x.ticker))
   const triInfo = triSleeve ? TRIPOD_SLEEVES[triSleeve.ticker.trim().toUpperCase()] : null
   const timing = executionTiming(strategy)
+  // 트라이팟 슬리브가 직접 사고파는 상품(실물 포함)이 이미 있으면 같은 전략에 넣을 수 없다(검증에서 막힘)
+  const triClash = strategy.sleeves.filter((x) => tripodConflictsFor('TRIPOD').includes(x.ticker.trim().toUpperCase())).map((x) => x.ticker)
 
   return (
     <div className={`${cardCls} p-4 space-y-3`}>
@@ -140,8 +143,13 @@ export function StrategyCard({
           {!triSleeve && (
             <button
               onClick={() => onChange((s) => ({ ...s, sleeves: [...s.sleeves, { ticker: 'TRIPOD', targetWeight: 0 }] }))}
-              className="text-xs text-[#2962ff] dark:text-[#5b8aff] hover:underline"
-              title="트라이팟 신호 전략 슬리브(TRIPOD)를 비중 0%로 추가합니다. 비중을 정해 합계를 100%로 맞추세요"
+              disabled={triClash.length > 0}
+              className="text-xs text-[#2962ff] dark:text-[#5b8aff] hover:underline disabled:text-zinc-400 disabled:no-underline disabled:cursor-not-allowed"
+              title={
+                triClash.length > 0
+                  ? `트라이팟은 QQQ·QLD·TQQQ를 직접 사고팔기 때문에 ${triClash.join(', ')}가 있는 전략에는 넣을 수 없습니다. 전략을 따로 만들어 비교하세요`
+                  : '트라이팟 신호 전략 슬리브(TRIPOD)를 비중 0%로 추가합니다. 비중을 정해 합계를 100%로 맞추세요'
+              }
             >
               + 트라이팟 슬리브
             </button>
@@ -164,41 +172,37 @@ export function StrategyCard({
               {triInfo.top === 3 ? 'TQQQ 100%(3배)' : 'QLD 100%(2배)'}, 아니면 QQQ 50% + QLD 50%(1.5배)
               <br />· <b>하락 국면</b>: VIX 10일 평균이 18 미만이면 QQQ 50% + QLD 50%, 아니면 현금
               <br />판정은 나스닥100 전체 이력(1985년부터)으로 계산해 시작일과 무관하게 이어집니다. 상태가 바뀌면 이 슬리브
-              평가액 전체를 새 비중으로 실제로 사고팔아, 그 매도 이익에 양도세가 해마다 정산됩니다. 상장 전 구간의 QLD·TQQQ는
-              합성 시계열(QLD-EXT·TQQQ-EXT)을 이어 씁니다.
+              평가액 전체를 새 비중으로 실제로 사고팔아, 그 매도 이익에 양도세가 해마다 정산됩니다. 구성 상품은 상장 전 구간을
+              나스닥100 지수 합성으로 이어 붙인 {triInfo.top === 3 ? 'QQQ-EXT·QLD-EXT·TQQQ-EXT' : 'QQQ-EXT·QLD-EXT'}입니다.
+              <br />구성 상품의 배당은 다른 배당처럼 계좌 현금으로 들어와, 아래 적립 배분 규칙대로 다시 투자됩니다.
             </HelpTip>
           </div>
           <p>
             {/* 상품명과 비중이 줄에 걸쳐 갈라지지 않게 NBSP로 묶는다 */}
             신호에 따라 이 슬리브 안에서 {triInfo.top === 3 ? 'TQQQ\u00a0100%' : 'QLD\u00a0100%'} · {'QQQ\u00a050%\u00a0+\u00a0QLD\u00a050%'} · 현금 가운데
             하나를 보유합니다. 다른 자산과의 비중은 아래 리밸런싱 설정이 맞추고, 무매도 설정이어도 신호 전환 매매는 규칙대로 실행됩니다.
+            체결은 아래 "체결 시점"을 따릅니다(규칙 원안은 다음 거래일 종가).
           </p>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <label className={labelCls} htmlFor={`timing-${strategy.id}`}>
-              체결 시점
+          {strategy.sleeves.length > 1 && (
+            <label className="flex items-start gap-2 text-[11.5px]">
+              <input
+                type="checkbox"
+                checked={!!strategy.rebalance.onTripodSwitch}
+                onChange={(e) => onChange((s) => ({ ...s, rebalance: { ...s.rebalance, onTripodSwitch: e.target.checked } }))}
+                className="rounded mt-0.5"
+              />
+              <span>
+                신호가 바뀌는 날 전체 비중도 목표로 맞추기
+                <HelpTip title="신호 전환 때 전체 비중 맞추기" align="right">
+                  켜면 트라이팟 신호가 바뀌어 슬리브 안을 교체하는 날, 다른 자산과의 비중도 함께 목표로 되돌립니다(아래 매도 정책은
+                  그대로 적용). 연구 문서의 적립식 비교에서 쓴 "트라이팟 60% + 현금 40%"가 이 방식입니다. 끄면 아래 리밸런싱
+                  트리거에 따른 날에만 맞춥니다.
+                </HelpTip>
+              </span>
             </label>
-            <select
-              id={`timing-${strategy.id}`}
-              value={timing}
-              onChange={(e) =>
-                onChange((s) => ({ ...s, execution: { ...s.execution, timing: e.target.value as 'next_open' | 'next_close' } }))
-              }
-              className={selectCls}
-            >
-              <option value="next_close">다음 거래일 종가 (규칙 원안)</option>
-              <option value="next_open">다음 거래일 시가</option>
-            </select>
-            <HelpTip title="체결 시점" align="right">
-              오늘 종가로 판정한 신호를 언제 체결할지 정합니다. 이 전략의 적립·리밸런싱 주문도 같은 시점에 체결됩니다.
-              <br />· <b>다음 거래일 종가</b>: 장 마감 주문(MOC·LOC)으로 다음 날 종가에 맞추는 방식으로, 검증에서 영상 수치를 재현한
-              해석입니다.
-              <br />· <b>다음 거래일 시가</b>: 다음 날 장 시작에 체결합니다. 두 방식은 신호 다음 날 장중(시가→종가) 움직임을 이전
-              보유와 새 보유 중 어느 쪽으로 받느냐만 다른데, 검증(2000~2026, 연구 문서 §4.1)에서 연 수익률이 종가 체결 19.8%, 시가 체결
-              15.7%로 차이가 컸습니다.
-            </HelpTip>
-          </div>
+          )}
           <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-            QQQ 상장(1999-03) 이후 구간만 실행할 수 있습니다. 공개된 규칙의 과거 재현이며 미래 성과를 보장하지 않습니다.
+            판정에 VIX가 필요해 1990-01 중순 이후 구간만 실행할 수 있습니다. 공개된 규칙의 과거 재현이며 미래 성과를 보장하지 않습니다.
           </p>
         </div>
       )}
@@ -282,24 +286,30 @@ export function StrategyCard({
             />
           </div>
         )}
-        {!triSleeve && strategy.execution.timing === 'next_close' && (
-          <div className="flex flex-col gap-1">
-            <label className={labelCls} htmlFor={`timing-${strategy.id}`}>
-              체결 시점
-            </label>
-            <select
-              id={`timing-${strategy.id}`}
-              value={timing}
-              onChange={(e) =>
-                onChange((s) => ({ ...s, execution: { ...s.execution, timing: e.target.value as 'next_open' | 'next_close' } }))
-              }
-              className={selectCls}
-            >
-              <option value="next_close">다음 거래일 종가</option>
-              <option value="next_open">다음 거래일 시가 (기본)</option>
-            </select>
-          </div>
-        )}
+        <div className="flex flex-col gap-1">
+          <label className={labelCls} htmlFor={`timing-${strategy.id}`}>
+            체결 시점
+            <HelpTip title="체결 시점" align="right">
+              오늘 종가로 정한 주문(신호 전환·적립·리밸런싱)을 언제 체결할지 정합니다. 어느 쪽이든 판정은 오늘 종가까지의 정보만 씁니다.
+              <br />· <b>다음 거래일 시가</b>: 다음 날 장 시작에 체결(일반 전략 기본값)
+              <br />· <b>다음 거래일 종가</b>: 장 마감 주문(MOC·LOC)으로 다음 날 종가에 맞추는 방식. 트라이팟 전략의 기본값이고,
+              검증에서 영상 수치를 재현한 해석입니다. 트라이팟과 나란히 비교할 전략도 같은 시점으로 맞추면 공정합니다.
+              <br />두 방식은 다음 날 장중(시가→종가) 움직임을 이전 보유와 새 보유 중 어느 쪽으로 받느냐가 다릅니다. 트라이팟은 이 차이가
+              커서, 연구 문서 §4.1(2000~2026, 연구의 가상 상품 기준)에서 연 수익률이 종가 체결 19.8%, 시가 체결 15.7%였습니다.
+            </HelpTip>
+          </label>
+          <select
+            id={`timing-${strategy.id}`}
+            value={timing}
+            onChange={(e) =>
+              onChange((s) => ({ ...s, execution: { ...s.execution, timing: e.target.value as 'next_open' | 'next_close' } }))
+            }
+            className={selectCls}
+          >
+            <option value="next_open">다음 거래일 시가</option>
+            <option value="next_close">다음 거래일 종가</option>
+          </select>
+        </div>
         {needsBand && (
           <div className="flex flex-col gap-1">
             <label className={labelCls}>밴드 폭 (%p)</label>

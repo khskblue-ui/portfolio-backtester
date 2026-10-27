@@ -149,24 +149,27 @@ export function presetTripod(
 }
 
 /**
- * 트라이팟 비교 세트 — 트라이팟 탭의 "백테스트에서 비교" 버튼이 사용.
- * 같은 적립·기간·세금 가정에서 트라이팟·2배판·현금 혼합을 QQQ 보유·QQQ+현금(적립일에 모자란 쪽 채우기)과 견준다
+ * 트라이팟 비교 세트 — 트라이팟 탭의 "백테스트에서 비교하기" 버튼이 사용.
+ * 같은 적립·기간·세금 가정에서 트라이팟·2배판·현금 혼합을 QQQ 보유·QQQ+현금과 견준다. 비교가 규칙 차이로 흐려지지 않게
+ * 다섯 전략 모두 다음 거래일 종가 체결, 적립은 부족한 쪽부터, 현금 혼합 둘은 똑같이 연 1회 리밸런싱으로 맞췄다.
+ * QQQ는 1999-03 상장 전을 나스닥100 지수 합성으로 이은 QQQ-EXT라서 세트 전체가 1990년부터 돈다
  */
 export function tripodComparisonStrategies(): StrategyConfig[] {
   const d = baseDefaults()
-  const plain = (name: string, sleeves: StrategyConfig['sleeves']): StrategyConfig => ({
+  const mk = (name: string, sleeves: StrategyConfig['sleeves'], yearly: boolean): StrategyConfig => ({
     id: nextId(),
     name,
     sleeves,
     contribution: { initialUsd: 10_000, monthlyUsd: 1_000, allocation: 'to_underweight' },
-    rebalance: { trigger: 'none', mode: 'sell_to_target' },
+    rebalance: yearly ? { trigger: 'periodic', periodMonths: 12, mode: 'sell_to_target' } : { trigger: 'none', mode: 'sell_to_target' },
     ...d,
+    execution: { ...d.execution, timing: 'next_close' },
   })
   return [
-    presetTripod('트라이팟 100%'),
-    presetTripod('트라이팟 2배판 100%', [{ ticker: 'TRIPOD-2X', targetWeight: 1 }]),
-    presetTripod('트라이팟 60 + 현금 40', [{ ticker: 'TRIPOD', targetWeight: 0.6 }, { ticker: 'CASH', targetWeight: 0.4 }]),
-    plain('QQQ 100%', [{ ticker: 'QQQ', targetWeight: 1 }]),
-    plain('QQQ 60 + 현금 40', [{ ticker: 'QQQ', targetWeight: 0.6 }, { ticker: 'CASH', targetWeight: 0.4 }]),
+    mk('트라이팟 100%', [{ ticker: 'TRIPOD', targetWeight: 1 }], false),
+    mk('트라이팟 2배판 100%', [{ ticker: 'TRIPOD-2X', targetWeight: 1 }], false),
+    mk('트라이팟 60 + 현금 40 (연 1회 리밸런싱)', [{ ticker: 'TRIPOD', targetWeight: 0.6 }, { ticker: 'CASH', targetWeight: 0.4 }], true),
+    mk('QQQ 100%', [{ ticker: 'QQQ-EXT', targetWeight: 1 }], false),
+    mk('QQQ 60 + 현금 40 (연 1회 리밸런싱)', [{ ticker: 'QQQ-EXT', targetWeight: 0.6 }, { ticker: 'CASH', targetWeight: 0.4 }], true),
   ]
 }

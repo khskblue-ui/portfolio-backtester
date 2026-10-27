@@ -248,12 +248,13 @@ export default function App() {
     setBundle(null)
     setWizardStep(1)
     setView('backtest')
-    // 트라이팟은 QQQ 상장(1999-03-10) 이후만 돌 수 있다 — 그 전에 끝나는 저장 기간(역사 탐구 등)은 전체 기간으로 되돌린다
-    const periodReset = !!shared.endDate && shared.endDate < '1999-03-11'
+    // 트라이팟 판정은 VIX 자료가 쌓이는 1990-01 중순부터 가능하다 — 그 전에 끝나는 저장 기간(역사 탐구 등)은 전체 기간으로 되돌린다
+    const periodReset = !!shared.endDate && shared.endDate < '1990-02-01'
     if (periodReset) setShared((p) => ({ ...p, startDate: '', endDate: '' }))
     setNotice(
-      '트라이팟 비교 세트를 불러왔습니다. 공통 설정(초기 투자금·월 적립·기간)을 확인하고 "백테스트 실행"을 누르세요. 트라이팟 비중을 바꾸거나 현금·비트코인 같은 자산을 더할 수도 있습니다.' +
-        (periodReset ? ' 저장된 기간이 QQQ 상장(1999-03-10) 전에 끝나 기간을 전체로 바꿨습니다.' : ''),
+      '트라이팟 비교 세트를 불러왔습니다. 다섯 전략 모두 다음 거래일 종가에 체결하고, 현금을 섞은 둘은 똑같이 연 1회 리밸런싱합니다. ' +
+        '공통 설정(초기 투자금·월 적립·기간)을 확인하고 "백테스트 실행"을 누르세요. 트라이팟 비중을 바꾸거나 현금·비트코인 같은 자산을 더할 수도 있습니다.' +
+        (periodReset ? ' 저장된 기간이 트라이팟 판정이 가능한 1990-01 전에 끝나 기간을 전체로 바꿨습니다.' : ''),
       'info'
     )
     window.scrollTo({ top: 0 })
@@ -680,7 +681,7 @@ export default function App() {
 
         {/* 티커 자동완성 카탈로그 — 장기 히스토리(^GSPC 1927~ 등) 포함 */}
         <datalist id="asset-catalog">
-          {ASSET_CATALOG.map((a) => (
+          {ASSET_CATALOG.filter((a) => !a.hidden).map((a) => (
             <option key={a.ticker} value={a.ticker}>
               {`${a.label} · ${a.startYear}~ · ${a.group}${a.note ? ' ⚠' : ''}`}
             </option>

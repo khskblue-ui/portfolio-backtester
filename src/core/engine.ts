@@ -38,7 +38,7 @@ import type {
 } from './types'
 import type { TripodState } from './types'
 import { CASH_TICKER } from './types'
-import { isTripodTicker, tripodComponentsFor, tripodWeights, TRIPOD_PRODUCTS, TRIPOD_SLEEVES } from './tripod'
+import { isTripodTicker, tripodComponentsFor, tripodConflictsFor, tripodWeights, TRIPOD_PRODUCTS, TRIPOD_SLEEVES } from './tripod'
 import {
   computeCapitalGainsTax,
   computeCryptoTax,
@@ -146,6 +146,8 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
   const warnings: EngineWarning[] = []
   let dividendsGrossUsd = 0
   let dividendsWithheldUsd = 0
+  let interestWithheldUsd = 0
+  let yearInterest = 0
   let totalFeesUsd = 0
   let totalTaxesUsd = 0
 
@@ -165,12 +167,16 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
   const feeRate = config.costs.feeBps / 10_000
   const spreadRate = config.costs.spreadBps / 10_000
   const fixedYield = config.execution.cashAnnualYieldPct / 100
-  // 유휴현금 금리: 고정값 또는 전일 종가에 관측한 단기국채 금리(그 날짜에 자료가 없으면 고정값)
+  // 유휴현금 금리: 고정값 또는 전일 종가에 관측한 단기국채 금리(그 날짜에 자료가 없으면 고정값).
+  // ^IRX는 13주물 할인율이라 실제 수익률보다 낮다 — 91일 보유수익을 연복리로 바꾼 실효 수익률로 쓴다
   const rateSeries = config.execution.cashYieldSource === 'tbill' ? bundle.cashRate : undefined
   const cashYieldAt = (k: number) => {
     const r = rateSeries?.[k]
-    return r != null && Number.isFinite(r) ? r / 100 : fixedYield
+    if (r == null || !Number.isFinite(r)) return fixedYield
+    return tbillEffectiveYield(r)
   }
+  /** 이자 원천징수율 (세금 반영 시 — 국내 이자소득 15.4% 근사) */
+  const interestWh = config.tax.enabled ? (config.tax.interestWithholdingPct ?? 0) / 100 : 0
 
   const closeAt = (ticker: string, i: number) => bundle.series[ticker].close[i]
   const openAt = (ticker: string, i: number) => bundle.series[ticker].open[i]
@@ -185,6 +191,29 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
   const monthOf = (d: string) => d.slice(0, 7)
   const daysBetween = (a: string, b: string) =>
     Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
+
+  // 시가 자료 품질: 야후 지수의 1999년 이전 시가는 대부분 전일 종가 복사본이다. 그 구간의 '다음 거래일 시가' 체결은
+  // 사실상 판정한 날 종가 체결이 되므로(연구 문서 §4.1) 그런 자산을 시가 체결로 들고 있으면 알린다
+  if (timing === 'next_open' && dates[0] < '2000-01-01') {
+    const flat = positions.filter((t) => {
+      const sr = bundle.series[t]
+      let n = 0
+      let same = 0
+      for (let k = 1; k < N && dates[k] < '2000-01-01'; k++) {
+        n++
+        if (sr.open[k] === sr.close[k - 1]) same++
+      }
+      return n >= 20 && same / n >= 0.5
+    })
+    if (flat.length > 0)
+      warnings.push({
+        date: dates[0],
+        code: 'data_caveat',
+        message:
+          `${flat.join(', ')}의 2000년 이전 시가 자료는 대부분 전일 종가와 같아서, 그 구간의 '다음 거래일 시가' 체결은 사실상 판정한 날 ` +
+          '종가에 체결한 것과 같습니다. 체결 시점을 다음 거래일 종가로 두는 편이 정확합니다',
+      })
+  }
 
   // 월 적립·periodic 판정용: 시작월 기준 경과 개월
   const startYm = monthOf(dates[0])
@@ -205,9 +234,12 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
       const dt = daysBetween(dates[i - 1], date)
       const growthF = Math.pow(1 + cashYield, dt / 365) - 1
       const interest = cash * growthF
-      cash += interest
-      cashLedger += interest
-      triCash += triCash * growthF // 슬리브 몫 현금도 같은 금리
+      const withheld = interest * interestWh
+      cash += interest - withheld
+      cashLedger += interest - withheld
+      interestWithheldUsd += withheld
+      yearInterest += interest
+      triCash += triCash * growthF * (1 - interestWh) // 슬리브 몫 현금도 같은 금리
     }
 
     // ── 2) 배당 (오늘 체결 전 보유분 = ex-date 전일 보유자) ──
@@ -298,7 +330,8 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
       if (cg) { cg.year = year; taxes.push(cg); taxDue += cg.taxUsd }
       const crypto = computeCryptoTax(yearRealized.crypto, config.tax)
       if (crypto) { crypto.year = year; taxes.push(crypto); taxDue += crypto.taxUsd }
-      const divTax = computeDividendComprehensiveTax(yearGrossDividends, config.tax)
+      // 금융소득 종합과세 판정에는 배당과 이자를 합산한다(초과분 추가세율은 배당 기준 근사)
+      const divTax = computeDividendComprehensiveTax(yearGrossDividends + yearInterest, config.tax)
       if (divTax) { divTax.year = year; taxes.push(divTax); taxDue += divTax.taxUsd }
 
       if (taxDue > 0) {
@@ -347,6 +380,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
       if (i === N - 1) finalYearRealized = { ...yearRealized }
       yearRealized = { foreign_equity: 0, crypto: 0 }
       yearGrossDividends = 0
+      yearInterest = 0
     }
 
     // ── 7.5) 강제 매도 후에도 현금이 음수면(시가 갭·수수료가 버퍼 초과) 추가 매도 재시도 ──
@@ -410,6 +444,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     taxes,
     dividendsGrossUsd,
     dividendsWithheldUsd,
+    interestWithheldUsd,
     totalFeesUsd,
     totalTaxesUsd,
     warnings,
@@ -661,8 +696,10 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     const sellsAllowed =
       config.rebalance.mode === 'sell_to_target' ||
       (config.rebalance.mode === 'no_sell_except_periodic' && periodicDue)
+    // 트라이팟 신호 전환 때 바깥 비중도 맞추기 (연구 적립식 문서의 '트라이팟 60%+현금 40%' 정의)
+    const tripodSwitchDue = !!config.rebalance.onTripodSwitch && nextTri != null && triHeld != null && nextTri.target !== triHeld
     const triggerFired =
-      (config.rebalance.trigger !== 'none') && (periodicDue || bandBreached)
+      ((config.rebalance.trigger !== 'none') && (periodicDue || bandBreached)) || tripodSwitchDue
 
     const orders: Order[] = []
 
@@ -773,7 +810,18 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
  * 나머지는 다음 거래일 시가(PRD 4.2 기본)
  */
 export function executionTiming(config: StrategyConfig): 'next_open' | 'next_close' {
-  return config.execution.timing ?? (config.sleeves.some((s) => isTripodTicker(s.ticker)) ? 'next_close' : 'next_open')
+  return config.execution.timing ?? (config.sleeves.some((s) => isTripodTicker(s.ticker) && s.targetWeight > 0) ? 'next_close' : 'next_open')
+}
+
+/**
+ * ^IRX(13주물 국채 할인율, 연 %) → 연 실효 수익률. 가격 = 1 − d·91/360, 91일 보유수익을 365일 복리로 환산.
+ * 예: 할인율 5.81% → 채권 환산 수익률 약 5.98%, 연복리 실효 약 6.11%
+ */
+export function tbillEffectiveYield(discountPct: number): number {
+  const d = discountPct / 100
+  const price = 1 - (d * 91) / 360
+  if (!(price > 0)) return 0
+  return Math.pow(1 / price, 365 / 91) - 1
 }
 
 // ─── 검증 ─────────────────────────────────────────────────────────────────────
@@ -826,10 +874,11 @@ export function validateStrategy(config: StrategyConfig, bundle?: AlignedDataBun
   if (triSleeves.length > 1) errors.push('트라이팟 슬리브(TRIPOD·TRIPOD-2X)는 한 전략에 하나만 넣을 수 있습니다')
   else if (triSleeves.length === 1) {
     const comps = tripodComponentsFor(triSleeves[0].ticker)
-    const clash = config.sleeves.filter((s) => comps.includes(s.ticker.trim().toUpperCase())).map((s) => s.ticker)
+    const conflicts = tripodConflictsFor(triSleeves[0].ticker)
+    const clash = config.sleeves.filter((s) => conflicts.includes(s.ticker.trim().toUpperCase())).map((s) => s.ticker)
     if (clash.length > 0)
       errors.push(
-        `트라이팟 슬리브가 ${comps.join('·')}를 직접 사고팔기 때문에 같은 전략에 ${clash.join(', ')}를 따로 넣을 수 없습니다 — ` +
+        `트라이팟 슬리브가 ${comps.join('·')}를 직접 사고팔기 때문에 같은 전략에 ${clash.join(', ')}를 따로 넣을 수 없습니다. ` +
           '나스닥100 보유와 같이 보려면 전략을 나눠 비교하세요'
       )
   }
