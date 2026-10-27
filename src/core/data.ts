@@ -503,7 +503,20 @@ export async function loadDataBundle(
   if (unique.length === 0) {
     const cashOnly = buildCashOnlyBundle(options)
     if (options?.cashRate) {
-      attachCashRate(cashOnly, await fetchCached(RATE_TICKER, options))
+      try {
+        attachCashRate(cashOnly, await fetchCached(RATE_TICKER, options))
+        // 고정 금리 전제 안내를 실제 금리 안내로 교체
+        cashOnly.clipWarnings = cashOnly.clipWarnings.map((w) =>
+          w.startsWith('현금 100% 실행')
+            ? '현금 100% 실행: 시장 데이터 없이 유휴현금 이자만으로 복리 계산합니다 — 이자는 그날의 미국 단기국채(^IRX) 금리를 씁니다'
+            : w
+        )
+      } catch (e) {
+        cashOnly.cashRate = new Array<number>(cashOnly.dates.length).fill(NaN)
+        cashOnly.clipWarnings.push(
+          `유휴현금 금리: 단기국채 금리(^IRX)를 받지 못해 고정 금리 설정값으로 계산했습니다 (${e instanceof Error ? e.message : String(e)})`
+        )
+      }
       cashOnly.snapshotHash = hashBundle(cashOnly)
     }
     return cashOnly
@@ -539,7 +552,9 @@ export async function loadDataBundle(
     }
   }
   for (const t of unique) planFetch(t)
-  if (anySynthetic || options?.cashRate) toFetch.add(RATE_TICKER)
+  // 역사 월간(-HIST) 모드는 네트워크 없이 도는 번들이라 현금 금리를 고정값으로 둔다(아래 경고)
+  const wantRate = !!options?.cashRate && !monthlyExpected
+  if (anySynthetic) toFetch.add(RATE_TICKER)
   if (tripodSleeves.length > 0) {
     toFetch.add(TRIPOD_SIGNAL_INDEX)
     toFetch.add(TRIPOD_SIGNAL_VIX)
@@ -554,6 +569,15 @@ export async function loadDataBundle(
       continue
     }
     raw.set(t, await fetchCached(t, options, net))
+  }
+  // 현금 금리만을 위한 ^IRX는 실패해도 실행을 막지 않는다 — 고정 금리로 대체하고 경고
+  let rateError: string | null = null
+  if (wantRate && !raw.has(RATE_TICKER)) {
+    try {
+      raw.set(RATE_TICKER, await fetchCached(RATE_TICKER, options, net))
+    } catch (e) {
+      rateError = e instanceof Error ? e.message : String(e)
+    }
   }
 
   const build = (t: string): DailySeries => {
@@ -577,7 +601,17 @@ export async function loadDataBundle(
       )
     }
   }
-  if (options?.cashRate) attachCashRate(bundle, raw.get(RATE_TICKER)!)
+  if (options?.cashRate) {
+    if (wantRate && raw.has(RATE_TICKER)) attachCashRate(bundle, raw.get(RATE_TICKER)!)
+    else {
+      bundle.cashRate = new Array<number>(bundle.dates.length).fill(NaN) // 엔진이 고정 금리로 대체
+      bundle.clipWarnings.push(
+        monthlyExpected
+          ? '유휴현금 금리: 역사 월간 모드는 고정 금리 설정값으로 계산합니다. 실제 역사 단기금리로 현금을 보유하려면 BILL-HIST 자산을 쓰세요'
+          : `유휴현금 금리: 단기국채 금리(^IRX)를 받지 못해 고정 금리 설정값으로 계산했습니다 (${rateError ?? '데이터 없음'})`
+      )
+    }
+  }
   bundle.snapshotHash = hashBundle(bundle)
   return bundle
 }

@@ -10,10 +10,11 @@ import { computeMetrics } from './metrics'
 
 export * from './types'
 export { loadDataBundle, alignToCommonCalendar, fetchDailySeries, isCryptoTicker } from './data'
-export { runBacktest, validateStrategy } from './engine'
+export { runBacktest, validateStrategy, executionTiming } from './engine'
+export { isTripodTicker, tripodComponentsFor, tripodExposure, TRIPOD_SLEEVES, TRIPOD_RULE } from './tripod'
 export { computeMetrics, xirr } from './metrics'
 export { defaultTaxConfig } from './tax'
-export { ASSET_CATALOG, assetCautionFor, type CatalogEntry, type AssetGroup } from './catalog'
+export { ASSET_CATALOG, assetCautionFor, assetCautionList, type CatalogEntry, type AssetGroup } from './catalog'
 export * from './presets'
 
 export interface StrategyRun {

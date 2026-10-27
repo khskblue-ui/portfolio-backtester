@@ -397,3 +397,90 @@ describe('데이터 로드 — TRIPOD 슬리브 해석 (야후 응답 스텁)', 
     }
   }, 20000)
 })
+
+describe('체결 시점 기본값', () => {
+  it('지정하지 않으면 트라이팟 전략은 다음 거래일 종가, 나머지는 시가 — 지정하면 지정값', async () => {
+    const { executionTiming } = await import('../engine')
+    const st = cleanStrategy({ sleeves: [{ ticker: 'TRIPOD', targetWeight: 1 }] })
+    expect(executionTiming(st)).toBe('next_close')
+    expect(executionTiming(cleanStrategy({ sleeves: [{ ticker: 'VOO', targetWeight: 1 }] }))).toBe('next_open')
+    expect(executionTiming({ ...st, execution: { ...st.execution, timing: 'next_open' } })).toBe('next_open')
+  })
+})
+
+describe('유휴현금 금리 — 데이터 로드 대체 경로', () => {
+  it('역사 월간(-HIST) 모드는 ^IRX를 받지 않고 고정 금리로 둔다(경고)', async () => {
+    const { loadDataBundle, resetHistAssetsCache } = await import('../data')
+    const { vi } = await import('vitest')
+    const months = Array.from({ length: 14 }, (_, i) => `19${20 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}-01`)
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ meta: { note: 't', dataEnd: '1921-02' }, assets: { 'SPX-HIST': { dates: months, close: months.map((_, i) => 100 + i) } } }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const b = await loadDataBundle(['SPX-HIST'], { cashRate: true })
+      expect(b.cashRate?.every((r) => Number.isNaN(r))).toBe(true)
+      expect(b.clipWarnings.some((w) => w.includes('역사 월간 모드는 고정 금리'))).toBe(true)
+      expect(fetchMock.mock.calls.every((c) => !String(c[0]).includes('IRX'))).toBe(true)
+      const res = runBacktest({ ...cleanStrategy({ sleeves: [{ ticker: 'SPX-HIST', targetWeight: 0.5 }, { ticker: 'CASH', targetWeight: 0.5 }] }), execution: { fractionalShares: true, cashAnnualYieldPct: 4, minTradeUsd: 100, cashYieldSource: 'tbill' } }, b)
+      expect(res.finalValue).toBeGreaterThan(0)
+    } finally {
+      vi.unstubAllGlobals()
+      resetHistAssetsCache()
+    }
+  })
+
+  it('^IRX 조회가 실패해도 실행은 고정 금리로 계속된다(경고)', async () => {
+    const { loadDataBundle } = await import('../data')
+    const { vi } = await import('vitest')
+    const DAY = 86_400
+    const t0 = Date.parse('2021-01-04T14:30:00Z') / 1000
+    const closes = [100, 101, 102, 103]
+    const body = { chart: { result: [{ meta: { gmtoffset: -18000, dataGranularity: '1d' }, timestamp: closes.map((_, i) => t0 + i * DAY), indicators: { quote: [{ open: closes, close: closes }], adjclose: [{ adjclose: closes }] } }] } }
+    vi.stubGlobal('fetch', vi.fn((url: string) =>
+      Promise.resolve(url.includes('%5EIRX') ? new Response('{}', { status: 404 }) : new Response(JSON.stringify(body), { status: 200 }))
+    ))
+    try {
+      const b = await loadDataBundle(['VOO'], { cashRate: true })
+      expect(b.cashRate).toHaveLength(4)
+      expect(b.cashRate?.every((r) => Number.isNaN(r))).toBe(true)
+      expect(b.clipWarnings.some((w) => w.includes('받지 못해 고정 금리'))).toBe(true)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  }, 20000)
+})
+
+describe('청산 기준 (기간 끝 전량 매도 가정)', () => {
+  const dates = makeDates('2024-03-04', 6)
+  const b = makeBundle(dates, { VOO: { close: [100, 100, 120, 150, 180, 200] } })
+  const taxed = (feeBps = 0) => {
+    const st = cleanStrategy({ sleeves: [{ ticker: 'VOO', targetWeight: 1 }] })
+    return { ...st, costs: { feeBps, spreadBps: 0 }, tax: { ...st.tax, enabled: true } }
+  }
+  it('미실현 이익 $10,000(가정 환율 1,000원) → (1,000만 − 250만) × 22% = $1,650, 청산 후 $18,350', () => {
+    const res = runBacktest(taxed(), b)
+    expect(res.finalValue).toBeCloseTo(20_000, 6)
+    expect(res.liquidation?.taxUsd).toBeCloseTo(1_650, 6)
+    expect(res.liquidation?.valueUsd).toBeCloseTo(18_350, 6)
+    const m = computeMetrics(res)
+    expect(m.liquidatedValue).toBeCloseTo(18_350, 6)
+  })
+  it('같은 해에 이미 실현한 이익과 공제를 나눠 쓴다 (증분 세액)', () => {
+    // 3일 종가 150에 절반 매도 결정 → 4일 체결가 180: 실현 50주 × (180 − 100) = $4,000
+    const st = { ...taxed(), rebalance: { trigger: 'bands' as const, bandAbsPct: 1, mode: 'sell_to_target' as const } }
+    const half = { ...st, sleeves: [{ ticker: 'VOO', targetWeight: 0.5 }, { ticker: 'CASH', targetWeight: 0.5 }] }
+    const res = runBacktest(half, b)
+    const realized = res.trades.filter((t) => t.side === 'SELL').reduce((a, t) => a + (t.realizedPnl ?? 0), 0)
+    const cg = (usd: number) => Math.max(0, usd * 1000 - 2_500_000) * 0.22 / 1000
+    const unrealized = res.daily[5].sleeveValues.VOO - (res.daily[5].sleeveValues.VOO / 200) * 100
+    expect(res.liquidation?.taxUsd).toBeCloseTo(cg(realized + unrealized) - cg(realized), 6)
+  })
+  it('세금을 끄면 청산 비용(수수료)만 빠진다', () => {
+    const st = { ...taxed(10), tax: { ...taxed().tax, enabled: false } }
+    const res = runBacktest(st, b)
+    expect(res.liquidation?.taxUsd).toBe(0)
+    expect(res.liquidation?.costUsd).toBeCloseTo(res.finalValue * 0.001, 6)
+  })
+})

@@ -91,6 +91,10 @@ export function computeMetrics(result: BacktestResult): Metrics {
   }
   flows.push({ date: daily[n - 1].date, amount: daily[n - 1].value })
   const mwrrAnnualPct = xirr(flows) * 100
+  // 청산 기준: 마지막 현금흐름을 전량 매도 후 남는 금액으로 바꾼 XIRR
+  const liquidatedValue = result.liquidation?.valueUsd ?? daily[n - 1].value
+  const liqFlows = flows.slice(0, -1).concat({ date: daily[n - 1].date, amount: liquidatedValue })
+  const liquidatedMwrrAnnualPct = xirr(liqFlows) * 100
 
   return {
     twrrAnnualPct,
@@ -102,6 +106,8 @@ export function computeMetrics(result: BacktestResult): Metrics {
     annualReturns,
     finalValue: result.finalValue,
     totalContributions: result.totalContributions,
+    liquidatedValue,
+    liquidatedMwrrAnnualPct,
   }
 }
 

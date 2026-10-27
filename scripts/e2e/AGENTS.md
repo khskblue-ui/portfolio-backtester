@@ -58,3 +58,12 @@ node scripts/e2e/e2e-wrapaudit.mjs     # 잔존 ≤ 11 확인
 
 <!-- 추가 2026-10-21 -->
 - `e2e-deckaudit.mjs`: 트라이팟 발표 자료(docs/research/tripod/tripod-deck.html)의 겹침·튀어나옴·넘침 검수. 발표 자료를 고친 뒤 실행하고 문제 0건(exit 0)을 확인할 것.
+
+<!-- 추가 2026-10-27 -->
+- `staticserver.mjs`는 `FIXTURES=1`이면 `/yf/v8/finance/chart/<심볼>`을 저장소 스냅숏(`data-src/tripod/*.csv` — QQQ·QLD·TQQQ·SPY·^NDX·^VIX·^IRX·^GSPC·^IXIC)으로
+  야후 v8 형식에 맞춰 응답한다(외부 접속 없음). `PORT`로 포트 지정. 기본(FIXTURES 없음)은 기존처럼 /yf 404.
+- `e2e-tripodrun.mjs`: 트라이팟 탭 → "백테스트에서 비교하기" → 실행 → 비교표·트라이팟 신호 요약·청산 열·보고서, 이어서
+  트라이팟 60 + SPY 30 + 현금 10 혼합·적립식·2007~2013 기간 지정 실행. 390·1280, problems 0이 통과(exit 0).
+  `FIXTURES=1 PORT=4176 node scripts/e2e/staticserver.mjs &` 뒤에 실행.
+- fullaudit·wrapaudit 끝에 트라이팟 비교 세트 카드(트라이팟 안내 패널·체결 시점 선택) 단계가 추가됐다.
+

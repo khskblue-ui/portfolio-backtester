@@ -27,6 +27,18 @@ node scripts/e2e/e2e-wrapaudit.mjs           # 괄호 줄바꿈 품질 — 신�
   그 외가 나오면 회귀 — `nbspShortParens` 적용 누락이나 새 컴포넌트일 가능성이 크다.
 - 결과 리포트는 실행 디렉터리에 audit/, wrap-report.json으로 남는다(.gitignore 대상).
 
+## 백테스트 실행 흐름 (트라이팟 포함, 실제 데이터)
+
+```bash
+npm run build
+FIXTURES=1 PORT=4176 node scripts/e2e/staticserver.mjs &   # /yf를 저장소 스냅숏(data-src/tripod)으로 응답
+node scripts/e2e/e2e-tripodrun.mjs                          # problems 0이면 exit 0
+```
+
+- 트라이팟 탭 → "백테스트에서 비교하기" → 실행 → 비교표·트라이팟 신호 요약·청산 열·보고서 확인, 이어서 트라이팟 60 + SPY 30 +
+  현금 10 혼합·적립식·2007~2013 기간 지정 실행. 화면 넘침·페이지 오류·엔진 정합성 경고가 없어야 한다.
+- 스냅숏에 없는 티커(예: BTC-USD)는 404라 이 모드에서는 쓸 수 없다.
+
 ## 트라이팟 발표 자료 검수
 
 ```bash

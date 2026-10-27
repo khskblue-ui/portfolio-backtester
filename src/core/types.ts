@@ -169,10 +169,11 @@ export interface ExecutionConfig {
   /** 현금 스윕: 유휴현금(CASH 목표 초과분)이 이 금액을 넘으면 다음날 매수 */
   minTradeUsd: number
   /**
-   * 체결 시점 (기본 next_open). t 종가로 정한 주문을
+   * 체결 시점. t 종가로 정한 주문을
    * - next_open: t+1 시가에 체결 (PRD 4.2 기본 규약)
    * - next_close: t+1 종가에 체결 (트라이팟 규칙 원안 — 장 마감 주문으로 다음 거래일 종가에 맞춤)
-   * 어느 쪽이든 결정은 t 종가까지의 정보만 쓴다(룩어헤드 없음)
+   * 어느 쪽이든 결정은 t 종가까지의 정보만 쓴다(룩어헤드 없음).
+   * 생략하면 트라이팟 슬리브가 있는 전략은 next_close, 나머지는 next_open (engine.executionTiming)
    */
   timing?: 'next_open' | 'next_close'
   /** 유휴현금 금리 원천 (기본 fixed = cashAnnualYieldPct). tbill = 그날 관측한 미국 단기국채(^IRX) 금리 */
@@ -293,6 +294,19 @@ export interface TripodRunSummary {
   lastTarget: TripodState | null
 }
 
+/**
+ * 청산 기준 — 마지막 날 종가에 전부 판다고 볼 때. 보유 위주 전략은 양도세가 뒤로 미뤄져 있으므로
+ * 매매가 잦은 전략과 세후를 비교할 때는 이 값이 같은 잣대다(연구 문서 §8의 세후 수치와 같은 기준)
+ */
+export interface LiquidationSummary {
+  /** 전량 매도 비용 (수수료 + 스프레드) */
+  costUsd: number
+  /** 그 매도로 늘어나는 양도세 — 마지막 해 실현손익과 합산해 연 1회 공제 (세금 비활성이면 0) */
+  taxUsd: number
+  /** 청산 후 남는 금액 = 최종 가치 − 비용 − 세금 */
+  valueUsd: number
+}
+
 export interface BacktestResult {
   strategyId: string
   daily: DailyPoint[]
@@ -309,6 +323,8 @@ export interface BacktestResult {
   totalContributions: number
   /** 트라이팟 슬리브가 있는 전략만 */
   tripod?: TripodRunSummary
+  /** 기간 끝 전량 매도 가정 (엔진은 항상 채운다 — 손으로 만든 결과 객체를 위해 선택 필드) */
+  liquidation?: LiquidationSummary
 }
 
 // ─── 지표 (§6) ────────────────────────────────────────────────────────────────
@@ -330,4 +346,8 @@ export interface Metrics {
   annualReturns: { year: number; returnPct: number }[]
   finalValue: number
   totalContributions: number
+  /** 청산 후 가치 (BacktestResult.liquidation.valueUsd) */
+  liquidatedValue: number
+  /** 청산 기준 MWRR 연환산 (%) — 마지막 현금흐름을 청산 후 가치로 둔 XIRR */
+  liquidatedMwrrAnnualPct: number
 }

@@ -14,7 +14,7 @@ JSX와 상태는 전부 .tsx**. 이 분리는 fast refresh 유지 목적도 있�
 
 | 파일 | 설명 |
 |------|------|
-| `common.ts` | 공유 기반 (124줄). `SERIES_COLORS_LIGHT/DARK` 전략 팔레트(6색 고정, `MAX_STRATEGIES`=팔레트 길이), `SharedSettings`+`applyShared()`(전 전략 동일 가정 주입 — 사과 대 사과 비교 보장), 포맷터 4종(U+2212 마이너스), `nbspShortParens()`(괄호 줄바꿈 방지), 클래스 토큰(`cardCls` 등), `uniqueRunLabels()`(recharts dataKey 충돌 방지 — 외관 아닌 정확성 헬퍼) |
+| `common.ts` | 공유 기반. `SERIES_COLORS_LIGHT/DARK` 전략 팔레트(6색 고정, `MAX_STRATEGIES`=팔레트 길이), `SharedSettings`+`applyShared()`(전 전략 동일 가정 주입 — 사과 대 사과 비교 보장), `normalizeShared()`(저장본·가져온 파일을 현재 스키마로 — 유휴현금 금리 원천 기본 tbill, 고정 금리를 바꿔 둔 이전 사용자는 fixed 유지. App은 읽기·쓰기 모두 이걸 거친다), 포맷터 4종(U+2212 마이너스), `nbspShortParens()`(괄호 줄바꿈 방지), 클래스 토큰(`cardCls` 등), `uniqueRunLabels()`(recharts dataKey 충돌 방지 — 외관 아닌 정확성 헬퍼) |
 | `guideContent.ts` | 가이드 2부(경제 공부) 콘텐츠 (956줄, 최대 파일). `GUIDE_CHAPTERS` 9 STEP + `GUIDE_GLOSSARY` + `GUIDE_INTRO`. **가이드 시스템 전체의 타입 홈** (`GuideSection`/`GuideChapter`/`GlossaryEntry`/`AppQuote`) |
 | `tradingGuide.ts` | 가이드 1부(매매 습관 교정) 콘텐츠 (550줄). `TRADING_GUIDE_CHAPTERS` 7챕터 + `TRADING_GUIDE_GLOSSARY` 24항목. `docs/guides/trading-discipline.md`의 앱 포팅 — **3중 동기화 대상** |
 | `guideProgress.ts` | 가이드 학습 진도 (75줄). `GUIDE_PROGRESS_KEY`(`bt_guide_progress_v1`), `loadGuideProgress()`, `computePartProgress()`. GuideView가 쓰고 HomeView가 읽는 유일한 교차 뷰 키 |
@@ -34,11 +34,11 @@ JSX와 상태는 전부 .tsx**. 이 분리는 fast refresh 유지 목적도 있�
 | `HistoryView.tsx` | 역사 연구 탭 (866줄, 최대 컴포넌트). 1900~ 차트, 에피소드 7종, 연대기 음영, 오버레이, 모달 2종 진입. **로컬 `SERIES_COLORS`는 자산 의미론 맵 — common.ts 전략 팔레트와 별개(의도된 분리)** |
 | `GuideView.tsx` | 가이드 탭 셸 (463줄). 파트 전환, TOC, `**bold**` 미니 렌더러, 인용/비유/함정/표/도해 블록, 용어 사전, 스크롤 진도 기록 |
 | `HomeView.tsx` | 홈 콕핏 (239줄). 체제 히어로 + 신호 5종 + 이어서 카드. **세 도메인(신호·학습·백테스트)을 모두 잇는 유일한 허브** |
-| `TripodView.tsx` | 트라이팟 국면 현황 탭. 지금 비중·판정 흐름·조건 3카드(게이지·경계값)·최근 흐름 차트(보유 상태 음영)·신호 이력·후보 가상 추적·검증 요약 |
+| `TripodView.tsx` | 트라이팟 국면 현황 탭. 지금 비중·판정 흐름·조건 3카드(게이지·경계값)·최근 흐름 차트(보유 상태 음영)·신호 이력·후보 가상 추적·검증 요약·"백테스트에서 비교하기"(App이 확인 후 `tripodComparisonStrategies()` 5종으로 교체) |
 | `NowView.tsx` | 현재 신호 탭 (341줄). 체크리스트 + 신호별 1900~ 추이 차트(역사 임계선) |
-| `ResultsSection.tsx` | 백테스트 결과 (507줄). 비교 차트 브러시, 지표 표, 세전/세후 토글, 규칙 에피소드 음영 |
-| `StrategyCard.tsx` | 전략 편집기 (322줄). 슬리브·적립 배분·리밸런싱 규칙 DSL |
-| `SettingsPanel.tsx` | 공통 가정(`SharedSettings`) 편집기 (146줄) |
+| `ResultsSection.tsx` | 백테스트 결과. 비교 차트 브러시(세로축 폭은 최장 눈금에 맞춤), 지표 표(청산 후 가치·청산 MWRR 열 포함), 세전/세후 토글, 규칙 에피소드 음영, 트라이팟 신호 요약 카드(전환 횟수·상태별 보유 비율·마지막 판정), 세금 드래그 카드의 청산 시 추가 양도세 |
+| `StrategyCard.tsx` | 전략 편집기. 슬리브·적립 배분·리밸런싱 규칙 DSL. TRIPOD 슬리브가 있으면 안내 패널과 체결 시점 선택(다음 거래일 종가/시가), "+ 트라이팟 슬리브" 빠른 추가 |
+| `SettingsPanel.tsx` | 공통 가정(`SharedSettings`) 편집기. 유휴현금 금리는 단기국채 실제 금리(기본)/고정 %/년 선택 |
 | `ReportView.tsx` | 인쇄 보고서 오버레이 (328줄). 인쇄 관례상 항상 라이트 스타일, `SERIES_COLORS_LIGHT`만 사용 |
 | `GuideFigure.tsx` | 도해 렌더러 (189줄). `bars`/`flow`/`quad` 3종 — **HTML·CSS 전용, SVG 텍스트 금지가 의도**(폭·테마 무관 라벨 안정). 도해 타입 홈(guideContent가 타입 역수입하는 유일한 사례) |
 | `EraStoryModal.tsx` / `ManiaStoryModal.tsx` | 포털 모달. ManiaStoryModal은 History·Now 두 곳에서 열림 |

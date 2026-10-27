@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { NumberInput } from './NumberInput'
 import { HelpTip } from './HelpTip'
-import { cardCls, inputCls, labelCls, type SharedSettings } from './common'
+import { cardCls, inputCls, selectCls, labelCls, type SharedSettings } from './common'
 
 /** 공통 설정 패널 — 납입·비용·세금 가정을 전 전략에 동일 적용 */
 export function SettingsPanel({
@@ -37,7 +37,38 @@ export function SettingsPanel({
         {num('monthlyUsd', '월 적립금 (USD)', false, '매월 첫 거래일에 들어오는 적립금. 각 전략의 "적립 배분" 규칙대로 매수됩니다.')}
         {num('feeBps', '수수료 (bps)', true, '거래대금 대비 매매 수수료. 1bp = 0.01% (예: 7bps = 0.07%, 해외주식 온라인 수수료 수준). 매수·매도 모두 부과.')}
         {num('spreadBps', '슬리피지 (bps)', true, '호가 스프레드·체결 미끄러짐 근사. 매수는 비싸게, 매도는 싸게 체결된다고 가정 (거래 규모 무관 고정 bps 근사).')}
-        {num('cashYieldPct', '유휴현금 금리 (%/년)', true, '투자되지 않은 현금이 버는 이자 (SGOV·단기국채·파킹 근사). 고금리 국면에서 이걸 빼먹으면 현금 비중 전략의 수익이 과소평가됩니다.')}
+        <div className="flex flex-col gap-1">
+          <label className={labelCls}>
+            유휴현금 금리
+            <HelpTip title="유휴현금 금리">
+              투자되지 않은 현금(현금 슬리브, 트라이팟의 현금 국면, 매수 대기 현금)이 버는 이자입니다.
+              <br />· <b>단기국채 실제 금리</b>(기본): 그날 관측된 미국 13주 국채 금리(^IRX)를 씁니다. 금리가 0%에 가까웠던
+              2009~2015년과 2020~2021년, 5% 안팎이던 2000년·2007년·2023년이 그대로 반영됩니다.
+              <br />· <b>고정 %/년</b>: 입력한 금리를 전 기간에 똑같이 씁니다. 긴 기간을 한 값으로 고정하면 현금 비중이 큰 전략의
+              수익이 실제보다 부풀거나 줄어듭니다.
+              <br />이자에는 세금을 매기지 않습니다(근사).
+            </HelpTip>
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            <select
+              value={shared.cashYieldMode}
+              onChange={(e) => onChange((p) => ({ ...p, cashYieldMode: e.target.value as SharedSettings['cashYieldMode'] }))}
+              className={`${selectCls} flex-1 min-w-0`}
+              aria-label="유휴현금 금리 기준"
+            >
+              <option value="tbill">단기국채 실제 금리</option>
+              <option value="fixed">고정 %/년</option>
+            </select>
+            {shared.cashYieldMode === 'fixed' && (
+              <NumberInput
+                value={shared.cashYieldPct}
+                onChange={(v) => onChange((p) => ({ ...p, cashYieldPct: v }))}
+                allowDecimal
+                className={`${inputCls} !w-16`}
+              />
+            )}
+          </div>
+        </div>
         {num('assumedUsdKrw', '가정 환율 (₩/$, 세금 근사용)', false, '양도세 250만원 공제·금융소득 2,000만원 임계를 USD 손익에 적용하기 위한 고정 환율 가정. 실제 세금은 거래일 환율 기준이라 근사입니다.')}
         {num('marginalRatePct', '가정 한계세율 (%)', true, '금융소득 종합과세(연 2,000만원 초과) 시 적용될 본인의 종합소득 한계세율 가정. 초과 배당에 (한계세율 − 원천 15%)를 추가 과세하는 근사.')}
         {num('otherFinancialIncomeKrw', '기타 금융소득 (₩/년)', false, '이 포트폴리오 밖에서 발생하는 연간 이자·배당 소득. 종합과세 임계(2,000만원) 판정에 합산됩니다.')}

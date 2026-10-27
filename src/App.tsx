@@ -6,6 +6,8 @@ import {
   validateStrategy,
   defaultStrategies,
   emptyStrategy,
+  presetTripod,
+  tripodComparisonStrategies,
   nextId,
   ASSET_CATALOG,
   type StrategyConfig,
@@ -18,6 +20,7 @@ import {
   SERIES_COLORS_DARK,
   MAX_STRATEGIES,
   defaultSharedSettings,
+  normalizeShared,
   applyShared,
   btnPrimaryCls,
   btnGhostCls,
@@ -110,9 +113,12 @@ export default function App() {
 
   // ── 설정 (localStorage 자동 저장 — 백엔드 없는 독립 툴의 저장 수단) ──
   const [strategies, setStrategies] = usePersistentState<StrategyConfig[]>('bt_strategies_v1', defaultStrategies)
-  const [sharedStored, setShared] = usePersistentState<SharedSettings>('bt_shared_v1', defaultSharedSettings)
+  const [sharedStored, setSharedRaw] = usePersistentState<SharedSettings>('bt_shared_v1', defaultSharedSettings)
   // 저장된 설정에 새 필드(예: endDate)가 없어도 기본값으로 채움 — 스키마 확장 호환
-  const shared = useMemo(() => ({ ...defaultSharedSettings(), ...sharedStored }), [sharedStored])
+  const shared = useMemo(() => normalizeShared(sharedStored), [sharedStored])
+  // 쓰기도 정규화한 값으로 — 이전 스키마 저장본에서 바꾼 필드 하나 때문에 기본값 해석이 달라지지 않게
+  const setShared = (next: SharedSettings | ((p: SharedSettings) => SharedSettings)) =>
+    setSharedRaw((p) => (typeof next === 'function' ? next(normalizeShared(p)) : normalizeShared(next)))
 
   // ── 실행 상태 ──
   const [running, setRunning] = useState(false)
@@ -207,6 +213,7 @@ export default function App() {
         startDate: shared.startDate || undefined,
         endDate: shared.endDate || undefined,
         forceRefresh,
+        cashRate: applied.some((s) => s.execution.cashYieldSource === 'tbill'),
       })
       setBundle(b)
       setRuns(runComparison(applied, b))
@@ -220,12 +227,36 @@ export default function App() {
     }
   }
 
-  const addStrategy = () => {
+  const addStrategy = (preset?: 'tripod') => {
     if (strategies.length >= MAX_STRATEGIES) {
       setNotice(`전략은 최대 ${MAX_STRATEGIES}개까지 비교할 수 있습니다`)
       return
     }
-    setStrategies((prev) => [...prev, emptyStrategy(`전략 ${prev.length + 1}`)])
+    setStrategies((prev) => [...prev, preset === 'tripod' ? presetTripod() : emptyStrategy(`전략 ${prev.length + 1}`)])
+  }
+
+  // 트라이팟 탭 → 백테스트: 비교 세트로 전략 목록을 바꾼다 (사용자 전략을 덮어쓰므로 확인)
+  const openTripodBacktest = () => {
+    if (
+      !window.confirm(
+        '현재 전략 목록을 트라이팟 비교 세트 5종(트라이팟, 2배판, 트라이팟 60 + 현금 40, QQQ 100%, QQQ 60 + 현금 40)으로 바꿉니다. 계속할까요?\n(기존 전략이 필요하면 먼저 상단의 내려받기 아이콘으로 JSON 백업하세요)'
+      )
+    )
+      return
+    setStrategies(tripodComparisonStrategies())
+    setRuns(null)
+    setBundle(null)
+    setWizardStep(1)
+    setView('backtest')
+    // 트라이팟은 QQQ 상장(1999-03-10) 이후만 돌 수 있다 — 그 전에 끝나는 저장 기간(역사 탐구 등)은 전체 기간으로 되돌린다
+    const periodReset = !!shared.endDate && shared.endDate < '1999-03-11'
+    if (periodReset) setShared((p) => ({ ...p, startDate: '', endDate: '' }))
+    setNotice(
+      '트라이팟 비교 세트를 불러왔습니다. 공통 설정(초기 투자금·월 적립·기간)을 확인하고 "백테스트 실행"을 누르세요. 트라이팟 비중을 바꾸거나 현금·비트코인 같은 자산을 더할 수도 있습니다.' +
+        (periodReset ? ' 저장된 기간이 QQQ 상장(1999-03-10) 전에 끝나 기간을 전체로 바꿨습니다.' : ''),
+      'info'
+    )
+    window.scrollTo({ top: 0 })
   }
 
   // ── 설정 파일 내보내기/가져오기 (재현성 — 설정 소유권은 사용자에게) ──
@@ -265,7 +296,7 @@ export default function App() {
         ids.add(id)
         return { ...s, id }
       })
-      setShared({ ...defaultSharedSettings(), ...parsed.shared })
+      setShared(normalizeShared(parsed.shared))
       setStrategies(cleaned)
       setRuns(null)
       setBundle(null)
@@ -446,7 +477,7 @@ export default function App() {
 
         {view === 'now' && <NowView theme={theme} />}
 
-        {view === 'tripod' && <TripodView theme={theme} />}
+        {view === 'tripod' && <TripodView theme={theme} onBacktest={openTripodBacktest} />}
 
         {view === 'history' && (
           <HistoryView
@@ -517,12 +548,21 @@ export default function App() {
                 <span className="block text-[9px] font-mono tracking-[0.22em] text-zinc-400 dark:text-zinc-500">STRATEGIES</span>
                 전략 ({strategies.length})
               </h2>
-              <button
-                onClick={addStrategy}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium ${btnGhostCls}`}
-              >
-                <Plus className="w-4 h-4" /> 전략 추가
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => addStrategy('tripod')}
+                  title="트라이팟 신호 전략(TRIPOD 100%)을 추가합니다. 비중과 섞을 자산은 카드에서 바꿀 수 있습니다"
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium ${btnGhostCls}`}
+                >
+                  <Radar className="w-4 h-4" /> 트라이팟
+                </button>
+                <button
+                  onClick={() => addStrategy()}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium ${btnGhostCls}`}
+                >
+                  <Plus className="w-4 h-4" /> 전략 추가
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-1 min-[560px]:grid-cols-2 lg:grid-cols-1 gap-4">
               {strategies.map((s, idx) => (

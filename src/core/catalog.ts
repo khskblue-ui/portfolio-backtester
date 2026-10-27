@@ -50,6 +50,22 @@ export const TRIPOD_NOTE =
   '신호가 바뀔 때의 교체는 실제 매도로 계산해 양도세를 해마다 정산하고, 판정은 미국 종가 기준이며 체결 시점은 전략 카드에서 고릅니다(기본: 다음 거래일 종가). ' +
   '공개된 규칙의 과거 재현일 뿐이며, 규칙이 과거 데이터를 보고 만들어졌다는 한계(과최적화 가능성)가 있습니다'
 
+/** TRIPOD 안내와 함께 보일 때 쓰는 2배판 짧은 안내 (같은 문단 반복 방지) */
+export const TRIPOD_2X_SHORT_NOTE =
+  '트라이팟과 같은 판정 규칙에서 3배 자리(TQQQ 100%)에 QLD 100%를 쓰는 2배판입니다(최대 2배). 구성 상품은 QQQ·QLD-EXT이고 그 밖의 가정·한계는 TRIPOD와 같습니다'
+
+/** 결과·보고서의 자산 주의 목록 — 두 트라이팟 슬리브가 함께 있으면 2배판은 짧은 안내로 */
+export function assetCautionList(tickers: string[]): [string, string][] {
+  const uniq = [...new Set(tickers.map((t) => t.trim().toUpperCase()))]
+  const both = uniq.includes('TRIPOD') && uniq.includes('TRIPOD-2X')
+  const out: [string, string][] = []
+  for (const t of uniq) {
+    const c = both && t === 'TRIPOD-2X' ? TRIPOD_2X_SHORT_NOTE : assetCautionFor(t)
+    if (c) out.push([t, c])
+  }
+  return out
+}
+
 export const ASSET_CATALOG: CatalogEntry[] = [
   // ── 신호 전략: 규칙이 매일 보유 상품을 바꾸는 가상 슬리브 (tripod.ts) ──
   {

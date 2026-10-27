@@ -75,6 +75,13 @@ async function sweep(width, height, tag) {
   await page.getByText('스냅샷').waitFor({ timeout: 60000 })
   await page.waitForTimeout(900)
   await wrapCheck(page, `${tag}/backtest-results`)
+  // 트라이팟 비교 세트 카드 (트라이팟 안내 패널·체결 시점 선택)
+  page.once('dialog', (d) => d.accept())
+  await nav('트라이팟'); await page.waitForTimeout(1200)
+  await page.getByRole('button', { name: '백테스트에서 비교하기' }).click()
+  await page.getByText('트라이팟 슬리브 100%').first().waitFor({ timeout: 10000 })
+  await page.waitForTimeout(500)
+  await wrapCheck(page, `${tag}/backtest-tripod`)
   await page.close()
 }
 

@@ -126,3 +126,47 @@ export function emptyStrategy(name: string): StrategyConfig {
     ...baseDefaults(),
   }
 }
+
+/**
+ * 트라이팟 전략 — 체결은 규칙 원안대로 다음 거래일 종가.
+ * 섞는 자산이 있으면 적립은 부족한 쪽부터, 비중은 1년마다 목표로 되돌린다
+ */
+export function presetTripod(
+  name = '트라이팟 100%',
+  sleeves: StrategyConfig['sleeves'] = [{ ticker: 'TRIPOD', targetWeight: 1 }]
+): StrategyConfig {
+  const d = baseDefaults()
+  const mixed = sleeves.length > 1
+  return {
+    id: nextId(),
+    name,
+    sleeves,
+    contribution: { initialUsd: 10_000, monthlyUsd: 1_000, allocation: 'to_underweight' },
+    rebalance: mixed ? { trigger: 'periodic', periodMonths: 12, mode: 'sell_to_target' } : { trigger: 'none', mode: 'sell_to_target' },
+    ...d,
+    execution: { ...d.execution, timing: 'next_close' },
+  }
+}
+
+/**
+ * 트라이팟 비교 세트 — 트라이팟 탭의 "백테스트에서 비교" 버튼이 사용.
+ * 같은 적립·기간·세금 가정에서 트라이팟·2배판·현금 혼합을 QQQ 보유·QQQ+현금(적립일에 모자란 쪽 채우기)과 견준다
+ */
+export function tripodComparisonStrategies(): StrategyConfig[] {
+  const d = baseDefaults()
+  const plain = (name: string, sleeves: StrategyConfig['sleeves']): StrategyConfig => ({
+    id: nextId(),
+    name,
+    sleeves,
+    contribution: { initialUsd: 10_000, monthlyUsd: 1_000, allocation: 'to_underweight' },
+    rebalance: { trigger: 'none', mode: 'sell_to_target' },
+    ...d,
+  })
+  return [
+    presetTripod('트라이팟 100%'),
+    presetTripod('트라이팟 2배판 100%', [{ ticker: 'TRIPOD-2X', targetWeight: 1 }]),
+    presetTripod('트라이팟 60 + 현금 40', [{ ticker: 'TRIPOD', targetWeight: 0.6 }, { ticker: 'CASH', targetWeight: 0.4 }]),
+    plain('QQQ 100%', [{ ticker: 'QQQ', targetWeight: 1 }]),
+    plain('QQQ 60 + 현금 40', [{ ticker: 'QQQ', targetWeight: 0.6 }, { ticker: 'CASH', targetWeight: 0.4 }]),
+  ]
+}

@@ -7,7 +7,7 @@
 
 결정론 백테스트 엔진 — 데이터 → 엔진 → 세금 → 지표. **React 무관 순수 TS**이며 전부
 테스트로 고정돼 있다. 코드 주석의 `§번호`는 `docs/PRD.md` 섹션 앵커.
-import 그래프는 엄격한 비순환: `types` → {`synthetic`,`tax`,`metrics`} →
+import 그래프는 엄격한 비순환: `types` → {`synthetic`,`tax`,`metrics`,`tripod`} →
 {`catalog`,`presets`,`engine`} → `data` → `index`. 특히 **engine은 data를 import하지
 않는다** (미리 만들어진 `AlignedDataBundle`을 소비).
 
@@ -16,12 +16,13 @@ import 그래프는 엄격한 비순환: `types` → {`synthetic`,`tax`,`metrics
 | 파일 | 설명 |
 |------|------|
 | `types.ts` | 타입 어휘 전체 (~296줄, leaf). 전략 DSL(`AllocationPolicy`/`RebalanceTrigger`/`SellMode`/`DrawdownRule`), 데이터 형태(`DailySeries`/`AlignedDataBundle`), 세금·출력 레코드. 유일한 값 export는 `CASH_TICKER` |
-| `engine.ts` | 상태기계 시뮬레이터 (~610줄). `runBacktest()`, `validateStrategy()`(한국어 오류 반환). t 종가 관측 → t+1 시가 체결을 `pendingOrders` 큐로 구조화해 **룩어헤드가 코드상 불가능** |
+| `engine.ts` | 상태기계 시뮬레이터. `runBacktest()`, `validateStrategy()`(한국어 오류 반환), `executionTiming()`. t 종가 관측 → t+1 체결(기본 시가, `execution.timing='next_close'`면 종가)을 `pendingOrders`·`pendingTri` 큐로 구조화해 **룩어헤드가 코드상 불가능**. TRIPOD 신호 슬리브와 기간 끝 청산 기준(`liquidation`)도 여기 |
+| `tripod.ts` | 트라이팟 판정 (순수). 연구 `scripts/tripod/lib.mjs` computeSignals(RULE_DEFAULT)의 이식 — 이동평균 누적합·52주 단조 덱까지 같게 옮겨 1985~2026 배열이 일치(`tests/tripod-backtest.test.ts`). `TRIPOD_SLEEVES`(TRIPOD 3배·TRIPOD-2X 2배판), 구성 상품 `QQQ`·`QLD-EXT`·`TQQQ-EXT`, `alignTripodTargets`(지수 달력 → 백테스트 달력) |
 | `data.ts` | 데이터 레이어 (~585줄). Yahoo v8 파싱(`parseYahooChart`), 해상도 다운그레이드 복구(20년 청크 재조회), 429 백오프(1.5s→3s→6s, 순차 +400ms), 24h localStorage 캐시, 공통 캘린더 정렬(`alignToCommonCalendar`), 스냅샷 해시(FNV-1a), `-HIST` 번들 로더, `-SIM` 합성 해석 |
 | `tax.ts` | 한국 세제 순수 함수 (~124줄). 연 손익통산 양도세(가정환율 × −250만 → 22%), 배당 15% 원천 + 종합과세 근사, 크립토 별도 그룹(기본 비활성), `resolveTaxClass` |
 | `metrics.ts` | 지표 (~137줄). TWRR(외부 흐름 제거)·MWRR(`xirr` — 결정론 이분법)·growth-of-$1 기준 MDD·수면하 일수(달력일 기준 — 해상도 불변)·관측 빈도 자동 연율화(일간 ≈252, 월간 12) |
 | `catalog.ts` | 자산 카탈로그 ~40종 (~150줄). 그룹 7종, `-HIST` 4종·`-SIM` 4종 포함, `assetCautionFor()`(지수·선물·합성·월간 주의문), `isBundleTicker()` |
-| `synthetic.ts` | 레버리지 ETF 소급 합성 (~83줄). `buildLeveragedSeries` — `1 + L·r − (L−1)(^IRX+스프레드)/365 − 보수/365`, 배당락일 시가 보정으로 유령 ×L 갭 방지, 음수 방지 클램프 |
+| `synthetic.ts` | 레버리지 ETF 소급 합성. `buildLeveragedSeries` — `1 + L·r − (L−1)(^IRX+스프레드)/365 − 보수/365`, 배당락일 시가 보정으로 유령 ×L 갭 방지, 음수 방지 클램프. `spliceSeries` — 실물 상장 뒤는 실물, 그 전은 합성을 가격이 이어지게 연결(-EXT) |
 | `presets.ts` | 전략 프리셋 (~128줄). 기본 3종 + `histEraStrategies()`(역사 탭 -HIST 3종) + `emptyStrategy()`. id는 UUID(`nextId` — 카운터는 localStorage 복원 후 충돌) |
 | `index.ts` | 공개 배럴 + `runComparison()` — 각 전략을 **세금 on/off 2회 실행**해 세금 드래그 분리. 파서·해시·세금 계산 함수 등은 의도적으로 미재수출(테스트가 모듈 직접 import) |
 
@@ -31,7 +32,7 @@ import 그래프는 엄격한 비순환: `types` → {`synthetic`,`tax`,`metrics
 |---|------|------|
 | 1 | 유휴현금 이자 | 실제 경과일수 복리. 배당보다 먼저(당일 배당에 이전 기간 이자 미부과) |
 | 2 | 배당 (ex-date) | 체결 전 보유분 기준, 15% 원천 즉시 차감 |
-| 3 | 오더 체결 (t 시가) | **매도 먼저**(이동평균 원가 → `yearRealized`), 매수는 예산 비례 축소, 정수주 모드는 floor |
+| 3 | 오더 체결 (t 시가, `next_close`면 t 종가) | **매도 먼저**(이동평균 원가 → `yearRealized`) → 트라이팟 슬리브(인출·입금·신호 전환) → 매수는 예산 비례 축소, 정수주 모드는 floor. 유입(4)보다 먼저라 두 체결 시점의 예산 축소 규칙이 같다 |
 | 4 | 외부 현금 유입 | i===0 포함 월 시작일 적립. overrides → 전일 관측 규칙의 `contributionMultiplier` 순 적용 |
 | 5 | 종가 평가 | `value = cash + marketValue(i)` |
 | 5.5 | 낙폭 관측 | growth 피크·투입원금 두 기준, **가장 깊은 규칙 하나만** `activeRule`로 |
@@ -77,3 +78,22 @@ import 그래프는 엄격한 비순환: `types` → {`synthetic`,`tax`,`metrics
 - 없음 (의존성 zero — 표준 라이브러리만). UI 쪽에서만 react·recharts 사용
 
 <!-- MANUAL: 이 줄 아래의 수동 메모는 재생성 시 보존됩니다 -->
+
+<!-- 추가 2026-10-27 -->
+### 트라이팟 신호 슬리브 (TRIPOD / TRIPOD-2X)
+
+- 바깥에서는 슬리브 하나(목표 비중·적립 배분·리밸런싱 대상), 안에서는 신호 상태에 따라 `QQQ`·`QLD-EXT`·`TQQQ-EXT`와
+  슬리브 몫 현금 `triCash`를 실제 포지션으로 보유한다. `triCash`는 `cash`에 포함된 꼬리표(0 ≤ triCash ≤ max(0, cash))라
+  이자·세금은 계좌 현금 전체 기준이고, CASH 슬리브 값과 자유현금은 `cash − triCash`다.
+- 신호가 바뀌면 다음 체결 때 슬리브 평가액 전체를 **체결 가격 기준** 새 비중으로 맞춘다(연구 close1·open1과 같은 방식,
+  비용 0에서 1e-9 일치). 상태가 같으면 1.5배 혼합은 흘러가게 두고, 들어온 돈만 **결정 시점(t 종가)** 미달분으로 배분한다
+  (일반 슬리브 매수 예산 규약과 같아 고정 신호 = 일반 보유가 정확히 같다). 바깥 리밸런싱 매도는 결정 시점 보유의 비율로 뺀다.
+- 판정은 나스닥100 전 기간으로 계산해 번들(`bundle.tripod.target`)에 붙인다 — 시작일과 무관하게 국면 이력이 이어진다.
+  판정이 없는 날(준비 전)은 현금. 빈 슬리브(비중 0%)는 상태만 따라가고 전환 기록을 남기지 않는다.
+- 같은 전략에 트라이팟 슬리브는 하나, 구성 상품과 같은 티커를 따로 넣는 것은 금지(이동평균 원가가 섞이므로 검증에서 차단).
+- 체결 시점을 지정하지 않으면 트라이팟 전략은 `next_close`(규칙 원안), 나머지는 `next_open`(`executionTiming`).
+- 청산 기준(`result.liquidation`, `metrics.liquidatedValue`·`liquidatedMwrrAnnualPct`): 마지막 날 종가 전량 매도의 비용과
+  늘어나는 양도세(마지막 해 실현손익과 합산해 공제 1회). 보유 전략의 이연된 세금까지 같은 잣대로 비교하는 값이다.
+- 유휴현금 금리 `execution.cashYieldSource='tbill'`이면 전일 종가 ^IRX(`bundle.cashRate`)를 쓰고, 값이 없는 날(NaN)은 고정 금리.
+  -HIST 모드와 ^IRX 조회 실패는 data.ts가 NaN 배열 + 경고로 대체한다(실행을 막지 않음).
+

@@ -12,9 +12,9 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { NumberInput } from './NumberInput'
-import { assetCautionFor, type StrategyRun, type AlignedDataBundle } from '@/core'
+import { assetCautionList, executionTiming, TRIPOD_SLEEVES, type StrategyRun, type AlignedDataBundle, type TripodState } from '@/core'
 import { HelpTip } from './HelpTip'
-import { cardCls, fmtUsd, fmtSignedUsd, fmtPct, fmtSignedPct , uniqueRunLabels } from './common'
+import { cardCls, fmtUsd, fmtSignedUsd, fmtPct, fmtSignedPct , uniqueRunLabels, SERIES_COLORS_LIGHT, SERIES_COLORS_DARK } from './common'
 
 /**
  * 결과 섹션 (§7) — TWRR 기준 정렬 비교표 + growth-of-$1 오버레이 +
@@ -84,6 +84,23 @@ export function ResultsSection({
     return rows
   }, [runs, taxView, labelOf])
 
+  // 세로축 폭: 레버리지 전략은 누적 수익률이 수만 %가 되므로 가장 긴 눈금 글자 수에 맞춘다(잘림 방지)
+  const yTick = (g: number) => `${g >= 1 ? '+' : ''}${((g - 1) * 100).toFixed(0)}%`
+  const yAxisWidth = useMemo(() => {
+    let lo = 1
+    let hi = 1
+    for (const row of chartData)
+      for (const r of runs) {
+        const v = Number(row[labelOf.get(r.config.id)!])
+        if (Number.isFinite(v)) {
+          if (v > hi) hi = v
+          if (v < lo) lo = v
+        }
+      }
+    const chars = Math.max(yTick(hi).length, yTick(lo).length)
+    return Math.min(96, Math.max(48, 10 + chars * 7))
+  }, [chartData, runs, labelOf])
+
   const engineWarnings = useMemo(() => {
     const agg: { name: string; code: string; count: number; first: string }[] = []
     for (const r of runs) {
@@ -99,16 +116,14 @@ export function ResultsSection({
   }, [runs, labelOf])
 
   // 지수/선물 등 "실매매 불가 자산" 가정 경고 (카탈로그 note + ^/=F 패턴)
-  const assetCautions = useMemo(() => {
-    const seen = new Map<string, string>()
-    for (const r of runs) {
-      for (const s of r.config.sleeves) {
-        const caution = assetCautionFor(s.ticker)
-        if (caution && !seen.has(s.ticker)) seen.set(s.ticker, caution)
-      }
-    }
-    return [...seen.entries()]
-  }, [runs])
+  const assetCautions = useMemo(() => assetCautionList(runs.flatMap((r) => r.config.sleeves.map((s) => s.ticker))), [runs])
+
+  // 트라이팟 슬리브가 있는 전략 (신호 요약 카드)
+  const tripodRuns = useMemo(() => runs.filter((r) => r.postTax.result.tripod), [runs])
+  const stateColors = useMemo(() => {
+    const p = theme === 'dark' ? SERIES_COLORS_DARK : SERIES_COLORS_LIGHT
+    return { T3: p[5], B15: p[4], CASH: theme === 'dark' ? '#6b7280' : '#9ca3af' } as Record<TripodState, string>
+  }, [theme])
 
   const years = useMemo(() => {
     const set = new Set<number>()
@@ -192,9 +207,9 @@ export function ResultsSection({
             <YAxis
               tick={{ fontSize: 11, fill: axisTickColor }}
               stroke={axisTickColor}
-              width={48}
+              width={yAxisWidth}
               domain={['auto', 'auto']}
-              tickFormatter={(g: number) => `${g >= 1 ? '+' : ''}${((g - 1) * 100).toFixed(0)}%`}
+              tickFormatter={yTick}
             />
             <Tooltip content={<MoneyTooltip colorByName={colorByName} />} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -278,7 +293,7 @@ export function ResultsSection({
 
       {/* 비교 테이블 (§7 TWRR 정렬) */}
       <div className={`${cardCls} overflow-x-auto`}>
-        <table className="ledger-table w-full text-xs min-w-[880px]">
+        <table className="ledger-table w-full text-xs min-w-[1040px]">
           <thead>
             <tr className="text-zinc-500 dark:text-zinc-500 border-b border-[#d3d8e3] dark:border-[#363a45]">
               <th className="text-left px-4 py-3 font-medium">전략</th>
@@ -339,8 +354,30 @@ export function ResultsSection({
                 </HelpTip>
               </th>
               <th className="text-right px-3 py-3 font-medium">최종 가치</th>
+              <th className="text-right px-3 py-3 font-medium">
+                청산 후 가치
+                <HelpTip title="청산 후 가치 — 마지막 날 전부 판다면" align="right">
+                  기간 마지막 날 종가에 <b>모든 자산을 판다고 가정</b>했을 때 손에 남는 금액입니다. 매도 비용과, 아직 팔지 않은
+                  평가이익에 붙는 양도세(그해 실현손익과 합쳐 연 250만 원 공제 후 22%)를 뺍니다.
+                  <br />오래 들고만 있는 전략은 세금이 뒤로 미뤄져 있어 "최종 가치"가 실제보다 좋아 보입니다. 신호 전환으로 자주
+                  파는 전략(트라이팟 등)과 <b>세후를 공정하게 비교하려면 이 값</b>을 보세요. 세전 보기에서는 매도 비용만 뺍니다.
+                </HelpTip>
+              </th>
+              <th className="text-right px-3 py-3 font-medium">
+                청산 MWRR/년
+                <HelpTip title="청산 기준 MWRR/년" align="right">
+                  MWRR(내 돈의 실제 연평균 수익률)을 계산할 때 마지막 금액을 "청산 후 가치"로 바꾼 값입니다. 거치식이면 청산 기준
+                  연복리 수익률과 같습니다.
+                </HelpTip>
+              </th>
               <th className="text-right px-3 py-3 font-medium">총 납입</th>
-              <th className="text-right px-3 py-3 font-medium">세금</th>
+              <th className="text-right px-3 py-3 font-medium">
+                세금
+                <HelpTip title="세금 — 기간 중 실제로 낸 세금" align="right">
+                  기간 동안 낸 양도세(연말 정산)와 배당 원천징수 합계입니다. 기간 끝까지 팔지 않은 평가이익의 세금은 들어 있지
+                  않고, "청산 후 가치"에서 따로 뺍니다.
+                </HelpTip>
+              </th>
               <th className="text-right px-3 py-3 font-medium">비용</th>
               <th className="text-right px-3 py-3 font-medium">거래</th>
             </tr>
@@ -361,6 +398,8 @@ export function ResultsSection({
                   <td className="text-right px-3 py-2.5">{m.maxUnderwaterDays}</td>
                   <td className="text-right px-3 py-2.5">{fmtPct(m.volAnnualPct)}</td>
                   <td className="text-right px-3 py-2.5 font-semibold">{fmtUsd(m.finalValue)}</td>
+                  <td className="text-right px-3 py-2.5 font-semibold">{fmtUsd(m.liquidatedValue)}</td>
+                  <td className="text-right px-3 py-2.5">{fmtPct(m.liquidatedMwrrAnnualPct)}</td>
                   <td className="text-right px-3 py-2.5">{fmtUsd(m.totalContributions)}</td>
                   {/* 세금 = 연말 정산분 + 배당 원천징수 (원천도 실제 납부 세금) */}
                   <td className="text-right px-3 py-2.5">
@@ -375,6 +414,62 @@ export function ResultsSection({
         </table>
       </div>
 
+      {/* 트라이팟 신호 요약 — 전환 횟수·상태별 보유 기간·마지막 판정 */}
+      {tripodRuns.length > 0 && (
+        <div className={`${cardCls} p-5`}>
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3">
+            트라이팟 신호 요약
+            <HelpTip title="트라이팟 신호 요약">
+              트라이팟 슬리브가 이 기간에 신호를 몇 번 바꿨고, 어떤 상태로 얼마나 오래 있었는지입니다. 신호 전환은 슬리브 전체를
+              사고파는 거래라 비용과 양도세가 생깁니다. 보유 기간은 첫 진입 이후 거래일 기준이고, 마지막 판정은 기간 마지막 날
+              종가로 정한 상태(다음 거래일에 체결될 상태)입니다.
+            </HelpTip>
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {tripodRuns.map((r) => {
+              const t = r[taxView].result.tripod!
+              const top = TRIPOD_SLEEVES[t.sleeve.trim().toUpperCase()]?.top ?? 3
+              const total = t.daysByState.T3 + t.daysByState.B15 + t.daysByState.CASH
+              const n = t.switches.filter((x) => x.from !== null).length
+              const lastDate = bundle.dates[bundle.dates.length - 1]
+              const first = t.switches[0]?.date
+              const yrs = first ? (Date.parse(lastDate) - Date.parse(first)) / (365.25 * 86_400_000) : 0
+              const name: Record<TripodState, string> = { T3: top === 3 ? '3배 TQQQ' : '2배 QLD', B15: '1.5배 QQQ+QLD', CASH: '현금' }
+              const share = (k: TripodState) => (total > 0 ? (t.daysByState[k] / total) * 100 : 0)
+              return (
+                <div key={r.config.id} className="border border-[#dfe3ec] dark:border-[#2a2e39] rounded p-3 space-y-2 text-xs">
+                  <div className="text-zinc-500 dark:text-zinc-400">
+                    <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: colorOf.get(r.config.id) }} />
+                    {labelOf.get(r.config.id)!}
+                  </div>
+                  <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                    신호 전환 {n}회{' '}
+                    <span className="text-xs font-normal text-gray-400">(연 {yrs > 0 ? (n / yrs).toFixed(1) : '—'}회)</span>
+                  </div>
+                  <div className="flex h-2 rounded overflow-hidden bg-[#eef1f5] dark:bg-[#2a2e39]" aria-hidden="true">
+                    {(['T3', 'B15', 'CASH'] as const).map((k) => (
+                      <div key={k} style={{ width: `${share(k)}%`, backgroundColor: stateColors[k] }} />
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-zinc-600 dark:text-zinc-300">
+                    {(['T3', 'B15', 'CASH'] as const).map((k) => (
+                      <span key={k} className="whitespace-nowrap">
+                        <span className="inline-block w-2 h-2 rounded-sm mr-1 align-middle" style={{ backgroundColor: stateColors[k] }} />
+                        {name[k]} {share(k).toFixed(0)}%
+                      </span>
+                    ))}
+                  </div>
+                  <div className="text-[11px] text-gray-400 leading-relaxed">
+                    체결 {executionTiming(r.config) === 'next_close' ? '다음 거래일 종가' : '다음 거래일 시가'} · 마지막 판정{' '}
+                    <span className="whitespace-nowrap">({lastDate} 종가)</span> {t.lastTarget ? name[t.lastTarget] : '판정 없음'}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* 세금 드래그 요약 (5.5 — 이 툴의 핵심 가치) */}
       {taxEnabled && (
         <div className={`${cardCls} p-5`}>
@@ -382,7 +477,8 @@ export function ResultsSection({
             세금 드래그 (세전 − 세후)
             <HelpTip title="세금 드래그 — 세금이 깎아먹는 연 수익률">
               <b>같은 전략을 세금 없이 돌렸을 때</b>와 실제 세금(양도세 + 배당
-              원천징수 15%)을 내면서 돌렸을 때의 연 수익률 차이입니다.
+              원천징수 15%)을 내면서 돌렸을 때의 연 수익률 차이입니다. 기간 끝까지 팔지 않은 평가이익의 세금은 이 차이에
+              들어 있지 않아, 그 몫은 카드 아래 줄(기간 끝에 모두 팔면)에 따로 보여 줍니다.
               <br />예: −0.50%p/년 = 세금 때문에 매년 수익률이 0.5%포인트씩
               깎였다는 뜻. 복리로 쌓이면 장기에선 큰 금액입니다.
               <br />리밸런싱 매도가 잦을수록 이익 실현 → 과세가 앞당겨져 드래그가
@@ -403,6 +499,14 @@ export function ResultsSection({
                   <div className="text-xs text-gray-400 mt-0.5">
                     양도세 {fmtUsd(res.totalTaxesUsd)} + 배당 원천 {fmtUsd(res.dividendsWithheldUsd)} — 실현익 과세와 원천징수가 만드는 복리 드래그
                   </div>
+                  {res.liquidation && (
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                      기간 끝에 모두 팔면 추가 양도세 {fmtUsd(res.liquidation.taxUsd)} → 청산 기준 MWRR{' '}
+                      <span className="whitespace-nowrap">
+                        {fmtPct(r.postTax.metrics.liquidatedMwrrAnnualPct)} (세전 {fmtPct(r.preTax.metrics.liquidatedMwrrAnnualPct)})
+                      </span>
+                    </div>
+                  )}
                 </div>
               )
             })}

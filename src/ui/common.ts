@@ -18,6 +18,8 @@ export interface SharedSettings {
   monthlyUsd: number
   feeBps: number
   spreadBps: number
+  /** 유휴현금 금리 원천 — tbill: 그날 미국 단기국채(^IRX) 실제 금리, fixed: cashYieldPct 고정 */
+  cashYieldMode: 'tbill' | 'fixed'
   cashYieldPct: number
   fractionalShares: boolean
   taxEnabled: boolean
@@ -36,6 +38,7 @@ export const defaultSharedSettings = (): SharedSettings => ({
   monthlyUsd: 1_000,
   feeBps: 7,
   spreadBps: 3,
+  cashYieldMode: 'tbill',
   cashYieldPct: 4,
   fractionalShares: true,
   taxEnabled: true,
@@ -47,6 +50,20 @@ export const defaultSharedSettings = (): SharedSettings => ({
   endDate: '',
   contributionOverrides: [],
 })
+
+/**
+ * 저장본·가져온 파일의 공통 설정을 현재 스키마로 맞춘다 — 없는 필드는 기본값.
+ * 유휴현금 금리 원천(cashYieldMode)이 생기기 전에 고정 금리를 직접 바꿔 둔 사용자(기본 4% 아님)는
+ * 그 선택을 존중해 고정 모드로 두고, 나머지는 실제 단기국채 금리(기본)로 옮긴다
+ */
+export function normalizeShared(raw: Partial<SharedSettings> | null | undefined): SharedSettings {
+  const base = defaultSharedSettings()
+  const merged = { ...base, ...(raw ?? {}) }
+  if (raw?.cashYieldMode !== 'tbill' && raw?.cashYieldMode !== 'fixed') {
+    merged.cashYieldMode = raw?.cashYieldPct != null && raw.cashYieldPct !== base.cashYieldPct ? 'fixed' : 'tbill'
+  }
+  return merged
+}
 
 /** 공통 설정을 전략에 주입 — 실행 직전에 적용해 전략 간 가정 불일치를 차단 */
 export function applyShared(s: StrategyConfig, g: SharedSettings): StrategyConfig {
@@ -64,6 +81,7 @@ export function applyShared(s: StrategyConfig, g: SharedSettings): StrategyConfi
       ...s.execution,
       fractionalShares: g.fractionalShares,
       cashAnnualYieldPct: g.cashYieldPct,
+      cashYieldSource: g.cashYieldMode,
     },
     tax,
   }

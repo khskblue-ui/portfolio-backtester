@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts'
 import { Printer, X } from 'lucide-react'
 import type { StrategyRun, AlignedDataBundle, StrategyConfig } from '@/core'
-import { assetCautionFor } from '@/core'
+import { assetCautionFor, assetCautionList, executionTiming, TRIPOD_SLEEVES } from '@/core'
 import { SERIES_COLORS_LIGHT, fmtUsd, fmtSignedUsd, fmtPct, type SharedSettings , uniqueRunLabels } from './common'
 
 /**
@@ -57,6 +57,22 @@ export function ReportView({
     return rows
   }, [runs, labelOf])
 
+  // 세로축 폭: 가장 긴 눈금 글자 수에 맞춘다 (레버리지 전략의 수만 % 눈금 잘림 방지)
+  const yTick = (g: number) => `${g >= 1 ? '+' : ''}${((g - 1) * 100).toFixed(0)}%`
+  const yAxisWidth = useMemo(() => {
+    let lo = 1
+    let hi = 1
+    for (const row of chartData)
+      for (const r of runs) {
+        const v = Number(row[labelOf.get(r.config.id)!])
+        if (Number.isFinite(v)) {
+          if (v > hi) hi = v
+          if (v < lo) lo = v
+        }
+      }
+    return Math.min(96, Math.max(48, 10 + Math.max(yTick(hi).length, yTick(lo).length) * 6.5))
+  }, [chartData, runs, labelOf])
+
   const period = `${bundle.dates[0]} ~ ${bundle.dates[bundle.dates.length - 1]}`
   const generatedAt = new Date().toISOString().slice(0, 10)
 
@@ -101,7 +117,7 @@ export function ReportView({
             <span>월 적립 {fmtUsd(shared.monthlyUsd)}</span>
             <span>수수료 {shared.feeBps}bps</span>
             <span>슬리피지 {shared.spreadBps}bps</span>
-            <span>유휴현금 금리 {shared.cashYieldPct}%/년</span>
+            <span>유휴현금 금리 {shared.cashYieldMode === 'tbill' ? '미국 단기국채(^IRX) 실제 금리' : `${shared.cashYieldPct}%/년 고정`}</span>
             <span>가정 환율 ₩{shared.assumedUsdKrw.toLocaleString()}/$</span>
             <span>한국 세금 {shared.taxEnabled ? '반영' : '미반영'}</span>
             <span>분수주 {shared.fractionalShares ? '허용' : '불가(정수주)'}</span>
@@ -133,6 +149,7 @@ export function ReportView({
               <th className={`${thCls} text-right`}>최장 회복기간(일)</th>
               <th className={`${thCls} text-right`}>변동성/년</th>
               <th className={`${thCls} text-right`}>최종 가치</th>
+              <th className={`${thCls} text-right`}>청산 후 가치</th>
               <th className={`${thCls} text-right`}>총 수익금</th>
             </tr>
           </thead>
@@ -151,6 +168,7 @@ export function ReportView({
                   <td className={`${tdCls} text-right`}>{m.maxUnderwaterDays}</td>
                   <td className={`${tdCls} text-right`}>{fmtPct(m.volAnnualPct)}</td>
                   <td className={`${tdCls} text-right font-semibold`}>{fmtUsd(m.finalValue)}</td>
+                  <td className={`${tdCls} text-right`}>{fmtUsd(m.liquidatedValue)}</td>
                   <td className={`${tdCls} text-right`}>{fmtSignedUsd(m.finalValue - m.totalContributions)}</td>
                 </tr>
               )
@@ -164,7 +182,7 @@ export function ReportView({
           <LineChart data={chartData} width={860} height={300} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
             <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#6b7280' }} stroke="#6b7280" minTickGap={60} tickFormatter={(d: string) => d.slice(0, 7)} />
-            <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} stroke="#6b7280" width={48} domain={['auto', 'auto']} tickFormatter={(g: number) => `${g >= 1 ? '+' : ''}${((g - 1) * 100).toFixed(0)}%`} />
+            <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} stroke="#6b7280" width={yAxisWidth} domain={['auto', 'auto']} tickFormatter={yTick} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             {runs.map((r) => (
               <Line key={r.config.id} type="monotone" dataKey={labelOf.get(r.config.id)!} stroke={colorOf.get(r.config.id)} strokeWidth={2} dot={false} isAnimationActive={false} />
@@ -178,12 +196,9 @@ export function ReportView({
             {bundle.clipWarnings.map((w, i) => (
               <p key={i}>⚠ {w}</p>
             ))}
-            {[...new Set(runs.flatMap((r) => r.config.sleeves.map((s) => s.ticker)))]
-              .map((t) => ({ t, c: assetCautionFor(t) }))
-              .filter((x) => x.c)
-              .map((x) => (
-                <p key={x.t}>⚠ [{x.t}] {x.c}</p>
-              ))}
+            {assetCautionList(runs.flatMap((r) => r.config.sleeves.map((s) => s.ticker))).map(([t, c]) => (
+              <p key={t}>⚠ [{t}] {c}</p>
+            ))}
           </div>
         )}
 
@@ -193,8 +208,8 @@ export function ReportView({
         ))}
 
         <p className="text-xs text-gray-400 mt-8">
-          데이터는 야후 파이낸스·Stooq의 일별 종가입니다. 매매는 결정 다음 거래일의 시가에 체결되고, 매도 원가는 평균
-          매입단가로 계산한다고 가정했습니다. 세금은 한국 기준 근사치입니다(양도세: 연간 손익 합산 후 250만원 공제, 22% ·
+          데이터는 야후 파이낸스·Stooq의 일별 종가입니다. 매매는 결정 다음 거래일에 체결되고(전략마다 시가 또는 종가, 각 전략의
+          규칙 표 참조), 매도 원가는 평균 매입단가로 계산한다고 가정했습니다. 세금은 한국 기준 근사치입니다(양도세: 연간 손익 합산 후 250만원 공제, 22% ·
           배당: 15% 원천징수). 이 문서는 투자 권유가 아닙니다.
         </p>
       </div>
@@ -215,6 +230,10 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
     no_sell_except_periodic: '무매도 + 주기 매도만',
   }[cfg.rebalance.mode]
   const allocLabel = { to_underweight: '부족한 자산 우선', pro_rata: '목표비중 비례', fixed_split: '고정 분할' }[cfg.contribution.allocation]
+  const tri = post.result.tripod
+  const triTop = tri ? (TRIPOD_SLEEVES[tri.sleeve.trim().toUpperCase()]?.top ?? 3) : 3
+  const triTotal = tri ? tri.daysByState.T3 + tri.daysByState.B15 + tri.daysByState.CASH : 0
+  const triShare = (n: number) => (triTotal > 0 ? `${((n / triTotal) * 100).toFixed(0)}%` : '—')
 
   const rows: { label: string; post: string; pre: string }[] = [
     { label: 'TWRR/년 (전략 자체)', post: fmtPct(post.metrics.twrrAnnualPct), pre: fmtPct(pre.metrics.twrrAnnualPct) },
@@ -223,10 +242,13 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
     { label: '최장 회복기간 (달력일)', post: String(post.metrics.maxUnderwaterDays), pre: String(pre.metrics.maxUnderwaterDays) },
     { label: '변동성/년', post: fmtPct(post.metrics.volAnnualPct), pre: fmtPct(pre.metrics.volAnnualPct) },
     { label: '최종 가치', post: fmtUsd(post.metrics.finalValue), pre: fmtUsd(pre.metrics.finalValue) },
+    { label: '청산 후 가치 (마지막 날 전량 매도 가정)', post: fmtUsd(post.metrics.liquidatedValue), pre: fmtUsd(pre.metrics.liquidatedValue) },
+    { label: '청산 기준 MWRR/년', post: fmtPct(post.metrics.liquidatedMwrrAnnualPct), pre: fmtPct(pre.metrics.liquidatedMwrrAnnualPct) },
     { label: '총 납입', post: fmtUsd(post.metrics.totalContributions), pre: fmtUsd(pre.metrics.totalContributions) },
     { label: '총 수익금', post: fmtSignedUsd(post.metrics.finalValue - post.metrics.totalContributions), pre: fmtSignedUsd(pre.metrics.finalValue - pre.metrics.totalContributions) },
     { label: '배당 (총 / 원천징수)', post: `${fmtUsd(post.result.dividendsGrossUsd)} / ${fmtUsd(post.result.dividendsWithheldUsd)}`, pre: `${fmtUsd(pre.result.dividendsGrossUsd)} / $0` },
-    { label: '세금 (양도세 + 원천)', post: fmtUsd(post.result.totalTaxesUsd + post.result.dividendsWithheldUsd), pre: '$0' },
+    { label: '세금 (양도세 + 원천, 기간 중 납부)', post: fmtUsd(post.result.totalTaxesUsd + post.result.dividendsWithheldUsd), pre: '$0' },
+    { label: '청산 시 추가 양도세', post: fmtUsd(post.result.liquidation?.taxUsd ?? 0), pre: '$0' },
     { label: '거래 비용', post: fmtUsd(post.result.totalFeesUsd), pre: fmtUsd(pre.result.totalFeesUsd) },
     { label: '거래 횟수', post: String(post.result.trades.length), pre: String(pre.result.trades.length) },
   ]
@@ -260,6 +282,18 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
           <table className="w-full text-xs">
             <tbody>
               <tr><td className={tdCls}>적립 배분</td><td className={`${tdCls} text-right`}>{allocLabel}</td></tr>
+              <tr><td className={tdCls}>체결 시점</td><td className={`${tdCls} text-right`}>{executionTiming(cfg) === 'next_close' ? '다음 거래일 종가' : '다음 거래일 시가'}</td></tr>
+              {tri && (
+                <>
+                  <tr><td className={tdCls}>트라이팟 신호 전환</td><td className={`${tdCls} text-right`}>{tri.switches.filter((x) => x.from !== null).length}회</td></tr>
+                  <tr>
+                    <td className={tdCls}>보유 기간 비율</td>
+                    <td className={`${tdCls} text-right`}>
+                      {triTop === 3 ? '3배' : '2배'} {triShare(tri.daysByState.T3)} · 1.5배 {triShare(tri.daysByState.B15)} · 현금 {triShare(tri.daysByState.CASH)}
+                    </td>
+                  </tr>
+                </>
+              )}
               <tr><td className={tdCls}>리밸런싱 트리거</td><td className={`${tdCls} text-right`}>{triggerLabel}</td></tr>
               <tr><td className={tdCls}>매도 정책</td><td className={`${tdCls} text-right`}>{modeLabel}</td></tr>
               {cfg.rebalance.periodMonths != null && (

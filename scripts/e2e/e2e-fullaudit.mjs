@@ -107,6 +107,16 @@ async function auditViewport(width, height, tag) {
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
   await page.waitForTimeout(300)
   await page.screenshot({ path: `audit/${tag}-footer.png` })
+  // 트라이팟 탭 → "백테스트에서 비교하기": 비교 세트 5종으로 바뀐 전략 카드(트라이팟 안내 패널) 레이아웃
+  page.once('dialog', (d) => d.accept())
+  await nav('트라이팟')
+  await page.getByText('지금 들고 있어야 할 비중').waitFor({ timeout: 15000 })
+  await page.getByRole('button', { name: '백테스트에서 비교하기' }).click()
+  await page.getByText('트라이팟 슬리브 100%').first().waitFor({ timeout: 10000 })
+  await page.waitForTimeout(500)
+  await overflow(page, `${tag}/backtest-tripod`)
+  if ((await page.getByText('트라이팟 2배판 슬리브 100%').count()) === 0) throw new Error('트라이팟 비교 세트 미적용')
+  await page.screenshot({ path: `audit/${tag}-backtest-tripod.png`, fullPage: true })
   if (errors.length) report.push({ label: `${tag}/pageerrors`, errors: errors.slice(0, 3) })
   await page.close()
 }

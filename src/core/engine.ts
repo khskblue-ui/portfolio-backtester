@@ -88,7 +88,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
   const N = dates.length
   const marketSleeves = config.sleeves.filter((s) => s.ticker !== CASH_TICKER)
   const cashTarget = config.sleeves.find((s) => s.ticker === CASH_TICKER)?.targetWeight ?? 0
-  const timing = config.execution.timing ?? 'next_open'
+  const timing = executionTiming(config)
 
   // ── 트라이팟 슬리브 (전략당 최대 1개 — 검증에서 보장) ──
   const triSleeve = marketSleeves.find((s) => isTripodTicker(s.ticker)) ?? null
@@ -152,6 +152,8 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
   // 연 단위 손익통산 그룹 (5.2/5.4) — 연도별·자산군별 실현손익 누적
   let yearRealized: Record<'foreign_equity' | 'crypto', number> = { foreign_equity: 0, crypto: 0 }
   let yearGrossDividends = 0
+  /** 마지막 해 실현손익 (청산 기준 세금을 같은 해 공제와 합산해 계산하려고 보관) */
+  let finalYearRealized: Record<'foreign_equity' | 'crypto', number> = { foreign_equity: 0, crypto: 0 }
 
   // 리컨실용 현금 원장 (모든 현금 변동을 독립 누적 → 상태 현금과 대조)
   let cashLedger = 0
@@ -342,6 +344,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
           }
         }
       }
+      if (i === N - 1) finalYearRealized = { ...yearRealized }
       yearRealized = { foreign_equity: 0, crypto: 0 }
       yearGrossDividends = 0
     }
@@ -415,6 +418,35 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     tripod: triSleeve
       ? { sleeve: triSleeve.ticker, switches: triSwitches, daysByState: triDays, lastTarget: triTarget[N - 1] ?? null }
       : undefined,
+    liquidation: liquidate(N - 1),
+  }
+
+  /**
+   * 청산 기준 — 마지막 날 종가에 전 포지션을 판다고 보고 매도 비용과 늘어나는 양도세를 계산한다(상태는 바꾸지 않음).
+   * 세금은 마지막 해 실현손익에 평가손익을 더한 연간 세액에서 이미 낸 그해 세액을 뺀 증분(공제는 연 1회)
+   */
+  function liquidate(i: number): { costUsd: number; taxUsd: number; valueUsd: number } {
+    let costUsd = 0
+    const unrealized: Record<'foreign_equity' | 'crypto', number> = { foreign_equity: 0, crypto: 0 }
+    for (const t of positions) {
+      const sl = state[t]
+      if (sl.shares <= 0) continue
+      const gross = sl.shares * closeAt(t, i)
+      const notional = sl.shares * closeAt(t, i) * (1 - spreadRate)
+      const net = notional - notional * feeRate
+      costUsd += gross - net
+      const taxClass = resolveTaxClass(t, config.sleeves.find((s) => s.ticker === t)?.taxClass)
+      if (taxClass !== 'exempt') unrealized[taxClass] += net - sl.totalCost
+    }
+    let taxUsd = 0
+    if (config.tax.enabled) {
+      const cgTax = (x: number) => computeCapitalGainsTax(x, config.tax)?.taxUsd ?? 0
+      const crTax = (x: number) => computeCryptoTax(x, config.tax)?.taxUsd ?? 0
+      const fe = finalYearRealized.foreign_equity
+      const cr = finalYearRealized.crypto
+      taxUsd = cgTax(fe + unrealized.foreign_equity) - cgTax(fe) + crTax(cr + unrealized.crypto) - crTax(cr)
+    }
+    return { costUsd, taxUsd, valueUsd: daily[i].value - costUsd - taxUsd }
   }
 
   // ─── 체결 (t 시가 또는 t 종가) ─────────────────────────────────────────────────
@@ -734,6 +766,14 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     }
     return budgets
   }
+}
+
+/**
+ * 실제 적용되는 체결 시점 — 지정이 없으면 트라이팟 슬리브가 있는 전략은 다음 거래일 종가(규칙 원안),
+ * 나머지는 다음 거래일 시가(PRD 4.2 기본)
+ */
+export function executionTiming(config: StrategyConfig): 'next_open' | 'next_close' {
+  return config.execution.timing ?? (config.sleeves.some((s) => isTripodTicker(s.ticker)) ? 'next_close' : 'next_open')
 }
 
 // ─── 검증 ─────────────────────────────────────────────────────────────────────

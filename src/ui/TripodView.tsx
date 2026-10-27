@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ComposedChart, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer } from 'recharts'
-import { Radar, CircleCheck, CircleAlert, CircleX, CircleMinus, ExternalLink, History, FlaskConical, BellRing, type LucideIcon } from 'lucide-react'
+import { Radar, CircleCheck, CircleAlert, CircleX, CircleMinus, ExternalLink, History, FlaskConical, BellRing, BarChart3, type LucideIcon } from 'lucide-react'
 import { HelpTip } from './HelpTip'
 import { tileCls, nbspShortParens, SERIES_COLORS_LIGHT, SERIES_COLORS_DARK } from './common'
 import {
@@ -183,7 +183,7 @@ function DecisionFlow({ d }: { d: TripodDashboard }) {
   )
 }
 
-export function TripodView({ theme }: { theme: Theme }) {
+export function TripodView({ theme, onBacktest }: { theme: Theme; onBacktest?: () => void }) {
   const [state, setState] = useState<{ data: TripodDashboard; source: TripodSource } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [period, setPeriod] = useState<(typeof PERIODS)[number]['key']>('1y')
@@ -555,6 +555,29 @@ export function TripodView({ theme }: { theme: Theme }) {
           원본 영상 <ExternalLink className="w-3 h-3" />
         </a>
       </div>
+
+      {/* 백테스트 연결 — 같은 규칙을 원하는 기간·적립·자산 조합으로 직접 돌려 보기 */}
+      {onBacktest && (
+        <div className={`${tileCls} p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3`}>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              <Eyebrow>BACKTEST</Eyebrow>
+              직접 백테스트해 보기
+            </h3>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-zinc-600 dark:text-zinc-300">
+              같은 판정 규칙을 백테스트 탭에서 원하는 기간·거치식이나 적립식·세금 조건으로 돌릴 수 있습니다. 트라이팟 비중을 정하고
+              현금이나 비트코인 같은 다른 자산을 섞어 QQQ 보유와 나란히 비교해 보세요. 신호가 바뀔 때의 교체 매매는 실제 매도로 계산해
+              양도세까지 반영합니다.
+            </p>
+          </div>
+          <button
+            onClick={onBacktest}
+            className="flex-shrink-0 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold btn-primary"
+          >
+            <BarChart3 className="w-4 h-4" /> 백테스트에서 비교하기
+          </button>
+        </div>
+      )}
 
       <p className="text-[11px] text-zinc-400 leading-relaxed">
         매 거래일 미국 장 마감 뒤(한국 시간 07:20 무렵) 야후 파이낸스 일봉으로 판정해 기록합니다. 이 화면은 공개된 규칙의 판정을 보여 줄 뿐 매매를 권유하지 않습니다.

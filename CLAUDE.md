@@ -35,16 +35,21 @@ npx tsc --noEmit && npx eslint <변경 파일> && npx vitest run && npm run buil
 node scripts/e2e/staticserver.mjs &        # dist를 4175 포트로 서빙 (/yf,/fred는 404)
 node scripts/e2e/e2e-fullaudit.mjs         # 6개 뷰 × 390/1280/1440 오버플로 검사
 node scripts/e2e/e2e-wrapaudit.mjs         # 괄호 줄바꿈 품질 검사 (허용 잔존: 22자+ 본문 괄호)
+# 백테스트 실행 흐름(트라이팟 포함)은 저장소 데이터 스냅숏을 야후 형식으로 서빙해 실제로 돌린다:
+FIXTURES=1 PORT=4176 node scripts/e2e/staticserver.mjs &
+node scripts/e2e/e2e-tripodrun.mjs         # 트라이팟 탭 → 비교 세트 실행 → 결과·보고서, 혼합·적립·기간 지정
 ```
 
-테스트는 현재 190개(엔진 골든·가이드/도해 무결성·연대기·신호·광기의 해부·트라이팟 대시보드 앵커).
+테스트는 현재 233개(엔진 골든·트라이팟 슬리브·연구 코드 대조·실데이터 통합·가이드/도해 무결성·연대기·신호·광기의 해부·트라이팟 대시보드 앵커).
 콘텐츠 수치를 바꾸면 tests/의 must-contain 앵커도 함께 갱신해야 한다.
 
 ## 아키텍처 지도
 
-- `src/core/` — engine.ts(결정론 시뮬레이터: t 종가 관측 → t+1 시가 체결, 낙폭 규칙,
-  ruleEpisodes), data.ts(야후 v8 파싱·달력 정렬·-HIST 번들), tax.ts(한국 세금 근사),
-  metrics.ts(TWRR/MWRR/MDD), types.ts
+- `src/core/` — engine.ts(결정론 시뮬레이터: t 종가 관측 → t+1 시가 체결(전략별로 t+1 종가 선택 가능),
+  낙폭 규칙, ruleEpisodes, TRIPOD 신호 슬리브, 기간 끝 청산 기준), data.ts(야후 v8 파싱·달력 정렬·-HIST 번들·
+  -EXT 연결 상품·트라이팟 신호·^IRX 현금 금리), tripod.ts(트라이팟 판정 — 연구 `scripts/tripod/lib.mjs`와
+  같은 배열을 `tests/tripod-backtest.test.ts`가 강제하므로 규칙은 두 곳을 같이 바꿀 것), tax.ts(한국 세금 근사),
+  metrics.ts(TWRR/MWRR/MDD·청산 기준 MWRR), types.ts
 - `src/ui/` — App.tsx(셸: 좌측 레일/하단 탭바, 워크벤치 분할+모바일 위저드),
   HomeView(콕핏), GuideView+guideContent/tradingGuide(가이드 1·2부)+GuideFigure(도해)+
   guideProgress(학습 진도), HistoryView+eraTimelines/eraStories, NowView+nowSignals,
