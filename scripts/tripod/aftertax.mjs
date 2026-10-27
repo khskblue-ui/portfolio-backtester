@@ -22,7 +22,7 @@ export const TAX = {
 const BRACKETS = [ // 종합소득세 과세표준 구간(원)과 세율 — 지방세 10%는 아래에서 곱한다
   [14e6, 0.06], [50e6, 0.15], [88e6, 0.24], [150e6, 0.35], [300e6, 0.38], [500e6, 0.40], [1e9, 0.42], [Infinity, 0.45],
 ]
-function progressive(krw) {
+export function progressive(krw) {
   let tax = 0, lo = 0
   for (const [hi, r] of BRACKETS) { if (krw <= lo) break; tax += (Math.min(krw, hi) - lo) * r; lo = hi }
   return tax * 1.1
