@@ -195,13 +195,16 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
   // 시가 자료 품질: 야후 지수의 1999년 이전 시가는 대부분 전일 종가 복사본이다. 그 구간의 '다음 거래일 시가' 체결은
   // 사실상 판정한 날 종가 체결이 되므로(연구 문서 §4.1) 그런 자산을 시가 체결로 들고 있으면 알린다
   if (timing === 'next_open' && dates[0] < '2000-01-01') {
+    // 상대 오차로 비교한다: 지수 시가를 그대로 물려받은 합성·연결 상품(-EXT)은 총수익 보정 계산을 거치며
+    // 전일 종가와 부동소수 끝자리만 달라진다(실제 호가 단위보다 훨씬 작은 차이)
+    const copied = (open: number, prevClose: number) => Math.abs(open - prevClose) <= 1e-6 * Math.abs(prevClose)
     const flat = positions.filter((t) => {
       const sr = bundle.series[t]
       let n = 0
       let same = 0
       for (let k = 1; k < N && dates[k] < '2000-01-01'; k++) {
         n++
-        if (sr.open[k] === sr.close[k - 1]) same++
+        if (copied(sr.open[k], sr.close[k - 1])) same++
       }
       return n >= 20 && same / n >= 0.5
     })

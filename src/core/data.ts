@@ -319,11 +319,16 @@ export function alignToCommonCalendar(
   const endDate = options?.endDate ?? '9999-12-31'
   const dates = [...calendar].filter((d) => d >= startDate && d <= endDate).sort()
   const bindingTickers = seriesList.filter((s) => s.dates[0] === latestStart).map((s) => s.ticker)
-  if (dates.length < 2)
+  if (dates.length < 2) {
+    const why =
+      options?.endDate && options.endDate < startDate
+        ? `종료일(${options.endDate})이 계산 시작일(${startDate})보다 앞섭니다`
+        : `${startDate}~${options?.endDate ?? '최근'} 사이에 모든 자산이 함께 거래된 날이 ${dates.length}일뿐입니다`
     throw new Error(
-      `공통 거래일이 부족합니다. 모든 자산의 데이터가 함께 있는 기간은 ${latestStart}부터입니다(${bindingTickers.join(', ')}). ` +
+      `공통 거래일이 부족합니다. ${why}. 모든 자산의 데이터가 함께 있는 기간은 ${latestStart}부터입니다(${bindingTickers.join(', ')}). ` +
         '시작일·종료일 범위를 확인하세요'
     )
+  }
 
   // 히스토리가 가장 짧은 자산이 비교 시작일을 결정 — 원인 자산을 지목해 설명 (§3.3)
   const clipWarnings: string[] = []
@@ -631,7 +636,8 @@ export async function loadDataBundle(
     const readyIdx = sig.target.findIndex((t) => t !== null)
     if (readyIdx < 0) throw new Error('트라이팟 판정에 필요한 나스닥100(^NDX)·VIX 자료가 부족합니다. 잠시 후 다시 실행하세요')
     tripodSig = { sig, firstReady: sig.dates[readyIdx], vixStart: vix.dates[0], lastDate: ndx.dates[ndx.dates.length - 1] }
-    if (options?.endDate && options.endDate < tripodSig.firstReady) {
+    // 종료일이 준비일과 같아도 하루짜리 구간이라 계산할 수 없다
+    if (options?.endDate && options.endDate <= tripodSig.firstReady) {
       throw new Error(
         `트라이팟은 VIX 10일 평균과 250일선이 모두 준비되는 ${tripodSig.firstReady}부터 계산할 수 있습니다(VIX 자료 시작 ${tripodSig.vixStart}). ` +
           '종료일을 그 뒤로 정하세요'

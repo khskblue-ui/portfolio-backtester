@@ -405,6 +405,8 @@ describe('데이터 로드 — TRIPOD 슬리브 해석 (야후 응답 스텁)', 
       expect(again.snapshotHash).toBe(b.snapshotHash)
       // 종료일이 판정 준비일보다 앞이면 원인을 알려 준다
       await expect(loadDataBundle(['TRIPOD'], { endDate: day(100) })).rejects.toThrow(/트라이팟은 .*부터 계산할 수 있습니다/)
+      // 종료일이 준비일 당일이어도 같은 안내(하루짜리 구간)
+      await expect(loadDataBundle(['TRIPOD'], { endDate: day(251) })).rejects.toThrow(/트라이팟은 .*부터 계산할 수 있습니다/)
     } finally {
       vi.unstubAllGlobals()
     }
@@ -585,6 +587,19 @@ describe('검수 반영 (2026-10-27)', () => {
     expect(runBacktest({ ...st, execution: { ...st.execution, timing: 'next_close' } }, b).warnings.some((w) => w.code === 'data_caveat')).toBe(false)
   })
 
+  it('끝자리만 다른 시가(합성·연결 상품의 부동소수 오차)도 전일 종가 복사본으로 보고, 실제 밤사이 갭은 알리지 않는다', () => {
+    const n = 60
+    const dates = makeDates('1998-01-02', n)
+    const close = randomWalk(1000, n, lcg(7))
+    const nearCopy = close.map((c, i) => (i === 0 ? c : close[i - 1] * (1 + 1e-12)))
+    expect(nearCopy.some((o, k) => k > 0 && o === close[k - 1])).toBe(false) // 엄격한 같음으로는 0일
+    const st = cleanStrategy({ sleeves: [{ ticker: 'TQQQ-EXT', targetWeight: 1 }] })
+    const w = runBacktest(st, makeBundle(dates, { 'TQQQ-EXT': { close, open: nearCopy } })).warnings.find((x) => x.code === 'data_caveat')
+    expect(w?.message).toContain('TQQQ-EXT')
+    const gap = close.map((c, i) => (i === 0 ? c : close[i - 1] * 1.002))
+    expect(runBacktest(st, makeBundle(dates, { 'TQQQ-EXT': { close, open: gap } })).warnings.some((x) => x.code === 'data_caveat')).toBe(false)
+  })
+
   it('연결일 시가는 합성 시가를 같은 비율로 옮긴 값(밤사이·장중 수익률이 합성과 같음)', () => {
     const syn: DailySeries = { ticker: 'S', dates: ['d1', 'd2', 'd3'], open: [100, 104, 108], close: [100, 105, 110], adjClose: [100, 105, 110], dividends: {} }
     const real: DailySeries = { ticker: 'R', dates: ['d2', 'd3'], open: [9, 10.2], close: [10, 10.5], adjClose: [10, 10.5], dividends: {} }
@@ -601,6 +616,8 @@ describe('검수 반영 (2026-10-27)', () => {
     const b = alignToCommonCalendar([s], { startDate: '2000-01-01' })
     expect(b.clipWarnings.some((w) => w.includes('2000-01-01') && w.includes('VOO'))).toBe(true)
     expect(() => alignToCommonCalendar([s], { endDate: '2005-01-01' })).toThrow(/2010-09-09부터입니다\(VOO\)/)
+    expect(() => alignToCommonCalendar([s], { endDate: '2005-01-01' })).toThrow(/종료일\(2005-01-01\)이 계산 시작일\(2010-09-09\)보다 앞섭니다/)
+    expect(() => alignToCommonCalendar([s], { startDate: '2010-09-13' })).toThrow(/2010-09-13~최근 사이에 모든 자산이 함께 거래된 날이 1일뿐입니다/)
   })
 
   it('실물 티커도 트라이팟과 충돌 목록에 든다', async () => {

@@ -126,7 +126,6 @@ describe('실데이터: 1991~2026 (상장 전은 나스닥100 지수 합성 연�
     b = await loadDataBundle(['TRIPOD', 'QQQ-EXT'], { startDate: '1991-01-02', endDate: '2026-08-28', cashRate: true, now: NOW })
   }, 60000)
 
-
   it('QQQ-EXT는 상장(1999-03-10) 전은 지수 합성, 그 뒤는 실물 QQQ 가격·배당', () => {
     expect(b.dates[0]).toBe('1991-01-02')
     const i = b.dates.indexOf('1999-03-10')
@@ -149,5 +148,13 @@ describe('실데이터: 1991~2026 (상장 전은 나스닥100 지수 합성 연�
 
   it('보유 비교: QQQ-EXT 15.5%, 상장 전 연결 상품은 연구 가상 상품과 연 0.3%p 안에서 같다', () => {
     near(run(b, 'QQQ-EXT', false).m.twrrAnnualPct, 15.5, 0.2)
+  })
+
+  it('2000년 이전을 다음 거래일 시가로 체결하면 지수 시가를 물려받은 연결 상품마다 알린다(TQQQ-EXT만 들어도)', () => {
+    // 일반 자산의 기본 체결은 다음 거래일 시가, 트라이팟 슬리브가 있으면 다음 거래일 종가
+    for (const t of ['TQQQ-EXT', 'QLD-EXT', 'QQQ-EXT']) {
+      expect(run(b, t, false).res.warnings.find((w) => w.code === 'data_caveat')?.message).toContain(t)
+    }
+    expect(run(b, 'TRIPOD', false).res.warnings.some((w) => w.code === 'data_caveat')).toBe(false)
   })
 })

@@ -1,7 +1,7 @@
 // 트라이팟 백테스트 흐름 e2e — 저장소 데이터 스냅숏으로 실제 실행까지 확인한다.
 //  1) 트라이팟 탭 → "백테스트에서 비교하기" → 실행 → 결과(비교표·트라이팟 신호 요약·청산 열) → 보고서
 //  2) 트라이팟 60% + SPY 30% + 현금 10% 혼합(연 1회 리밸런싱) · 적립식 · 2007~2013 기간 지정
-// 390·1280 뷰포트에서 화면 넘침·페이지 오류·엔진 정합성 경고가 없어야 통과(exit 0).
+// 390·1280 뷰포트에서 화면 넘침·짧은 괄호 줄갈림·전환 기록 날짜 줄갈림·페이지 오류·엔진 정합성 경고가 없어야 통과(exit 0).
 // 선행: npm run build, FIXTURES=1 PORT=4176 node scripts/e2e/staticserver.mjs &
 import { chromium } from 'playwright'
 import fs from 'node:fs'
@@ -30,6 +30,52 @@ async function overflow(page, label) {
     return { pageOverflow: document.documentElement.scrollWidth - vw, off: off.slice(0, 5) }
   })
   if (res.pageOverflow > 1 || res.off.length) problems.push({ label, ...res })
+}
+
+// 짧은 괄호 묶음(전략 이름의 "(연 1회 리밸런싱)" 등)이 두 줄로 갈라지면 검출 — e2e-wrapaudit.mjs와 같은 판정
+async function wrapCheck(page, label) {
+  const res = await page.evaluate(() => {
+    const out = []
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+    let node
+    while ((node = walker.nextNode())) {
+      const t = node.textContent ?? ''
+      if (t.trim().length === 0 || t.trim().length > 70) continue // 본문 문단 제외
+      const el = node.parentElement
+      if (!el || !/\([^()]* [^()]*\)/.test(t)) continue
+      const style = getComputedStyle(el)
+      if (style.display === 'none' || style.visibility === 'hidden') continue
+      const re = /\([^()]+\)/g
+      let m
+      while ((m = re.exec(t))) {
+        if (!m[0].includes(' ')) continue // 일반 공백이 있는 괄호만 (NBSP로 묶인 것은 제외)
+        const r = document.createRange()
+        r.setStart(node, m.index)
+        r.setEnd(node, m.index + m[0].length)
+        const rects = [...r.getClientRects()].filter((x) => x.width > 0.5)
+        if (new Set(rects.map((x) => Math.round(x.top / 4))).size > 1) out.push({ paren: m[0], ctx: t.trim().slice(0, 45) })
+      }
+    }
+    return out
+  })
+  if (res.length) problems.push({ label: `${label}/wrap`, found: res.slice(0, 5) })
+}
+
+/** 전환 기록을 펼쳐 날짜가 한 줄에 들어가는지 (좁은 화면에서 날짜가 갈라지면 읽기 어렵다) */
+async function switchLogCheck(page, label) {
+  const sum = page.locator('summary', { hasText: '전환 기록 보기' }).first()
+  if (!(await sum.count())) return problems.push({ label: `${label}/switch-log-missing` })
+  await sum.click()
+  await page.waitForTimeout(200)
+  const bad = await page.evaluate(() => {
+    const d = [...document.querySelectorAll('details')].find((x) => x.open && x.querySelector('summary')?.textContent?.includes('전환 기록 보기'))
+    return [...(d?.querySelectorAll('li') ?? [])].slice(0, 30).filter((li) => {
+      const span = li.firstElementChild
+      return !span || span.getClientRects().length !== 1 || span.getBoundingClientRect().height > 20
+    }).length
+  })
+  if (bad) problems.push({ label: `${label}/switch-log-wrap`, bad })
+  await sum.click()
 }
 
 /** 비교표(첫 ledger-table) 행 → { name, twrr, liq, liqMwrr } */
@@ -80,11 +126,15 @@ async function runFlow(width, height, tag) {
   if (/현금 원장 불일치|범위를 벗어남|슬리브 합/.test(bodyText)) problems.push({ label: `${tag}/reconciliation` })
   if (!/신호 전환 \d+회/.test(bodyText)) problems.push({ label: `${tag}/tripod-summary` })
   await overflow(page, `${tag}/results-set`)
+  await wrapCheck(page, `${tag}/results-set`)
+  await switchLogCheck(page, `${tag}/results-set`)
   await page.screenshot({ path: `audit/${tag}-tripodrun-results.png`, fullPage: true })
   // 보고서
   await page.locator('button[title="백테스트 결과 보고서 (PDF 저장)"]').click()
   await page.getByText('포트폴리오 백테스트 보고서').waitFor({ timeout: 10000 })
   const rep = await page.locator('.print-report').innerText()
+  if (!rep.includes('신호 전환 때 전체 비중 맞추기')) problems.push({ label: `${tag}/report-missing`, must: '신호 전환 때 전체 비중 맞추기' })
+  await wrapCheck(page, `${tag}/report`)
   for (const must of ['청산 후 가치', '트라이팟 신호 전환', '체결 시점', '다음 거래일 종가', '미국 단기국채(^IRX) 실제 금리']) if (!rep.includes(must)) problems.push({ label: `${tag}/report-missing`, must })
   await page.screenshot({ path: `audit/${tag}-tripodrun-report.png`, fullPage: true })
   await page.getByRole('button', { name: '닫기' }).click()
@@ -116,6 +166,7 @@ async function runFlow(width, height, tag) {
   const head = await page.getByText('2007-01-03 ~ 2013-12-31', { exact: false }).count()
   if (rows2.length !== 3 || head === 0) problems.push({ label: `${tag}/mix`, rows2, head })
   await overflow(page, `${tag}/results-mix`)
+  await wrapCheck(page, `${tag}/results-mix`)
   await page.screenshot({ path: `audit/${tag}-tripodrun-mix.png`, fullPage: true })
   console.log(`[${tag}] 혼합·적립:`, rows2.map((r) => `${r.name} TWRR ${r.twrr}% 최종 $${r.final} 청산 $${r.liq}`).join(' | '))
   if (errors.length) problems.push({ label: `${tag}/pageerrors`, errors: errors.slice(0, 3) })

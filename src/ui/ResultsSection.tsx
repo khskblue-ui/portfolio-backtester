@@ -14,7 +14,7 @@ import {
 import { NumberInput } from './NumberInput'
 import { assetCautionList, executionTiming, TRIPOD_SLEEVES, type StrategyRun, type AlignedDataBundle, type TripodState } from '@/core'
 import { HelpTip } from './HelpTip'
-import { cardCls, fmtUsd, fmtSignedUsd, fmtPct, fmtSignedPct , uniqueRunLabels } from './common'
+import { cardCls, fmtUsd, fmtSignedUsd, fmtPct, fmtSignedPct, uniqueRunLabels, nbspShortParens } from './common'
 
 /**
  * 결과 섹션 (§7) — TWRR 기준 정렬 비교표 + growth-of-$1 오버레이 +
@@ -408,7 +408,7 @@ export function ResultsSection({
                 <tr key={r.config.id} className="border-b border-[#e9edf4] dark:border-[#262b38] text-zinc-800 dark:text-zinc-200">
                   <td className="px-4 py-2.5 font-medium">
                     <span className="inline-block w-2.5 h-2.5 rounded-full mr-2" style={{ backgroundColor: colorOf.get(r.config.id) }} />
-                    {labelOf.get(r.config.id)!}
+                    {nbspShortParens(labelOf.get(r.config.id)!)}
                   </td>
                   <td className="text-right px-3 py-2.5 font-semibold">{fmtPct(m.twrrAnnualPct)}</td>
                   <td className="text-right px-3 py-2.5">{fmtPct(m.mwrrAnnualPct)}</td>
@@ -450,6 +450,8 @@ export function ResultsSection({
               const total = t.daysByState.T3 + t.daysByState.B15 + t.daysByState.CASH
               const n = t.switches.filter((x) => x.from !== null).length
               const lastDate = bundle.dates[bundle.dates.length - 1]
+              // 마지막 판정의 기준일: 장중 실행이면 확정 종가가 있는 전 거래일(판정에서 오늘 봉을 뺌)
+              const judgedOn = bundle.tripod && bundle.tripod.lastSignalDate < lastDate ? bundle.tripod.lastSignalDate : lastDate
               const first = t.switches[0]?.date
               const yrs = first ? (Date.parse(lastDate) - Date.parse(first)) / (365.25 * 86_400_000) : 0
               const name: Record<TripodState, string> = { T3: top === 3 ? '3배 TQQQ' : '2배 QLD', B15: '1.5배 QQQ+QLD', CASH: '현금' }
@@ -458,7 +460,7 @@ export function ResultsSection({
                 <div key={r.config.id} className="border border-[#dfe3ec] dark:border-[#2a2e39] rounded p-3 space-y-2 text-xs">
                   <div className="text-zinc-500 dark:text-zinc-400">
                     <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: colorOf.get(r.config.id) }} />
-                    {labelOf.get(r.config.id)!}
+                    {nbspShortParens(labelOf.get(r.config.id)!)}
                   </div>
                   <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
                     신호 전환 {n}회{' '}
@@ -485,7 +487,7 @@ export function ResultsSection({
                   />
                   <div className="text-[11px] text-gray-400 leading-relaxed">
                     체결 {executionTiming(r.config) === 'next_close' ? '다음 거래일 종가' : '다음 거래일 시가'} · 마지막 판정{' '}
-                    <span className="whitespace-nowrap">({lastDate} 종가)</span> {t.lastTarget ? name[t.lastTarget] : '판정 없음'}
+                    <span className="whitespace-nowrap">({judgedOn} 종가)</span> {t.lastTarget ? name[t.lastTarget] : '판정 없음'}
                   </div>
                   {t.switches.length > 1 && (
                     <details className="text-[11px] text-zinc-500 dark:text-zinc-400">
@@ -493,7 +495,7 @@ export function ResultsSection({
                       <ol className="mt-1 max-h-48 overflow-y-auto pr-1 space-y-0.5 font-mono">
                         {t.switches.slice(1).map((x) => (
                           <li key={x.date} className="flex justify-between gap-2">
-                            <span>{x.date}</span>
+                            <span className="whitespace-nowrap flex-shrink-0">{x.date}</span>
                             <span className="whitespace-nowrap">
                               {x.from ? name[x.from] : ''} → {name[x.to]}
                             </span>
@@ -532,7 +534,7 @@ export function ResultsSection({
                 <div key={r.config.id} className="border border-[#dfe3ec] dark:border-[#2a2e39] rounded p-3">
                   <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
                     <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: colorOf.get(r.config.id) }} />
-                    {labelOf.get(r.config.id)!}
+                    {nbspShortParens(labelOf.get(r.config.id)!)}
                   </div>
                   <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100">−{drag.toFixed(2)}%p/년</div>
                   <div className="text-xs text-gray-400 mt-0.5">
@@ -568,7 +570,7 @@ export function ResultsSection({
               {sorted.map((r) => (
                 <th key={r.config.id} className="text-right px-3 py-3 font-medium">
                   <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: colorOf.get(r.config.id) }} />
-                  {labelOf.get(r.config.id)!}
+                  {nbspShortParens(labelOf.get(r.config.id)!)}
                 </th>
               ))}
             </tr>

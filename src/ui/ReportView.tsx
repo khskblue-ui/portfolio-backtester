@@ -3,7 +3,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts'
 import { Printer, X } from 'lucide-react'
 import type { StrategyRun, AlignedDataBundle, StrategyConfig } from '@/core'
 import { assetCautionFor, assetCautionList, executionTiming, TRIPOD_SLEEVES } from '@/core'
-import { SERIES_COLORS_LIGHT, fmtUsd, fmtSignedUsd, fmtPct, type SharedSettings , uniqueRunLabels } from './common'
+import { SERIES_COLORS_LIGHT, fmtUsd, fmtSignedUsd, fmtPct, type SharedSettings, uniqueRunLabels, nbspShortParens } from './common'
 
 /**
  * 백테스트 결과 보고서 — 브라우저 인쇄(⌘/Ctrl+P → PDF 저장)로 생성.
@@ -117,7 +117,10 @@ export function ReportView({
             <span>월 적립 {fmtUsd(shared.monthlyUsd)}</span>
             <span>수수료 {shared.feeBps}bps</span>
             <span>슬리피지 {shared.spreadBps}bps</span>
-            <span>유휴현금 금리 {shared.cashYieldMode === 'tbill' ? '미국 단기국채(^IRX) 실제 금리' : `${shared.cashYieldPct}%/년 고정`}{shared.taxEnabled ? ' (이자 15.4% 원천징수)' : ''}</span>
+            <span>
+              유휴현금 금리 {shared.cashYieldMode === 'tbill' ? '미국 단기국채(^IRX) 실제 금리' : `${shared.cashYieldPct}%/년 고정`}
+              {shared.taxEnabled ? ' (이자\u00a015.4%\u00a0원천징수)' : ''}
+            </span>
             <span>가정 환율 ₩{shared.assumedUsdKrw.toLocaleString()}/$</span>
             <span>한국 세금 {shared.taxEnabled ? '반영' : '미반영'}</span>
             <span>분수주 {shared.fractionalShares ? '허용' : '불가(정수주)'}</span>
@@ -160,7 +163,7 @@ export function ReportView({
                 <tr key={r.config.id}>
                   <td className={`${tdCls} font-medium`}>
                     <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: colorOf.get(r.config.id) }} />
-                    {labelOf.get(r.config.id)!}
+                    {nbspShortParens(labelOf.get(r.config.id)!)}
                   </td>
                   <td className={`${tdCls} text-right font-semibold`}>{fmtPct(m.twrrAnnualPct)}</td>
                   <td className={`${tdCls} text-right`}>{fmtPct(m.mwrrAnnualPct)}</td>
@@ -210,7 +213,7 @@ export function ReportView({
         <p className="text-xs text-gray-400 mt-8">
           데이터는 야후 파이낸스·Stooq의 일별 종가입니다. 매매는 결정 다음 거래일에 체결되고(전략마다 시가 또는 종가, 각 전략의
           규칙 표 참조), 매도 원가는 평균 매입단가로 계산한다고 가정했습니다. 세금은 한국 기준 근사치입니다(양도세: 연간 손익 합산 후 250만원 공제, 22% ·
-          배당: 15% 원천징수). 이 문서는 투자 권유가 아닙니다.
+          배당: 15% 원천징수 · 현금 이자: 15.4% 원천징수). 이 문서는 투자 권유가 아닙니다.
         </p>
       </div>
     </div>
@@ -242,12 +245,12 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
     { label: '최장 회복기간 (달력일)', post: String(post.metrics.maxUnderwaterDays), pre: String(pre.metrics.maxUnderwaterDays) },
     { label: '변동성/년', post: fmtPct(post.metrics.volAnnualPct), pre: fmtPct(pre.metrics.volAnnualPct) },
     { label: '최종 가치', post: fmtUsd(post.metrics.finalValue), pre: fmtUsd(pre.metrics.finalValue) },
-    { label: '청산 후 가치 (마지막 날 전량 매도 가정)', post: fmtUsd(post.metrics.liquidatedValue), pre: fmtUsd(pre.metrics.liquidatedValue) },
+    { label: '청산 후 가치 (마지막 날 전량 매도)', post: fmtUsd(post.metrics.liquidatedValue), pre: fmtUsd(pre.metrics.liquidatedValue) },
     { label: '청산 기준 MWRR/년', post: fmtPct(post.metrics.liquidatedMwrrAnnualPct), pre: fmtPct(pre.metrics.liquidatedMwrrAnnualPct) },
     { label: '총 납입', post: fmtUsd(post.metrics.totalContributions), pre: fmtUsd(pre.metrics.totalContributions) },
     { label: '총 수익금', post: fmtSignedUsd(post.metrics.finalValue - post.metrics.totalContributions), pre: fmtSignedUsd(pre.metrics.finalValue - pre.metrics.totalContributions) },
     { label: '배당 (총 / 원천징수)', post: `${fmtUsd(post.result.dividendsGrossUsd)} / ${fmtUsd(post.result.dividendsWithheldUsd)}`, pre: `${fmtUsd(pre.result.dividendsGrossUsd)} / $0` },
-    { label: '세금 (양도세 + 배당·이자 원천, 기간 중 납부)', post: fmtUsd(post.result.totalTaxesUsd + post.result.dividendsWithheldUsd + (post.result.interestWithheldUsd ?? 0)), pre: '$0' },
+    { label: '기간 중 낸 세금 (양도세·배당·이자 원천)', post: fmtUsd(post.result.totalTaxesUsd + post.result.dividendsWithheldUsd + (post.result.interestWithheldUsd ?? 0)), pre: '$0' },
     { label: '청산 시 추가 양도세', post: fmtUsd(post.result.liquidation?.taxUsd ?? 0), pre: '$0' },
     { label: '거래 비용', post: fmtUsd(post.result.totalFeesUsd), pre: fmtUsd(pre.result.totalFeesUsd) },
     { label: '거래 횟수', post: String(post.result.trades.length), pre: String(pre.result.trades.length) },
@@ -260,7 +263,7 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
     <div className="page-break border-t border-gray-300 pt-5 mt-6">
       <h2 className="text-lg font-bold mb-2">
         <span className="inline-block w-2.5 h-2.5 rounded-full mr-2" style={{ backgroundColor: color }} />
-        {cfg.name}
+        {nbspShortParens(cfg.name)}
       </h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
@@ -293,6 +296,9 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
                     </td>
                   </tr>
                 </>
+              )}
+              {tri && cfg.sleeves.length > 1 && (
+                <tr><td className={tdCls}>신호 전환 때 전체 비중 맞추기</td><td className={`${tdCls} text-right`}>{cfg.rebalance.onTripodSwitch ? '켬' : '끔'}</td></tr>
               )}
               <tr><td className={tdCls}>리밸런싱 트리거</td><td className={`${tdCls} text-right`}>{triggerLabel}</td></tr>
               <tr><td className={tdCls}>매도 정책</td><td className={`${tdCls} text-right`}>{modeLabel}</td></tr>
@@ -330,7 +336,7 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
         <tbody>
           {rows.map((row) => (
             <tr key={row.label}>
-              <td className={tdCls}>{row.label}</td>
+              <td className={tdCls}>{nbspShortParens(row.label)}</td>
               <td className={`${tdCls} text-right font-medium`}>{row.post}</td>
               {taxEnabled && <td className={`${tdCls} text-right text-gray-500`}>{row.pre}</td>}
             </tr>
