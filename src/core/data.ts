@@ -16,7 +16,16 @@ import { fetchWithTimeout } from '../fetchUtil'
 import type { DailySeries, AlignedDataBundle, AlignedSeries } from './types'
 import { CASH_TICKER } from './types'
 import { ASSET_CATALOG, isBundleTicker } from './catalog'
-import { buildLeveragedSeries, RATE_TICKER } from './synthetic'
+import { buildLeveragedSeries, spliceSeries, RATE_TICKER } from './synthetic'
+import {
+  isTripodTicker,
+  tripodComponentsFor,
+  computeTripodSignals,
+  alignVixToIndex,
+  alignTripodTargets,
+  TRIPOD_SIGNAL_INDEX,
+  TRIPOD_SIGNAL_VIX,
+} from './tripod'
 
 /** 크립토 티커 판별 (Yahoo -USD 표기) — 365일 거래 → 공통 캘린더 강제 대상 */
 export function isCryptoTicker(ticker: string): boolean {
@@ -430,6 +439,12 @@ export function hashBundle(bundle: AlignedDataBundle): string {
     for (let i = 0; i < s.close.length; i += step) mix(s.close[i].toFixed(6) + s.open[i].toFixed(6))
     mix(s.divPerShare.reduce((a, b) => a + b, 0).toFixed(8))
   }
+  // 신호·금리 부가 데이터도 결과를 바꾸므로 지문에 포함
+  if (bundle.tripod) mix('tripod' + bundle.tripod.target.map((t) => t ?? '-').join(''))
+  if (bundle.cashRate) {
+    const step = Math.max(1, Math.floor(bundle.cashRate.length / 256))
+    for (let i = 0; i < bundle.cashRate.length; i += step) mix(String(bundle.cashRate[i]))
+  }
   return (h >>> 0).toString(16).padStart(8, '0')
 }
 
@@ -476,13 +491,23 @@ const INTER_FETCH_DELAY_MS = 400
  */
 export async function loadDataBundle(
   tickers: string[],
-  options?: { startDate?: string; endDate?: string; forceRefresh?: boolean }
+  options?: { startDate?: string; endDate?: string; forceRefresh?: boolean; cashRate?: boolean }
 ): Promise<AlignedDataBundle> {
-  const unique = [...new Set(tickers.map((t) => t.trim().toUpperCase()))].filter(
+  const requested = [...new Set(tickers.map((t) => t.trim().toUpperCase()))].filter(
     (t) => t !== '' && t !== CASH_TICKER
   )
+  // 트라이팟 가상 슬리브 → 실제로 보유하는 구성 상품 + 판정 전용 신호 원천(^NDX·^VIX, 보유 안 함)
+  const tripodSleeves = requested.filter((t) => isTripodTicker(t))
+  const unique = [...new Set([...requested.filter((t) => !isTripodTicker(t)), ...tripodSleeves.flatMap((t) => tripodComponentsFor(t))])]
   // 전 전략이 현금뿐이면 시장 데이터 없이도 실행 가능 — 이자 복리는 달력만 있으면 된다
-  if (unique.length === 0) return buildCashOnlyBundle(options)
+  if (unique.length === 0) {
+    const cashOnly = buildCashOnlyBundle(options)
+    if (options?.cashRate) {
+      attachCashRate(cashOnly, await fetchCached(RATE_TICKER, options))
+      cashOnly.snapshotHash = hashBundle(cashOnly)
+    }
+    return cashOnly
+  }
 
   // 역사 월간(-HIST) 자산은 일별 자산과 혼합 불가 — 캘린더 교집합(월초 vs 거래일)이
   // 사실상 공집합이 되어 조용히 왜곡되므로 명시적으로 차단하고 대체 티커를 안내
@@ -497,51 +522,103 @@ export async function loadDataBundle(
   }
   const monthlyExpected = bundleTickers.length > 0
 
-  // 합성 레버리지(-SIM) 해석: 실제 조회 대상 = 비합성 티커 + 합성의 기초 + 금리(^IRX)
+  // 합성 레버리지(-SIM)·연결(-EXT) 해석: 실제 조회 대상 = 원본 티커 + 합성의 기초 + 금리(^IRX)
   const entryOf = (t: string) => ASSET_CATALOG.find((e) => e.ticker === t)
   const toFetch = new Set<string>()
   let anySynthetic = false
-  for (const t of unique) {
-    const syn = entryOf(t)?.synthetic
-    if (syn) {
+  const planFetch = (t: string) => {
+    const e = entryOf(t)
+    if (e?.splice) {
+      toFetch.add(e.splice.real)
+      planFetch(e.splice.synthetic)
+    } else if (e?.synthetic) {
       anySynthetic = true
-      toFetch.add(syn.base.toUpperCase())
+      toFetch.add(e.synthetic.base.toUpperCase())
     } else {
       toFetch.add(t)
     }
   }
-  if (anySynthetic) toFetch.add(RATE_TICKER)
+  for (const t of unique) planFetch(t)
+  if (anySynthetic || options?.cashRate) toFetch.add(RATE_TICKER)
+  if (tripodSleeves.length > 0) {
+    toFetch.add(TRIPOD_SIGNAL_INDEX)
+    toFetch.add(TRIPOD_SIGNAL_VIX)
+  }
 
   const raw = new Map<string, DailySeries>()
-  let fetchedFromNetwork = false
+  const net = { fetched: false }
   for (const t of toFetch) {
     if (isBundleTicker(t)) {
       // 리포 번들 정적 파일 — 배포 버전이 곧 캐시 버전이라 localStorage 캐시 불필요
       raw.set(t, await fetchBundleSeries(t))
       continue
     }
-    if (!options?.forceRefresh) {
-      const cached = readCache(t)
-      if (cached) {
-        raw.set(t, cached)
-        continue
-      }
-    }
-    if (fetchedFromNetwork) await sleep(INTER_FETCH_DELAY_MS)
-    const source = entryOf(t)?.source
-    const fetched = source === 'stooq' ? await fetchStooqSeries(t) : await fetchDailySeries(t)
-    fetchedFromNetwork = true
-    writeCache(t, fetched)
-    raw.set(t, fetched)
+    raw.set(t, await fetchCached(t, options, net))
   }
 
-  const seriesList: DailySeries[] = unique.map((t) => {
-    const syn = entryOf(t)?.synthetic
-    if (!syn) return raw.get(t)!
-    return buildLeveragedSeries(t, raw.get(syn.base.toUpperCase())!, raw.get(RATE_TICKER)!, syn)
-  })
+  const build = (t: string): DailySeries => {
+    const e = entryOf(t)
+    if (e?.splice) return spliceSeries(t, raw.get(e.splice.real)!, build(e.splice.synthetic))
+    if (e?.synthetic) return buildLeveragedSeries(t, raw.get(e.synthetic.base.toUpperCase())!, raw.get(RATE_TICKER)!, e.synthetic)
+    return raw.get(t)!
+  }
+  const seriesList: DailySeries[] = unique.map(build)
 
-  return alignToCommonCalendar(seriesList, { ...options, monthlyExpected })
+  const bundle = alignToCommonCalendar(seriesList, { ...options, monthlyExpected })
+  if (tripodSleeves.length > 0) {
+    const ndx = raw.get(TRIPOD_SIGNAL_INDEX)!
+    const vix = raw.get(TRIPOD_SIGNAL_VIX)!
+    const sig = computeTripodSignals(ndx.dates, ndx.close, alignVixToIndex(ndx.dates, vix.dates, vix.close))
+    bundle.tripod = { target: alignTripodTargets(sig, bundle.dates), lastSignalDate: ndx.dates[ndx.dates.length - 1] }
+    const last = bundle.dates[bundle.dates.length - 1]
+    if (bundle.tripod.lastSignalDate < last) {
+      bundle.clipWarnings.push(
+        `트라이팟 신호: 나스닥100 지수 데이터가 ${bundle.tripod.lastSignalDate}까지라 그 뒤 거래일(~${last})은 마지막 판정을 이어 씁니다`
+      )
+    }
+  }
+  if (options?.cashRate) attachCashRate(bundle, raw.get(RATE_TICKER)!)
+  bundle.snapshotHash = hashBundle(bundle)
+  return bundle
+}
+
+/** 캐시 우선 조회 (네트워크 조회 사이에 간격을 둔다 — Yahoo 429 회피) */
+async function fetchCached(
+  t: string,
+  options?: { forceRefresh?: boolean },
+  net: { fetched: boolean } = { fetched: false }
+): Promise<DailySeries> {
+  if (!options?.forceRefresh) {
+    const cached = readCache(t)
+    if (cached) return cached
+  }
+  if (net.fetched) await sleep(INTER_FETCH_DELAY_MS)
+  const source = ASSET_CATALOG.find((e) => e.ticker === t)?.source
+  const fetched = source === 'stooq' ? await fetchStooqSeries(t) : await fetchDailySeries(t)
+  net.fetched = true
+  writeCache(t, fetched)
+  return fetched
+}
+
+/**
+ * 유휴현금 금리 시계열을 달력에 붙인다 — 각 날짜에 그날 이전(포함) 마지막 ^IRX 종가(연 %).
+ * 금리 자료가 시작되기 전 날짜는 NaN이고, 엔진은 그 구간에 고정 금리를 쓴다(경고로 안내).
+ */
+export function attachCashRate(bundle: AlignedDataBundle, rate: DailySeries): void {
+  const out: number[] = new Array(bundle.dates.length).fill(NaN)
+  let j = -1
+  for (let k = 0; k < bundle.dates.length; k++) {
+    while (j + 1 < rate.dates.length && rate.dates[j + 1] <= bundle.dates[k]) j++
+    if (j >= 0) out[k] = rate.close[j]
+  }
+  bundle.cashRate = out
+  const firstOk = out.findIndex((v) => Number.isFinite(v))
+  if (firstOk !== 0) {
+    const span = firstOk < 0 ? '전 구간' : `${bundle.dates[firstOk]} 이전 구간`
+    bundle.clipWarnings.push(
+      `유휴현금 금리: 미국 단기국채(^IRX) 자료가 ${rate.dates[0]}부터라 ${span}은 고정 금리 설정값으로 계산했습니다`
+    )
+  }
 }
 
 /**

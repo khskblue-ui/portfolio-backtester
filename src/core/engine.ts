@@ -2,18 +2,27 @@
  * 백테스트 시뮬레이션 엔진 (PRD §4) — 결정론 상태기계, 룩어헤드 금지
  *
  * ### 타이밍 규약 (4.2 — 룩어헤드 킬러)
- * t 종가로 관측·결정 → t+1 시가로 체결. 같은 날 종가 체결 금지(코드로 강제:
- * 의사결정은 pendingOrders에 쌓이고 다음 루프의 시가에서만 체결됨).
+ * t 종가로 관측·결정 → t+1 시가로 체결(기본). 같은 날 종가 체결 금지(코드로 강제:
+ * 의사결정은 pendingOrders에 쌓이고 다음 루프에서만 체결됨).
+ * execution.timing = 'next_close'면 같은 주문을 t+1 종가에 체결한다(트라이팟 규칙 원안).
+ * 결정 시점은 똑같이 t 종가라 미래 정보는 쓰지 않는다.
  *
  * ### 하루 처리 순서 (고정)
  * 1) 유휴현금 이자 (실제 경과일수 기준 — 4.5, 당일 배당 입금 전 잔고에만)
  * 2) 배당 입금 — ex-date에 "오늘 체결 전" 보유분 기준 (ex-date 매수자는 미수령)
- * 3) 전일 결정 오더 체결 (t 시가): 매도 먼저 → 매수(현금 부족 시 예산 스케일)
+ * 3) 전일 결정 오더 체결 (t 시가, next_close면 t 종가): 매도 먼저 → 트라이팟 슬리브 → 매수(현금 부족 시 예산 스케일)
  * 4) 외부 현금 유입 (초기 납입 / 월 적립 — 매월 첫 거래일)
  * 5) 종가 평가
  * 6) 의사결정 (적립 배분 → 리밸런싱 — 4.4 순서) → 내일 체결
  * 7) 연말 세금 정산 (5.2 연 손익통산) — 현금 차감, 부족 시 다음날 강제 매도
  * 8) 기록 + 리컨실 검증 (4.7)
+ *
+ * ### 트라이팟 슬리브 (TRIPOD / TRIPOD-2X — tripod.ts)
+ * 바깥에서 보면 하나의 슬리브(목표 비중·적립 배분·리밸런싱 대상)이고, 안에서는 신호 상태에 따라
+ * QQQ·QLD-EXT·TQQQ-EXT·슬리브 몫 현금(triCash)을 보유한다. t 종가 판정이 바뀌면 다음 체결 때
+ * 슬리브 평가액 전체를 새 상태 비중으로 맞춘다(실제 매도 → 양도세 반영). 상태가 같으면 1.5배 혼합의
+ * 비중이 흘러가게 두고(연구 V10 'signal'), 들어온 돈만 미달분에 채운다. triCash는 cash에 포함된
+ * 꼬리표라 이자·세금 납부는 전체 현금 기준이고, 바깥 CASH 슬리브 값은 cash − triCash다.
  */
 
 import type {
@@ -27,7 +36,9 @@ import type {
   DailyPoint,
   EngineWarning,
 } from './types'
+import type { TripodState } from './types'
 import { CASH_TICKER } from './types'
+import { isTripodTicker, tripodComponentsFor, tripodWeights, TRIPOD_PRODUCTS, TRIPOD_SLEEVES } from './tripod'
 import {
   computeCapitalGainsTax,
   computeCryptoTax,
@@ -42,6 +53,22 @@ interface Order {
   /** BUY: 지출 예산(USD, 수수료 포함) / SELL: 주식 수 (결정 시점 확정) */
   amount: number
   reason: TradeLogEntry['reason']
+}
+
+/** 트라이팟 슬리브의 다음 체결 지시 (t 종가 결정) */
+interface TripodIntent {
+  /** 맞출 상태 = t 종가 판정 */
+  target: TripodState
+  /** 바깥 리밸런싱으로 슬리브에서 빼낼 비율 (0~1, 결정 시점 보유 기준 — 일반 슬리브의 매도 주식 수 확정과 같은 뜻) */
+  withdrawFrac: number
+  /** 슬리브에 넣을 금액 (USD — 적립·리밸런싱·현금 스윕 배분, 일반 매수 예산과 함께 비례 축소) */
+  deposit: number
+  depositReason: TradeLogEntry['reason']
+  /**
+   * 전환이 없을 때의 입금 배분(구성 상품별 예산) — 결정 시점(t 종가) 미달분으로 확정한다.
+   * 일반 슬리브의 매수 예산이 결정 시점에 정해지는 것과 같은 규약. 전환이 있으면 쓰지 않는다
+   */
+  depositSplit?: number[]
 }
 
 interface SleeveState {
@@ -61,6 +88,20 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
   const N = dates.length
   const marketSleeves = config.sleeves.filter((s) => s.ticker !== CASH_TICKER)
   const cashTarget = config.sleeves.find((s) => s.ticker === CASH_TICKER)?.targetWeight ?? 0
+  const timing = config.execution.timing ?? 'next_open'
+
+  // ── 트라이팟 슬리브 (전략당 최대 1개 — 검증에서 보장) ──
+  const triSleeve = marketSleeves.find((s) => isTripodTicker(s.ticker)) ?? null
+  const triTop = triSleeve ? TRIPOD_SLEEVES[triSleeve.ticker.trim().toUpperCase()].top : 3
+  const triComps = triSleeve ? tripodComponentsFor(triSleeve.ticker) : []
+  const triTarget = bundle.tripod?.target ?? []
+  const triWeightOf = (st: TripodState, ticker: string) =>
+    tripodWeights(st, triTop)[(TRIPOD_PRODUCTS as readonly string[]).indexOf(ticker)]
+  // 보유 포지션 = 일반 시장 슬리브 + 트라이팟 구성 상품 (같은 티커 중복은 검증에서 차단)
+  const positions = [
+    ...marketSleeves.filter((s) => !isTripodTicker(s.ticker)).map((s) => s.ticker),
+    ...triComps,
+  ]
 
   // ── 낙폭 대응 규칙 (얕은 것부터 정렬 — 순회하며 마지막 발동 규칙 = 가장 깊은 규칙) ──
   const ddRules = [...(config.contribution.rules ?? [])].sort((a, b) => a.drawdownPct - b.drawdownPct)
@@ -85,10 +126,18 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
 
   // ── 상태 (4.1) ──
   const state: Record<string, SleeveState> = {}
-  for (const s of marketSleeves) state[s.ticker] = { ticker: s.ticker, shares: 0, totalCost: 0 }
+  for (const t of positions) state[t] = { ticker: t, shares: 0, totalCost: 0 }
   let cash = 0
   let cumContributions = 0
   let pendingOrders: Order[] = []
+  /** 트라이팟 슬리브 몫 현금 — cash에 포함된 꼬리표 (0 ≤ triCash ≤ cash) */
+  let triCash = 0
+  /** 체결 뒤 실제 보유 상태 (첫 진입 전 null) */
+  let triHeld: TripodState | null = null
+  let pendingTri: TripodIntent | null = null
+  let nextTri: TripodIntent | null = null
+  const triSwitches: { date: string; from: TripodState | null; to: TripodState }[] = []
+  const triDays: Record<TripodState, number> = { T3: 0, B15: 0, CASH: 0 }
 
   // 원장/로그
   const trades: TradeLogEntry[] = []
@@ -113,12 +162,22 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
 
   const feeRate = config.costs.feeBps / 10_000
   const spreadRate = config.costs.spreadBps / 10_000
-  const cashYield = config.execution.cashAnnualYieldPct / 100
+  const fixedYield = config.execution.cashAnnualYieldPct / 100
+  // 유휴현금 금리: 고정값 또는 전일 종가에 관측한 단기국채 금리(그 날짜에 자료가 없으면 고정값)
+  const rateSeries = config.execution.cashYieldSource === 'tbill' ? bundle.cashRate : undefined
+  const cashYieldAt = (k: number) => {
+    const r = rateSeries?.[k]
+    return r != null && Number.isFinite(r) ? r / 100 : fixedYield
+  }
 
   const closeAt = (ticker: string, i: number) => bundle.series[ticker].close[i]
   const openAt = (ticker: string, i: number) => bundle.series[ticker].open[i]
-  const marketValue = (i: number) =>
-    marketSleeves.reduce((sum, s) => sum + state[s.ticker].shares * closeAt(s.ticker, i), 0)
+  const priceAt = (ticker: string, i: number, side: 'open' | 'close') => (side === 'open' ? openAt(ticker, i) : closeAt(ticker, i))
+  const marketValue = (i: number) => positions.reduce((sum, t) => sum + state[t].shares * closeAt(t, i), 0)
+  const triValue = (i: number) => triComps.reduce((sum, t) => sum + state[t].shares * closeAt(t, i), 0) + triCash
+  /** 바깥(전략) 기준 슬리브 평가액 — CASH는 트라이팟 몫을 뺀 자유현금 */
+  const sleeveValue = (s: SleeveConfig, i: number) =>
+    s.ticker === CASH_TICKER ? cash - triCash : isTripodTicker(s.ticker) ? triValue(i) : state[s.ticker].shares * closeAt(s.ticker, i)
 
   const yearOf = (d: string) => Number(d.slice(0, 4))
   const monthOf = (d: string) => d.slice(0, 7)
@@ -139,18 +198,21 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
 
     // ── 1) 유휴현금 이자 (실제 경과일 — 주말·휴장 포함) ──
     // 배당 입금보다 먼저: 오늘 막 입금될 배당에 직전 기간 이자가 붙는 과대계상 방지
+    const cashYield = i > 0 ? cashYieldAt(i - 1) : 0
     if (i > 0 && cash > 0 && cashYield > 0) {
       const dt = daysBetween(dates[i - 1], date)
-      const interest = cash * (Math.pow(1 + cashYield, dt / 365) - 1)
+      const growthF = Math.pow(1 + cashYield, dt / 365) - 1
+      const interest = cash * growthF
       cash += interest
       cashLedger += interest
+      triCash += triCash * growthF // 슬리브 몫 현금도 같은 금리
     }
 
     // ── 2) 배당 (오늘 체결 전 보유분 = ex-date 전일 보유자) ──
-    for (const s of marketSleeves) {
-      const div = bundle.series[s.ticker].divPerShare[i]
-      if (div > 0 && state[s.ticker].shares > 0) {
-        const gross = state[s.ticker].shares * div
+    for (const t of positions) {
+      const div = bundle.series[t].divPerShare[i]
+      if (div > 0 && state[t].shares > 0) {
+        const gross = state[t].shares * div
         const { netUsd, withheldUsd } = applyDividendWithholding(gross, config.tax)
         cash += netUsd
         cashLedger += netUsd
@@ -160,52 +222,8 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
       }
     }
 
-    // ── 3) 오더 체결 (t 시가) — 매도 먼저, 매수는 가용현금 내 스케일 ──
-    if (pendingOrders.length > 0) {
-      for (const o of pendingOrders) {
-        if (o.side !== 'SELL') continue
-        const sl = state[o.ticker]
-        const shares = Math.min(o.amount, sl.shares)
-        if (shares <= 0) continue
-        const px = openAt(o.ticker, i) * (1 - spreadRate)
-        const notional = shares * px
-        const fee = notional * feeRate
-        const avgCost = sl.shares > 0 ? sl.totalCost / sl.shares : 0
-        const realized = notional - fee - shares * avgCost
-        sl.totalCost -= shares * avgCost
-        sl.shares -= shares
-        cash += notional - fee
-        cashLedger += notional - fee
-        totalFeesUsd += fee
-        const taxClass = resolveTaxClass(o.ticker, config.sleeves.find((s) => s.ticker === o.ticker)?.taxClass)
-        if (taxClass !== 'exempt') yearRealized[taxClass] += realized
-        trades.push({ date, ticker: o.ticker, side: 'SELL', shares, price: px, fee, realizedPnl: realized, reason: o.reason })
-      }
-
-      const buyOrders = pendingOrders.filter((o) => o.side === 'BUY')
-      const totalBudget = buyOrders.reduce((s, o) => s + o.amount, 0)
-      // 시가 갭으로 현금이 예산에 못 미치면 비례 축소 (결정론)
-      const scale = totalBudget > 0 ? Math.min(1, Math.max(0, cash) / totalBudget) : 0
-      for (const o of buyOrders) {
-        const budget = o.amount * scale
-        if (budget < 1e-9) continue
-        const px = openAt(o.ticker, i) * (1 + spreadRate)
-        // budget = shares×px + shares×px×feeRate → shares = budget / (px×(1+feeRate))
-        let shares = budget / (px * (1 + feeRate))
-        if (!config.execution.fractionalShares) shares = Math.floor(shares)
-        if (shares <= 0) continue
-        const notional = shares * px
-        const fee = notional * feeRate
-        const sl = state[o.ticker]
-        sl.shares += shares
-        sl.totalCost += notional + fee // 취득가액 = 매수가 + 수수료 (5.1)
-        cash -= notional + fee
-        cashLedger -= notional + fee
-        totalFeesUsd += fee
-        trades.push({ date, ticker: o.ticker, side: 'BUY', shares, price: px, fee, reason: o.reason })
-      }
-      pendingOrders = []
-    }
+    // ── 3) 오더 체결 (t 시가, next_close면 t 종가) — 매도 먼저, 매수는 가용현금 내 스케일 ──
+    if (pendingOrders.length > 0 || pendingTri) executePending(i, timing === 'next_close' ? 'close' : 'open')
 
     // ── 4) 외부 현금 유입 ──
     let externalFlow = 0
@@ -258,9 +276,15 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
       activeRule = next
     }
 
-    // ── 6) 의사결정 (t 종가 → t+1 시가 체결) ──
+    // ── 6) 의사결정 (t 종가 → t+1 체결) ──
     if (i < N - 1) {
+      // 트라이팟: 오늘 종가 판정이 다음 체결의 목표 상태 (판정 준비 전에는 현금)
+      nextTri = triSleeve ? { target: triTarget[i] ?? 'CASH', withdrawFrac: 0, deposit: 0, depositReason: 'cash_sweep' } : null
       pendingOrders = decide(i, value)
+      if (nextTri && nextTri.deposit > 0 && nextTri.target === triHeld && tripodWeights(triHeld, triTop)[3] < 1) {
+        nextTri.depositSplit = splitDeposit(nextTri.deposit, triHeld, (t) => closeAt(t, i), 1 - nextTri.withdrawFrac)
+      }
+      pendingTri = nextTri
     }
 
     // ── 7) 연말 세금 정산 (마지막 날 포함 — 미결 연도분 정산) ──
@@ -279,6 +303,8 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
         cash -= taxDue
         cashLedger -= taxDue
         totalTaxesUsd += taxDue
+        // 세금은 계좌 현금 전체에서 낸다 — 자유현금이 모자라면 트라이팟 몫 현금이 나머지를 낸다
+        if (triCash > cash) triCash = Math.max(0, cash)
         const valueBeforeTax = value
         value -= taxDue
         // 낙폭 관측(5.5)은 세전 값으로 이미 갱신됐으므로 세후 값으로 소급 보정 —
@@ -306,12 +332,12 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
           const mv = marketValue(i)
           const needed = -cash * 1.01 // 스프레드·수수료 여유
           if (mv > 0) {
-            for (const s of marketSleeves) {
-              const sleeveVal = state[s.ticker].shares * closeAt(s.ticker, i)
+            for (const t of positions) {
+              const sleeveVal = state[t].shares * closeAt(t, i)
               if (sleeveVal <= 0) continue
-              let sellShares = ((needed * sleeveVal) / mv) / closeAt(s.ticker, i)
-            if (!config.execution.fractionalShares) sellShares = Math.ceil(sellShares)
-              pendingOrders.push({ ticker: s.ticker, side: 'SELL', amount: Math.min(sellShares, state[s.ticker].shares), reason: 'forced_tax_sale' })
+              let sellShares = ((needed * sleeveVal) / mv) / closeAt(t, i)
+              if (!config.execution.fractionalShares) sellShares = Math.ceil(sellShares)
+              pendingOrders.push({ ticker: t, side: 'SELL', amount: Math.min(sellShares, state[t].shares), reason: 'forced_tax_sale' })
             }
           }
         }
@@ -332,20 +358,28 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
           message: `강제 매도 후 현금 ${cash.toFixed(2)} 음수 지속 → 추가 비례 매도 재시도`,
         })
         const neededR = -cash * 1.02
-        for (const s of marketSleeves) {
-          const sleeveVal = state[s.ticker].shares * closeAt(s.ticker, i)
+        for (const t of positions) {
+          const sleeveVal = state[t].shares * closeAt(t, i)
           if (sleeveVal <= 0) continue
-          let sellShares = ((neededR * sleeveVal) / mvR) / closeAt(s.ticker, i)
+          let sellShares = ((neededR * sleeveVal) / mvR) / closeAt(t, i)
           if (!config.execution.fractionalShares) sellShares = Math.ceil(sellShares)
-          pendingOrders.push({ ticker: s.ticker, side: 'SELL', amount: Math.min(sellShares, state[s.ticker].shares), reason: 'forced_tax_sale' })
+          pendingOrders.push({ ticker: t, side: 'SELL', amount: Math.min(sellShares, state[t].shares), reason: 'forced_tax_sale' })
         }
       }
     }
 
     // ── 8) 기록 + 리컨실 (4.7) ──
-    const sleeveValues: Record<string, number> = { [CASH_TICKER]: cash }
-    for (const s of marketSleeves) sleeveValues[s.ticker] = state[s.ticker].shares * closeAt(s.ticker, i)
+    const sleeveValues: Record<string, number> = { [CASH_TICKER]: cash - triCash }
+    for (const s of marketSleeves) sleeveValues[s.ticker] = sleeveValue(s, i)
     daily.push({ date, value, externalFlow, cumContributions, sleeveValues, cash })
+    if (triHeld && triValue(i) > 1e-9) triDays[triHeld]++
+    if (triCash < -1e-6 || triCash > Math.max(0, cash) + RECON_EPS * Math.max(1, Math.abs(value))) {
+      warnings.push({
+        date,
+        code: 'reconciliation',
+        message: `트라이팟 몫 현금이 계좌 현금 범위를 벗어남: triCash=${triCash.toFixed(6)} cash=${cash.toFixed(6)}`,
+      })
+    }
 
     const reconDiff = Math.abs(cash - cashLedger)
     if (reconDiff > RECON_EPS * Math.max(1, Math.abs(value))) {
@@ -378,6 +412,151 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     warnings,
     finalValue: daily[N - 1].value,
     totalContributions: cumContributions,
+    tripod: triSleeve
+      ? { sleeve: triSleeve.ticker, switches: triSwitches, daysByState: triDays, lastTarget: triTarget[N - 1] ?? null }
+      : undefined,
+  }
+
+  // ─── 체결 (t 시가 또는 t 종가) ─────────────────────────────────────────────────
+
+  /** 매도 — 이동평균 원가로 실현손익 계산 (5.1), 순매도대금을 반환 */
+  function execSell(ticker: string, shares: number, i: number, side: 'open' | 'close', reason: TradeLogEntry['reason']): number {
+    const sl = state[ticker]
+    const px = priceAt(ticker, i, side) * (1 - spreadRate)
+    const notional = shares * px
+    const fee = notional * feeRate
+    const avgCost = sl.shares > 0 ? sl.totalCost / sl.shares : 0
+    const realized = notional - fee - shares * avgCost
+    sl.totalCost -= shares * avgCost
+    sl.shares -= shares
+    if (sl.shares <= 0) {
+      sl.shares = 0
+      sl.totalCost = 0 // 전량 매도 후 부동소수 잔차 제거
+    }
+    cash += notional - fee
+    cashLedger += notional - fee
+    totalFeesUsd += fee
+    const taxClass = resolveTaxClass(ticker, config.sleeves.find((s) => s.ticker === ticker)?.taxClass)
+    if (taxClass !== 'exempt') yearRealized[taxClass] += realized
+    trades.push({ date: dates[i], ticker, side: 'SELL', shares, price: px, fee, realizedPnl: realized, reason })
+    return notional - fee
+  }
+
+  /** 매수 — 예산(수수료 포함)만큼, 정수주 모드는 내림. 실제 지출액을 반환 */
+  function execBuy(ticker: string, budget: number, i: number, side: 'open' | 'close', reason: TradeLogEntry['reason']): number {
+    const px = priceAt(ticker, i, side) * (1 + spreadRate)
+    // budget = shares×px + shares×px×feeRate → shares = budget / (px×(1+feeRate))
+    let shares = budget / (px * (1 + feeRate))
+    if (!config.execution.fractionalShares) shares = Math.floor(shares)
+    if (shares <= 0) return 0
+    const notional = shares * px
+    const fee = notional * feeRate
+    const sl = state[ticker]
+    sl.shares += shares
+    sl.totalCost += notional + fee // 취득가액 = 매수가 + 수수료 (5.1)
+    cash -= notional + fee
+    cashLedger -= notional + fee
+    totalFeesUsd += fee
+    trades.push({ date: dates[i], ticker, side: 'BUY', shares, price: px, fee, reason })
+    return notional + fee
+  }
+
+  /** 전일 결정 체결: 매도(일반·강제) → 트라이팟(인출·입금·신호 전환) → 일반 매수(가용 자유현금 안에서 비례 축소) */
+  function executePending(i: number, side: 'open' | 'close'): void {
+    for (const o of pendingOrders) {
+      if (o.side !== 'SELL') continue
+      const shares = Math.min(o.amount, state[o.ticker].shares)
+      if (shares > 0) execSell(o.ticker, shares, i, side, o.reason)
+    }
+
+    const tri = pendingTri
+    if (tri && tri.withdrawFrac > 0) {
+      // 바깥 리밸런싱 인출: 구성 상품과 슬리브 몫 현금을 같은 비율로 덜어 자유현금으로
+      const f = Math.min(1, tri.withdrawFrac)
+      for (const t of triComps) {
+        let sh = f >= 1 ? state[t].shares : state[t].shares * f
+        if (!config.execution.fractionalShares && f < 1) sh = Math.floor(sh)
+        if (sh > 0) execSell(t, sh, i, side, 'rebalance')
+      }
+      triCash = f >= 1 ? 0 : triCash * (1 - f)
+    }
+
+    const buyOrders = pendingOrders.filter((o) => o.side === 'BUY')
+    const deposit = tri ? Math.max(0, tri.deposit) : 0
+    const totalBudget = buyOrders.reduce((s, o) => s + o.amount, 0) + deposit
+    // 시가 갭으로 현금이 예산에 못 미치면 비례 축소 (결정론). 트라이팟 몫 현금은 일반 매수에 쓰지 않는다
+    const scale = totalBudget > 0 ? Math.min(1, Math.max(0, cash - triCash) / totalBudget) : 0
+
+    if (tri) {
+      triCash += deposit * scale
+      tripodSettle(i, side, tri, scale)
+    }
+
+    for (const o of buyOrders) {
+      const budget = o.amount * scale
+      if (budget < 1e-9) continue
+      execBuy(o.ticker, budget, i, side, o.reason)
+    }
+    pendingOrders = []
+    pendingTri = null
+  }
+
+  /**
+   * 트라이팟 슬리브 정산 — 상태가 바뀌면 슬리브 평가액 전체를 체결 가격 기준 새 비중으로 맞추고
+   * (초과분 매도 → 미달분 매수, 연구 close1과 같은 방식), 상태가 같으면 입금만 결정 시점에 정한
+   * 배분대로 산다. 현금 상태에서는 현금으로 둔다.
+   */
+  function tripodSettle(i: number, side: 'open' | 'close', tri: TripodIntent, scale: number): void {
+    const want = tri.target
+    const switching = want !== triHeld
+    const firstEntry = triHeld === null
+    const pxOf = (t: string) => priceAt(t, i, side)
+    if (switching) {
+      const pool = triComps.reduce((sum, t) => sum + state[t].shares * pxOf(t), 0) + triCash
+      for (const t of triComps) {
+        const cur = state[t].shares * pxOf(t)
+        const goal = triWeightOf(want, t) * pool
+        if (cur <= goal + 1e-9) continue
+        let sh = goal <= 0 ? state[t].shares : (cur - goal) / pxOf(t)
+        if (!config.execution.fractionalShares && goal > 0) sh = Math.floor(sh)
+        if (sh > 0) triCash += execSell(t, sh, i, side, 'signal')
+      }
+      // 빈 슬리브(비중 0% 등)는 상태만 따라가고 전환 기록은 남기지 않는다
+      if (pool > 1e-9) triSwitches.push({ date: dates[i], from: triHeld, to: want })
+      triHeld = want
+    }
+    if (tripodWeights(want, triTop)[3] >= 1 || triCash <= 1e-9) return
+    if (!switching && tri.depositSplit) {
+      tri.depositSplit.forEach((b, k) => {
+        if (b * scale > 1e-9) execBuy(triComps[k], b * scale, i, side, tri.depositReason)
+      })
+      triCash = 0 // 남은 몫(정수주 잔액·부동소수 잔차)은 자유현금으로
+      return
+    }
+    // 전환(또는 첫 진입): 슬리브 몫 현금 전체를 체결 가격 기준 미달분에 배분
+    const buyReason = switching && !firstEntry ? 'signal' : tri.depositReason
+    const split = splitDeposit(triCash, want, pxOf, 1, true)
+    split.forEach((b, k) => {
+      if (b > 1e-9) execBuy(triComps[k], b, i, side, buyReason)
+    })
+    // 현금 상태가 아니면 남은 몫(정수주 잔액·부동소수 잔차)은 자유현금으로 돌려 바깥 배분이 다시 쓰게 한다
+    triCash = 0
+  }
+
+  /**
+   * 슬리브 입금 배분 — 미달분 비례, 미달분을 다 채우고 남으면 목표 비중 비례(적립 배분 to_underweight와 같은 규칙).
+   * keep: 인출 뒤 남을 보유 비율(결정 시점 배분용). inPool: 금액이 이미 triCash에 들어 있는지
+   */
+  function splitDeposit(amount: number, st: TripodState, px: (t: string) => number, keep: number, inPool = false): number[] {
+    const cur = triComps.map((t) => state[t].shares * px(t) * keep)
+    const pool = cur.reduce((a, b) => a + b, 0) + triCash * keep + (inPool ? 0 : amount)
+    const deficits = triComps.map((t, k) => Math.max(0, triWeightOf(st, t) * pool - cur[k]))
+    const totalDef = deficits.reduce((a, b) => a + b, 0)
+    return triComps.map((t, k) => {
+      const w = triWeightOf(st, t)
+      if (totalDef <= 1e-9) return amount * w
+      return amount <= totalDef ? amount * (deficits[k] / totalDef) : deficits[k] + (amount - totalDef) * w
+    })
   }
 
   // ─── 의사결정 (t 종가 기준) ─────────────────────────────────────────────────
@@ -387,10 +566,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     if (value <= 0) return []
 
     const weights: Record<string, number> = {}
-    for (const s of config.sleeves) {
-      const v = s.ticker === CASH_TICKER ? cash : state[s.ticker].shares * closeAt(s.ticker, i)
-      weights[s.ticker] = v / value
-    }
+    for (const s of config.sleeves) weights[s.ticker] = sleeveValue(s, i) / value
 
     // 낙폭 규칙의 현금 목표 대체 — 시장 목표는 (1−유효현금)/(1−기본현금)으로 비례 확대
     const effCash = activeRule?.cashTargetOverride != null ? activeRule.cashTargetOverride : cashTarget
@@ -463,8 +639,17 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
       const reason = i === 0 ? 'initial' : 'rebalance'
       for (const s of marketSleeves) {
         const target = effTarget(s) * value
-        const current = state[s.ticker].shares * closeAt(s.ticker, i)
+        const current = sleeveValue(s, i)
         const delta = target - current
+        if (isTripodTicker(s.ticker)) {
+          // 트라이팟 슬리브는 통째로 넣고 뺀다 — 안쪽 구성은 신호 상태가 정한다
+          if (nextTri && delta < -1e-9 && current > 0) nextTri.withdrawFrac = Math.min(1, -delta / current)
+          else if (nextTri && delta > 1e-9) {
+            nextTri.deposit += delta
+            nextTri.depositReason = reason
+          }
+          continue
+        }
         if (delta < -1e-9) {
           let sellShares = -delta / closeAt(s.ticker, i)
           if (!config.execution.fractionalShares) sellShares = Math.floor(sellShares)
@@ -476,21 +661,22 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
       return orders
     }
 
-    // 적립/유휴현금 배분 (4.3 + 4.5 현금 스윕) — 매수만
+    // 적립/유휴현금 배분 (4.3 + 4.5 현금 스윕) — 매수만. 트라이팟 몫 현금은 자유현금이 아니다
     const targetCashUsd = effCash * value
-    const investable = cash - targetCashUsd
+    const investable = cash - triCash - targetCashUsd
     if (investable < config.execution.minTradeUsd) return orders
 
     const budgets = allocateBuys(investable, i, value, mktScale)
     const isContributionLike = daily.length === 0 || (daily[daily.length - 1]?.cumContributions ?? 0) < cumContributions
+    const reason = i === 0 ? 'initial' : isContributionLike ? 'contribution' : 'cash_sweep'
     for (const [ticker, budget] of Object.entries(budgets)) {
       if (budget > 1e-9) {
-        orders.push({
-          ticker,
-          side: 'BUY',
-          amount: budget,
-          reason: i === 0 ? 'initial' : isContributionLike ? 'contribution' : 'cash_sweep',
-        })
+        if (isTripodTicker(ticker)) {
+          if (nextTri) {
+            nextTri.deposit += budget
+            nextTri.depositReason = reason
+          }
+        } else orders.push({ ticker, side: 'BUY', amount: budget, reason })
       }
     }
     return orders
@@ -527,7 +713,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     const shortfalls: Record<string, number> = {}
     let totalShortfall = 0
     for (const s of marketSleeves) {
-      const current = state[s.ticker].shares * closeAt(s.ticker, i)
+      const current = sleeveValue(s, i)
       const sf = Math.max(0, s.targetWeight * mktScale * projected - current)
       shortfalls[s.ticker] = sf
       totalShortfall += sf
@@ -596,10 +782,28 @@ export function validateStrategy(config: StrategyConfig, bundle?: AlignedDataBun
   if (rb.mode === 'no_sell_except_periodic' && !(rb.periodMonths && rb.periodMonths >= 1))
     errors.push('no_sell_except_periodic에 periodMonths 필요')
 
+  const triSleeves = config.sleeves.filter((s) => isTripodTicker(s.ticker))
+  if (triSleeves.length > 1) errors.push('트라이팟 슬리브(TRIPOD·TRIPOD-2X)는 한 전략에 하나만 넣을 수 있습니다')
+  else if (triSleeves.length === 1) {
+    const comps = tripodComponentsFor(triSleeves[0].ticker)
+    const clash = config.sleeves.filter((s) => comps.includes(s.ticker.trim().toUpperCase())).map((s) => s.ticker)
+    if (clash.length > 0)
+      errors.push(
+        `트라이팟 슬리브가 ${comps.join('·')}를 직접 사고팔기 때문에 같은 전략에 ${clash.join(', ')}를 따로 넣을 수 없습니다 — ` +
+          '나스닥100 보유와 같이 보려면 전략을 나눠 비교하세요'
+      )
+  }
+
   if (bundle) {
     for (const s of config.sleeves) {
-      if (s.ticker !== CASH_TICKER && !bundle.series[s.ticker]) errors.push(`${s.ticker} 데이터 없음`)
+      if (s.ticker === CASH_TICKER) continue
+      if (isTripodTicker(s.ticker)) {
+        if (!bundle.tripod) errors.push(`${s.ticker} 신호 데이터(^NDX·^VIX)가 없습니다`)
+        for (const c of tripodComponentsFor(s.ticker)) if (!bundle.series[c]) errors.push(`${s.ticker} 구성 상품 ${c} 데이터 없음`)
+      } else if (!bundle.series[s.ticker]) errors.push(`${s.ticker} 데이터 없음`)
     }
+    if (config.execution.cashYieldSource === 'tbill' && !bundle.cashRate)
+      errors.push('유휴현금 금리를 단기국채 실제 금리로 설정했지만 ^IRX 데이터가 없습니다')
   }
   return errors
 }

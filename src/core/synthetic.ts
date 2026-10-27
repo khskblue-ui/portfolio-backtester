@@ -15,6 +15,8 @@
  * ⚠ 한계(카탈로그 노트로 상시 노출): 스왑 스프레드 변동·추적오차·유동성 미반영
  * (실제보다 소폭 낙관적), 배당이 가격에 내재돼 배당세 미계산, 하루 −(100/L)% 초과
  * 하락 시 실제로는 상장폐지지만 시뮬레이션은 잔존가치로 계속됨.
+ *
+ * spliceSeries는 실물 상장 뒤에는 실물을 쓰고 그 전만 합성으로 잇는다(-EXT, 트라이팟 슬리브의 구성 상품).
  */
 
 import type { DailySeries } from './types'
@@ -80,4 +82,33 @@ export function buildLeveragedSeries(
 
   // 배당은 adjClose 경유로 가격에 내재 — 별도 배당 현금흐름 없음 (배당세 미계산 주의)
   return { ticker, dates, open, close, adjClose: [...close], dividends: {} }
+}
+
+/**
+ * 실물 + 상장 전 합성 연결 (-EXT) — 실물 상장일 d0 이전은 합성 시계열을 실물 첫 종가에 맞게
+ * 스케일해 붙이고, d0부터는 실물 가격·배당을 그대로 쓴다.
+ *
+ * 스케일 k = 실물 d0 종가 ÷ 합성 d0 종가라서 d0 당일 수익률은 합성의 수익률이고, 이후는 실물 수익률이다.
+ * 보유 주식 수가 연결 시점에 끊기지 않으므로 엔진은 한 자산으로 계속 보유한다(가상의 교체 매매 없음).
+ * 합성이 d0를 포함하지 않으면 d0 직전 합성 값에 맞춘다(그 하루는 수익률 0으로 근사).
+ */
+export function spliceSeries(ticker: string, real: DailySeries, synthetic: DailySeries): DailySeries {
+  if (real.dates.length === 0) throw new Error(`${ticker} — 실물 데이터 없음`)
+  const d0 = real.dates[0]
+  const pre = synthetic.dates.filter((d) => d < d0).length
+  const exact = synthetic.dates[pre] === d0
+  // 합성이 실물보다 늦게 시작하면 이어 붙일 구간이 없다
+  if (pre === 0) return { ...real, ticker }
+  const anchor = exact ? pre : pre - 1
+  const k = real.close[0] / synthetic.close[anchor]
+  // 실물 adjClose는 이후 배당만큼 낮게 조정돼 있으므로 같은 비율로 합성 구간 adjClose를 맞춘다
+  const adjK = k * (real.adjClose[0] / real.close[0])
+  return {
+    ticker,
+    dates: [...synthetic.dates.slice(0, pre), ...real.dates],
+    open: [...synthetic.open.slice(0, pre).map((x) => x * k), ...real.open],
+    close: [...synthetic.close.slice(0, pre).map((x) => x * k), ...real.close],
+    adjClose: [...synthetic.close.slice(0, pre).map((x) => x * adjK), ...real.adjClose],
+    dividends: { ...real.dividends },
+  }
 }

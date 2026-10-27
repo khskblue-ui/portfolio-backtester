@@ -1,0 +1,399 @@
+/**
+ * 트라이팟 슬리브 엔진 검증 — 손계산 골든 · 등가 프로퍼티 · 룩어헤드 · 세금 · 바깥 리밸런싱 · 검증 규칙
+ * (연구 코드와의 일치는 tests/tripod-backtest.test.ts가 저장소 스냅숏으로 확인한다)
+ */
+
+import { describe, it, expect } from 'vitest'
+import { runBacktest, validateStrategy } from '../engine'
+import { computeMetrics } from '../metrics'
+import { alignTripodTargets, alignVixToIndex, computeTripodSignals, tripodComponentsFor, isTripodTicker } from '../tripod'
+import { spliceSeries } from '../synthetic'
+import { makeDates, makeBundle, cleanStrategy, lcg, randomWalk } from './helpers'
+import type { AlignedDataBundle, StrategyConfig, TripodState, DailySeries } from '../types'
+
+/** QQQ·QLD-EXT·TQQQ-EXT 세 상품 + 트라이팟 판정 배열로 번들 구성 */
+function triBundle(
+  dates: string[],
+  closes: { q: number[]; l: number[]; t: number[] },
+  target: (TripodState | null)[],
+  extra?: { dividendsT?: Record<number, number>; opens?: { q: number[]; l: number[]; t: number[] } }
+): AlignedDataBundle {
+  const b = makeBundle(dates, {
+    QQQ: { close: closes.q, open: extra?.opens?.q },
+    'QLD-EXT': { close: closes.l, open: extra?.opens?.l },
+    'TQQQ-EXT': { close: closes.t, open: extra?.opens?.t, dividends: extra?.dividendsT },
+  })
+  b.tripod = { target, lastSignalDate: dates[dates.length - 1] }
+  return b
+}
+
+const tripodStrategy = (partial: Partial<StrategyConfig> = {}, ticker = 'TRIPOD', weight = 1): StrategyConfig => {
+  const base = cleanStrategy({ sleeves: [{ ticker, targetWeight: weight }, ...(weight < 1 ? [{ ticker: 'CASH', targetWeight: 1 - weight }] : [])] })
+  return { ...base, ...partial, execution: { ...base.execution, timing: 'next_close', ...(partial.execution ?? {}) } }
+}
+
+describe('트라이팟 슬리브 — 손계산 골든 (6거래일)', () => {
+  const dates = makeDates('2024-01-02', 6)
+  // 판정(그날 종가): 3배 → 3배 → 1.5배 → 1.5배 → 현금 → 현금
+  const target: TripodState[] = ['T3', 'T3', 'B15', 'B15', 'CASH', 'CASH']
+  const closes = {
+    q: [100, 100, 110, 110, 110, 110],
+    l: [100, 100, 100, 120, 120, 120],
+    t: [100, 110, 121, 121, 100, 100],
+  }
+
+  it('다음 거래일 종가 체결: 0일 판정 → 1일 종가 진입, 2일 판정(1.5배) → 3일 종가 전환, 4일 판정(현금) → 5일 종가 매도', () => {
+    const res = runBacktest(tripodStrategy(), triBundle(dates, closes, target))
+    // 1일 종가 110에 TQQQ 10,000달러 → 2일 121 → 11,000. 3일 종가에 TQQQ 전량(11,000) 매도,
+    // QQQ 5,500(110에 50주)·QLD 5,500(120에 45.83주). 4일 TQQQ 급락(121→100)은 이미 피했다. 5일 종가에 전량 현금
+    expect(res.daily.map((d) => Math.round(d.value))).toEqual([10_000, 10_000, 11_000, 11_000, 11_000, 11_000])
+    const t = res.trades.map((x) => `${x.date}|${x.side}|${x.ticker}|${x.reason}|${x.price}`)
+    expect(t).toEqual([
+      `${dates[1]}|BUY|TQQQ-EXT|initial|110`,
+      `${dates[3]}|SELL|TQQQ-EXT|signal|121`,
+      `${dates[3]}|BUY|QQQ|signal|110`,
+      `${dates[3]}|BUY|QLD-EXT|signal|120`,
+      `${dates[5]}|SELL|QQQ|signal|110`,
+      `${dates[5]}|SELL|QLD-EXT|signal|120`,
+    ])
+    expect(res.trades.find((x) => x.ticker === 'QQQ')!.shares).toBeCloseTo(50, 9)
+    expect(res.daily[5].sleeveValues.TRIPOD).toBeCloseTo(11_000, 6)
+    expect(res.daily[5].sleeveValues.CASH).toBeCloseTo(0, 6) // 슬리브 몫 현금은 CASH 슬리브가 아니다
+    expect(res.tripod?.switches.map((s) => `${s.from}>${s.to}`)).toEqual(['null>T3', 'T3>B15', 'B15>CASH'])
+    expect(res.tripod?.daysByState).toEqual({ T3: 2, B15: 2, CASH: 1 })
+    expect(res.warnings.filter((w) => w.code === 'reconciliation')).toEqual([])
+  })
+
+  it('다음 거래일 시가 체결로 바꾸면 같은 판정이 하루 일찍(시가) 체결된다 — 시가 = 전일 종가인 데이터에서 13,310', () => {
+    const res = runBacktest(tripodStrategy({ execution: { timing: 'next_open' } as StrategyConfig['execution'] }), triBundle(dates, closes, target))
+    // 1일 시가 100에 100주 → 3일 시가 121에 매도 12,100 → QQQ 110·QLD 100에 반씩 → 3일 종가 6,050 + 7,260
+    expect(Math.round(res.finalValue)).toBe(13_310)
+    expect(res.trades[0].price).toBe(100)
+  })
+})
+
+describe('트라이팟 슬리브 — 신호가 고정이면 일반 보유와 같다 (등가 프로퍼티)', () => {
+  const n = 320
+  const dates = makeDates('2019-01-02', n)
+  const rand = lcg(42)
+  const closes = { q: randomWalk(100, n, rand), l: randomWalk(100, n, rand), t: randomWalk(100, n, rand) }
+  const divs = { 40: 0.4, 100: 0.35, 160: 0.5, 220: 0.45, 280: 0.4 }
+  const withCosts = (s: StrategyConfig): StrategyConfig => ({
+    ...s,
+    contribution: { ...s.contribution, initialUsd: 10_000, monthlyUsd: 1_000 },
+    costs: { feeBps: 7, spreadBps: 3 },
+    execution: { ...s.execution, cashAnnualYieldPct: 4, timing: 'next_close' },
+    tax: { ...s.tax, enabled: true, assumedUsdKrw: 1400 },
+  })
+  const same = (a: { daily: { value: number }[] }, b: { daily: { value: number }[] }) => {
+    expect(a.daily.length).toBe(b.daily.length)
+    for (let i = 0; i < a.daily.length; i++) expect(a.daily[i].value).toBeCloseTo(b.daily[i].value, 6)
+  }
+
+  it('항상 3배 판정 = TQQQ-EXT 100% 적립 보유 (배당 원천징수·현금 스윕·비용 포함)', () => {
+    const b = triBundle(dates, closes, new Array(n).fill('T3'), { dividendsT: divs })
+    const tri = runBacktest(withCosts(tripodStrategy()), b)
+    const hold = runBacktest(withCosts(cleanStrategy({ sleeves: [{ ticker: 'TQQQ-EXT', targetWeight: 1 }] })), b)
+    same(tri, hold)
+    expect(tri.dividendsWithheldUsd).toBeCloseTo(hold.dividendsWithheldUsd, 6)
+    expect(tri.tripod?.switches).toHaveLength(1) // 첫 진입만
+  })
+
+  it('항상 1.5배 판정 = QQQ 50% + QLD-EXT 50% 무리밸런싱 적립(부족분 우선)', () => {
+    const b = triBundle(dates, closes, new Array(n).fill('B15'))
+    const tri = runBacktest(withCosts(tripodStrategy()), b)
+    const mix = runBacktest(
+      withCosts(cleanStrategy({ sleeves: [{ ticker: 'QQQ', targetWeight: 0.5 }, { ticker: 'QLD-EXT', targetWeight: 0.5 }] })),
+      b
+    )
+    same(tri, mix)
+  })
+
+  it('항상 현금 판정 = 현금 100% (슬리브 몫 현금도 같은 금리)', () => {
+    const b = triBundle(dates, closes, new Array(n).fill('CASH'))
+    const tri = runBacktest(withCosts(tripodStrategy()), b)
+    const cash = runBacktest(withCosts(cleanStrategy({ sleeves: [{ ticker: 'CASH', targetWeight: 1 }] })), b)
+    same(tri, cash)
+    expect(tri.trades).toHaveLength(0)
+  })
+
+  it('2배판의 3배 판정 = QLD-EXT 100% 보유 (TQQQ를 쓰지 않음)', () => {
+    const b = triBundle(dates, closes, new Array(n).fill('T3'))
+    const tri = runBacktest(withCosts(tripodStrategy({}, 'TRIPOD-2X')), b)
+    const hold = runBacktest(withCosts(cleanStrategy({ sleeves: [{ ticker: 'QLD-EXT', targetWeight: 1 }] })), b)
+    same(tri, hold)
+    expect(tri.trades.every((x) => x.ticker === 'QLD-EXT')).toBe(true)
+  })
+})
+
+describe('트라이팟 슬리브 — 미래 정보 차단', () => {
+  const n = 120
+  const dates = makeDates('2022-03-01', n)
+  const rand = lcg(9)
+  const closes = { q: randomWalk(100, n, rand), l: randomWalk(100, n, rand), t: randomWalk(100, n, rand) }
+  const states: TripodState[] = ['T3', 'B15', 'CASH']
+  const sig = Array.from({ length: n }, () => states[Math.floor(rand() * 3)])
+
+  for (const timing of ['next_close', 'next_open'] as const) {
+    it(`${timing}: k+1일 이후 판정을 바꿔도 k+1일 종가까지의 평가액은 그대로`, () => {
+      const k = 60
+      const altered = sig.map((s, i) => (i > k ? (s === 'T3' ? 'CASH' : 'T3') : s))
+      const st = tripodStrategy({ execution: { timing } as StrategyConfig['execution'] })
+      const a = runBacktest(st, triBundle(dates, closes, sig))
+      const b = runBacktest(st, triBundle(dates, closes, altered))
+      for (let i = 0; i <= k + 1; i++) expect(b.daily[i].value).toBe(a.daily[i].value)
+      expect(b.daily[n - 1].value).not.toBe(a.daily[n - 1].value)
+    })
+  }
+})
+
+describe('트라이팟 슬리브 — 세금·바깥 리밸런싱·정수주', () => {
+  const n = 520
+  const dates = makeDates('2020-01-02', n)
+  const rand = lcg(2024)
+  const up = (start: number, drift: number) => {
+    const out = [start]
+    for (let i = 1; i < n; i++) out.push(out[i - 1] * (1 + drift + (rand() - 0.5) * 0.03))
+    return out
+  }
+  const closes = { q: up(100, 0.0008), l: up(100, 0.0016), t: up(100, 0.0024) }
+  // 40거래일마다 상태가 돌아가는 신호
+  const cycle: TripodState[] = ['T3', 'B15', 'T3', 'CASH', 'B15']
+  const sig = Array.from({ length: n }, (_, i) => cycle[Math.floor(i / 40) % cycle.length])
+
+  it('신호 전환 매도가 연간 양도세로 정산된다 (세후 < 세전, 세금 기록 존재)', () => {
+    const b = triBundle(dates, closes, sig)
+    const st = tripodStrategy({ tax: { ...cleanStrategy({ sleeves: [] }).tax, enabled: true, assumedUsdKrw: 1400 } })
+    const post = runBacktest(st, b)
+    const pre = runBacktest({ ...st, tax: { ...st.tax, enabled: false } }, b)
+    expect(post.taxes.some((x) => x.kind === 'capital_gains')).toBe(true)
+    expect(post.trades.filter((x) => x.reason === 'signal' && x.side === 'SELL').every((x) => x.realizedPnl != null)).toBe(true)
+    expect(post.finalValue).toBeLessThan(pre.finalValue)
+    expect(post.warnings.filter((w) => w.code === 'reconciliation')).toEqual([])
+  })
+
+  it('트라이팟 60% + 현금 40% 월간 리밸런싱: 체결한 날 바깥 비중이 60/40으로 돌아간다(비용 0)', () => {
+    // 월초 결정(i−1일 종가) → i일 종가 체결. 결정 시점 가격으로 정한 수량이라 i일 가격이 움직이면
+    // 정확히 60/40이 되지 않으므로, 체결일만 가격을 고정한 데이터로 확인한다
+    const monthStartNext = (i: number) => i >= 2 && dates[i - 1].slice(0, 7) !== dates[i - 2].slice(0, 7)
+    const hold = (arr: number[]) => {
+      const out = [arr[0]]
+      for (let i = 1; i < n; i++) out.push(monthStartNext(i) ? out[i - 1] : out[i - 1] * (arr[i] / arr[i - 1]))
+      return out
+    }
+    const b = triBundle(dates, { q: hold(closes.q), l: hold(closes.l), t: hold(closes.t) }, sig)
+    const st = tripodStrategy({ rebalance: { trigger: 'periodic', periodMonths: 1, mode: 'sell_to_target' } }, 'TRIPOD', 0.6)
+    const res = runBacktest(st, b)
+    let checked = 0
+    for (let i = 2; i < n; i++) {
+      if (!monthStartNext(i)) continue
+      const d = res.daily[i]
+      expect(d.sleeveValues.TRIPOD / d.value).toBeCloseTo(0.6, 6)
+      expect(d.sleeveValues.CASH / d.value).toBeCloseTo(0.4, 6)
+      checked++
+    }
+    expect(checked).toBeGreaterThan(20)
+    expect(res.warnings.filter((w) => w.code === 'reconciliation')).toEqual([])
+  })
+
+  it('랜덤 신호 · 적립 · 비용 · 세금 · 밴드 · 정수주에서도 현금 원장과 슬리브 합계가 맞는다', () => {
+    const r2 = lcg(77)
+    const states: TripodState[] = ['T3', 'B15', 'CASH']
+    const noisy = Array.from({ length: n }, () => states[Math.floor(r2() * 3)])
+    const b = triBundle(dates, closes, noisy, { dividendsT: { 50: 0.3, 300: 0.3 } })
+    for (const fractionalShares of [true, false]) {
+      const base = tripodStrategy({ rebalance: { trigger: 'bands', bandAbsPct: 5, mode: 'sell_to_target' } }, 'TRIPOD', 0.7)
+      const st: StrategyConfig = {
+        ...base,
+        contribution: { ...base.contribution, monthlyUsd: 700 },
+        costs: { feeBps: 7, spreadBps: 3 },
+        execution: { ...base.execution, fractionalShares, cashAnnualYieldPct: 3 },
+        tax: { ...base.tax, enabled: true, assumedUsdKrw: 1400 },
+      }
+      const res = runBacktest(st, b)
+      expect(res.warnings.filter((w) => w.code === 'reconciliation')).toEqual([])
+      for (const d of res.daily) {
+        const sum = Object.values(d.sleeveValues).reduce((a, x) => a + x, 0)
+        expect(Math.abs(sum - d.value)).toBeLessThan(1e-6 * Math.max(1, d.value))
+        expect(d.cash).toBeGreaterThan(-0.01)
+      }
+      expect(computeMetrics(res).twrrAnnualPct).toBeTypeOf('number')
+    }
+  })
+})
+
+describe('트라이팟 슬리브 — 검증 규칙', () => {
+  it('한 전략에 트라이팟 슬리브는 하나만', () => {
+    const st = cleanStrategy({ sleeves: [{ ticker: 'TRIPOD', targetWeight: 0.5 }, { ticker: 'TRIPOD-2X', targetWeight: 0.5 }] })
+    expect(validateStrategy(st).some((e) => e.includes('하나만'))).toBe(true)
+  })
+  it('구성 상품과 같은 티커를 같은 전략에 따로 넣으면 오류', () => {
+    const st = cleanStrategy({ sleeves: [{ ticker: 'TRIPOD', targetWeight: 0.5 }, { ticker: 'QQQ', targetWeight: 0.5 }] })
+    expect(validateStrategy(st).some((e) => e.includes('QQQ') && e.includes('따로'))).toBe(true)
+    const ok = cleanStrategy({ sleeves: [{ ticker: 'TRIPOD-2X', targetWeight: 0.5 }, { ticker: 'TQQQ-EXT', targetWeight: 0.5 }] })
+    expect(validateStrategy(ok)).toEqual([]) // 2배판은 TQQQ를 쓰지 않는다
+  })
+  it('번들에 신호가 없으면 실행 전에 막는다', () => {
+    const dates = makeDates('2024-01-02', 5)
+    const b = makeBundle(dates, { QQQ: { close: [1, 1, 1, 1, 1] }, 'QLD-EXT': { close: [1, 1, 1, 1, 1] }, 'TQQQ-EXT': { close: [1, 1, 1, 1, 1] } })
+    expect(validateStrategy(tripodStrategy(), b).some((e) => e.includes('신호 데이터'))).toBe(true)
+  })
+  it('티커 판별·구성 상품', () => {
+    expect(isTripodTicker('tripod')).toBe(true)
+    expect(isTripodTicker('TRIPODX')).toBe(false)
+    expect(tripodComponentsFor('TRIPOD')).toEqual(['QQQ', 'QLD-EXT', 'TQQQ-EXT'])
+    expect(tripodComponentsFor('TRIPOD-2X')).toEqual(['QQQ', 'QLD-EXT'])
+  })
+})
+
+describe('트라이팟 신호 보조 함수', () => {
+  it('VIX는 지수 날짜의 값만 쓰고 없으면 직전 값을 잇는다(시작 전 NaN)', () => {
+    const out = alignVixToIndex(['d1', 'd2', 'd3', 'd4'], ['d2', 'd2x', 'd4'], [20, 99, 22])
+    expect(out[0]).toBeNaN()
+    expect(out.slice(1)).toEqual([20, 20, 22])
+  })
+  it('판정을 백테스트 달력으로 옮길 때는 그날 이전(포함) 마지막 판정', () => {
+    const sig = { dates: ['2024-01-02', '2024-01-03', '2024-01-05'], target: ['T3', 'B15', 'CASH'] as TripodState[], regime: [] }
+    expect(alignTripodTargets(sig, ['2024-01-01', '2024-01-03', '2024-01-04', '2024-01-08'])).toEqual([null, 'B15', 'B15', 'CASH'])
+  })
+  it('지표가 준비되기 전(250일 미만)은 판정 없음, 첫 밴드 이탈 전은 현금', () => {
+    const n = 300
+    const dates = makeDates('2010-01-04', n)
+    // 249일 동안 100, 그 뒤 완만히 상승 → 250일선 × 1.01 위로 올라가는 날부터 상승 국면
+    const close = Array.from({ length: n }, (_, i) => (i < 260 ? 100 : 100 + (i - 259) * 0.5))
+    const sig = computeTripodSignals(dates, close, new Array(n).fill(15))
+    expect(sig.target.slice(0, 251).every((t) => t === null)).toBe(true) // 52주 낙폭이 252일째부터
+    expect(sig.target[251]).toBe('CASH')
+    const firstUp = sig.regime.indexOf('UP')
+    expect(firstUp).toBeGreaterThan(260)
+    expect(close[firstUp]).toBeGreaterThan(1.01 * (close.slice(firstUp - 249, firstUp + 1).reduce((a, b) => a + b, 0) / 250))
+    expect(sig.target[firstUp]).toBe('T3')
+  })
+})
+
+describe('실물 + 상장 전 합성 연결 (spliceSeries)', () => {
+  const s = (ticker: string, dates: string[], close: number[], dividends: Record<string, number> = {}): DailySeries => ({
+    ticker, dates, open: close.map((c) => c * 0.99), close, adjClose: close.map((c) => c * 0.9), dividends,
+  })
+  it('상장 전 구간은 실물 첫 종가에 맞춰 스케일, 상장일 수익률은 합성의 수익률, 배당은 실물만', () => {
+    const syn = s('X-SIM', ['d1', 'd2', 'd3', 'd4'], [100, 110, 121, 133.1])
+    const real = s('X', ['d3', 'd4'], [50, 60], { d4: 0.2 })
+    const out = spliceSeries('X-EXT', real, syn)
+    expect(out.dates).toEqual(['d1', 'd2', 'd3', 'd4'])
+    // k = 50 / 121
+    expect(out.close[0]).toBeCloseTo((100 * 50) / 121, 9)
+    expect(out.close[2] / out.close[1]).toBeCloseTo(121 / 110, 12) // 상장일 = 합성 수익률
+    expect(out.close.slice(2)).toEqual([50, 60]) // 상장 후 = 실물
+    expect(out.dividends).toEqual({ d4: 0.2 })
+    // adjClose도 실물 조정비율(0.9)에 이어진다
+    expect(out.adjClose[1] / out.close[1]).toBeCloseTo(0.9, 12)
+  })
+  it('합성이 실물보다 늦게 시작하면 실물 그대로', () => {
+    const syn = s('X-SIM', ['d3', 'd4'], [1, 2])
+    const real = s('X', ['d1', 'd2', 'd3'], [5, 6, 7])
+    expect(spliceSeries('X-EXT', real, syn).close).toEqual([5, 6, 7])
+  })
+})
+
+describe('유휴현금 금리 — 단기국채 실제 금리 모드', () => {
+  const dates = makeDates('2024-01-02', 60)
+  const flat = new Array(60).fill(100)
+  const cashOnly = (source: 'fixed' | 'tbill', pct: number) => {
+    const st = cleanStrategy({ sleeves: [{ ticker: 'CASH', targetWeight: 1 }] })
+    return { ...st, execution: { ...st.execution, cashAnnualYieldPct: pct, cashYieldSource: source } }
+  }
+  it('금리가 늘 5%면 고정 5%와 같다', () => {
+    const b = makeBundle(dates, { VOO: { close: flat } })
+    b.cashRate = new Array(60).fill(5)
+    const a = runBacktest(cashOnly('tbill', 0), b)
+    const f = runBacktest(cashOnly('fixed', 5), b)
+    expect(a.finalValue).toBeCloseTo(f.finalValue, 9)
+    expect(a.finalValue).toBeGreaterThan(10_000)
+  })
+  it('전일 종가 금리를 그날까지의 기간에 쓴다(룩어헤드 없음)', () => {
+    const b = makeBundle(dates, { VOO: { close: flat } })
+    b.cashRate = dates.map((_, i) => (i < 30 ? 0 : 10))
+    const res = runBacktest(cashOnly('tbill', 0), b)
+    expect(res.daily[30].value).toBe(10_000) // 30일 이자는 29일 금리(0%)
+    expect(res.daily[31].value).toBeGreaterThan(10_000)
+  })
+  it('자료가 없는 날(NaN)은 고정 금리로 대체', () => {
+    const b = makeBundle(dates, { VOO: { close: flat } })
+    b.cashRate = new Array(60).fill(NaN)
+    expect(runBacktest(cashOnly('tbill', 5), b).finalValue).toBeCloseTo(runBacktest(cashOnly('fixed', 5), b).finalValue, 9)
+  })
+  it('단기국채 모드인데 금리 데이터가 없으면 실행 전에 막는다', () => {
+    const b = makeBundle(dates, { VOO: { close: flat } })
+    expect(validateStrategy(cashOnly('tbill', 4), b).some((e) => e.includes('^IRX'))).toBe(true)
+  })
+})
+
+describe('체결 시점 — 일반 전략의 다음 거래일 종가 체결', () => {
+  it('next_close는 다음 거래일 종가로, next_open은 시가로 체결된다', () => {
+    const dates = makeDates('2024-01-02', 4)
+    const b = makeBundle(dates, { VOO: { close: [100, 120, 130, 130], open: [100, 105, 125, 130] } })
+    const st = cleanStrategy({ sleeves: [{ ticker: 'VOO', targetWeight: 1 }] })
+    const open = runBacktest(st, b)
+    const close = runBacktest({ ...st, execution: { ...st.execution, timing: 'next_close' } }, b)
+    expect(open.trades[0].price).toBe(105)
+    expect(close.trades[0].price).toBe(120)
+    expect(close.trades[0].date).toBe(dates[1])
+    expect(close.daily[1].value).toBeCloseTo(10_000, 9) // 종가 체결 직후 평가 = 투입액
+  })
+})
+
+describe('데이터 로드 — TRIPOD 슬리브 해석 (야후 응답 스텁)', () => {
+  it('구성 상품(QQQ·QLD-EXT·TQQQ-EXT)과 신호를 붙이고, ^NDX·^VIX는 보유 시계열에 넣지 않는다', async () => {
+    const { loadDataBundle } = await import('../data')
+    const { vi } = await import('vitest')
+    const DAY = 86_400
+    const t0 = Date.parse('2001-01-02T14:30:00Z') / 1000
+    const N = 320
+    const yahoo = (closes: number[], startDay = 0) => ({
+      chart: {
+        result: [
+          {
+            meta: { gmtoffset: -18000, dataGranularity: '1d' },
+            timestamp: closes.map((_, i) => t0 + (startDay + i) * DAY),
+            indicators: { quote: [{ open: closes, close: closes }], adjclose: [{ adjclose: closes }] },
+          },
+        ],
+      },
+    })
+    const rising = (n: number, start: number, g: number) => Array.from({ length: n }, (_, i) => start * (1 + g) ** i)
+    const bodies: Record<string, unknown> = {
+      QQQ: yahoo(rising(N, 100, 0.001)),
+      QLD: yahoo(rising(N - 100, 50, 0.002), 100), // 100일째 상장
+      TQQQ: yahoo(rising(N - 150, 20, 0.003), 150), // 150일째 상장
+      '%5EIRX': yahoo(new Array(N).fill(4)),
+      '%5ENDX': yahoo(rising(N, 1000, 0.001)),
+      '%5EVIX': yahoo(new Array(N).fill(15)),
+    }
+    const fetchMock = vi.fn((url: string) => {
+      const key = Object.keys(bodies).find((k) => url.includes(`/chart/${k}?`))
+      if (!key) return Promise.resolve(new Response('{}', { status: 404 }))
+      return Promise.resolve(new Response(JSON.stringify(bodies[key]), { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const b = await loadDataBundle(['TRIPOD', 'CASH'], { cashRate: true })
+      expect(Object.keys(b.series).sort()).toEqual(['QLD-EXT', 'QQQ', 'TQQQ-EXT'])
+      expect(b.dates).toHaveLength(N) // 연결 상품은 QQQ 첫날부터
+      // 연결 지점: 상장일 종가 = 실물 첫 종가
+      expect(b.series['QLD-EXT'].close[100]).toBeCloseTo(50, 9)
+      expect(b.series['TQQQ-EXT'].close[150]).toBeCloseTo(20, 9)
+      expect(b.tripod?.target).toHaveLength(N)
+      expect(b.tripod?.target[0]).toBeNull() // 지표 준비 전
+      expect(b.tripod?.target[N - 1]).not.toBeNull()
+      expect(b.cashRate?.every((r) => r === 4)).toBe(true)
+      const urls = fetchMock.mock.calls.map((c) => String(c[0]))
+      expect(urls.some((u) => u.includes('%5ENDX'))).toBe(true)
+      expect(urls.some((u) => u.includes('%5EVIX'))).toBe(true)
+      // 해시는 신호까지 포함 — 같은 입력이면 같은 지문
+      const again = await loadDataBundle(['TRIPOD'], { cashRate: true })
+      expect(again.snapshotHash).toBe(b.snapshotHash)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  }, 20000)
+})

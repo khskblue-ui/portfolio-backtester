@@ -9,9 +9,10 @@
  * 가격에 내재돼 배당 현금흐름·배당세가 계산되지 않음 — 엔진이 결과 화면에 플래그.
  */
 
-export type AssetGroup = '역사 월간 (1871~)' | '지수 (장기 히스토리)' | '주식 ETF' | '레버리지 (합성 소급)' | '채권/현금 ETF' | '원자재' | '크립토'
+export type AssetGroup = '신호 전략' | '역사 월간 (1871~)' | '지수 (장기 히스토리)' | '주식 ETF' | '레버리지 (합성 소급)' | '채권/현금 ETF' | '원자재' | '크립토'
 
 import type { SyntheticSpec } from './synthetic'
+import { TRIPOD_SLEEVES } from './tripod'
 
 export interface CatalogEntry {
   ticker: string
@@ -25,6 +26,8 @@ export interface CatalogEntry {
   source?: 'stooq' | 'bundle'
   /** 합성 레버리지 스펙 — 기초 ETF에서 소급 시뮬레이션 (synthetic.ts) */
   synthetic?: SyntheticSpec
+  /** 실물 + 상장 전 합성 연결 (-EXT) — real 상장 전 구간을 synthetic(카탈로그의 -SIM)으로 잇는다 */
+  splice?: { real: string; synthetic: string }
 }
 
 const PRICE_INDEX_NOTE = '가격지수 — 배당 미포함(총수익·배당세 과소). 매매 불가 지수를 보유 가능으로 가정'
@@ -35,7 +38,29 @@ const HIST_NOTE_COMMON =
   '배당 내재(총수익)라 배당 현금흐름·배당세가 계산되지 않으며, 매매 불가 지수를 보유 가능으로 가정합니다. ' +
   '일별 자산(ETF 등)과 같은 실행에 섞을 수 없고, 대공황·스태그플레이션 등 1900년대 구간 탐구 전용입니다'
 
+const EXT_NOTE = (real: string, sim: string, since: string) =>
+  `연결 시계열 — ${since} 상장 이후는 실물 ${real}, 그 이전은 ${sim}(QQQ 일간수익 배수 − 차입비용 − 보수의 소급 합성)을 ` +
+  '가격이 이어지도록 붙였습니다. 상장 전 구간에는 합성 자산의 한계(스왑 스프레드·추적오차 미반영으로 소폭 낙관적, 배당 내재로 배당세 미계산)가 그대로 남습니다'
+
+/** 트라이팟 가상 슬리브 안내 — 결과 화면 경고와 자동완성에 쓰인다 */
+export const TRIPOD_NOTE =
+  '신호 전략 슬리브 — 실존 상품이 아니라 규칙입니다. 매 거래일 나스닥100 종가가 250일선(위 1%·아래 5% 밴드)의 어느 쪽인지로 국면을 정하고, ' +
+  'VIX 10일 평균과 52주 종가 고점 대비 낙폭으로 TQQQ 100% · QQQ 50%+QLD 50% · 현금 가운데 하나를 고릅니다. ' +
+  '구성 상품은 QQQ·QLD-EXT·TQQQ-EXT(상장 전은 합성으로 연결)라 QQQ 상장(1999-03) 이후만 실행할 수 있습니다. ' +
+  '신호가 바뀔 때의 교체는 실제 매도로 계산해 양도세를 해마다 정산하고, 판정은 미국 종가 기준이며 체결 시점은 전략 카드에서 고릅니다(기본: 다음 거래일 종가). ' +
+  '공개된 규칙의 과거 재현일 뿐이며, 규칙이 과거 데이터를 보고 만들어졌다는 한계(과최적화 가능성)가 있습니다'
+
 export const ASSET_CATALOG: CatalogEntry[] = [
+  // ── 신호 전략: 규칙이 매일 보유 상품을 바꾸는 가상 슬리브 (tripod.ts) ──
+  {
+    ticker: 'TRIPOD', label: `${TRIPOD_SLEEVES.TRIPOD.label} (신호로 TQQQ·QQQ+QLD·현금 전환)`, group: '신호 전략', startYear: 1999,
+    note: TRIPOD_NOTE,
+  },
+  {
+    ticker: 'TRIPOD-2X', label: `${TRIPOD_SLEEVES['TRIPOD-2X'].label} (3배 자리에 QLD, 최대 2배)`, group: '신호 전략', startYear: 1999,
+    note: TRIPOD_NOTE.replace('TQQQ 100% · QQQ 50%+QLD 50% · 현금', 'QLD 100%(2배판) · QQQ 50%+QLD 50% · 현금').replace('QQQ·QLD-EXT·TQQQ-EXT', 'QQQ·QLD-EXT'),
+  },
+
   // ── 역사 월간 합성: ETF 이전 시대(1871~) — 역사 연구 탭의 구간을 실제로 백테스트 ──
   {
     ticker: 'SPX-HIST', label: '미국 대형주 총수익 (역사 월간)', group: '역사 월간 (1871~)', startYear: 1871, source: 'bundle',
@@ -94,6 +119,14 @@ export const ASSET_CATALOG: CatalogEntry[] = [
     synthetic: { base: 'SPY', leverage: 2, expensePct: 0.89, borrowSpreadPct: 0.6 },
     note: '가상 합성 자산 — 실존 ETF가 아니라 SPY 일간수익×2 − 차입비용(^IRX 실제 단기금리+0.6%) − 보수의 소급 시뮬레이션. 스왑 스프레드·추적오차 미반영(실제보다 소폭 낙관적), 배당 내재(배당세 미계산). 실물 상장 이후 구간에서 실제 ETF와 겹쳐 검증 가능',
   },
+  {
+    ticker: 'QLD-EXT', label: '나스닥100 2배 (실물 + 상장 전 합성 연결)', group: '레버리지 (합성 소급)', startYear: 1999,
+    splice: { real: 'QLD', synthetic: 'QLD-SIM' }, note: EXT_NOTE('QLD', 'QLD-SIM', '2006-06'),
+  },
+  {
+    ticker: 'TQQQ-EXT', label: '나스닥100 3배 (실물 + 상장 전 합성 연결)', group: '레버리지 (합성 소급)', startYear: 1999,
+    splice: { real: 'TQQQ', synthetic: 'TQQQ-SIM' }, note: EXT_NOTE('TQQQ', 'TQQQ-SIM', '2010-02'),
+  },
 
   // ── 채권 뮤추얼펀드: ETF 이전 시대(80~90년대) 커버, 분배금 포함 ──
   {
@@ -139,6 +172,7 @@ export function assetCautionFor(ticker: string): string | null {
   if (t.startsWith('^')) return PRICE_INDEX_NOTE
   if (t.endsWith('=F')) return '선물 근월물 — 롤오버 왜곡 가능'
   if (t.endsWith('-SIM')) return '가상 합성 자산 — 실존 상품이 아닌 시뮬레이션'
+  if (t.endsWith('-EXT')) return '연결 시계열 — 상장 전 구간은 합성 자산'
   if (t.endsWith('-HIST')) return HIST_NOTE_COMMON
   return null
 }

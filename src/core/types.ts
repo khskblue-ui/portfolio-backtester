@@ -34,6 +34,17 @@ export interface AlignedDataBundle {
   firstDates: Record<string, string>
   /** 최늦 시작일로 클립됐을 때 잘려나간 자산 경고 */
   clipWarnings: string[]
+  /**
+   * 트라이팟 신호 (TRIPOD 슬리브가 있을 때만) — dates 인덱스별로 그날 종가에 정한 목표 상태.
+   * 나스닥100 전 기간(1985~)으로 계산한 뒤 이 달력에 옮겨서, 시작일과 무관하게 국면 이력이 이어진다
+   */
+  tripod?: {
+    target: (TripodState | null)[]
+    /** 판정에 쓴 지수 데이터의 마지막 날짜 */
+    lastSignalDate: string
+  }
+  /** 미국 단기국채(^IRX) 연 % — dates 인덱스별 그날 종가 관측값 (유휴현금 금리 '실제 단기국채' 모드) */
+  cashRate?: number[]
 }
 
 export interface AlignedSeries {
@@ -46,6 +57,9 @@ export interface AlignedSeries {
 }
 
 // ─── 전략 DSL ─────────────────────────────────────────────────────────────────
+
+/** 트라이팟 목표 상태 — T3: 최대 노출(TQQQ 100%, 2배판은 QLD 100%), B15: QQQ 50% + QLD 50%, CASH: 현금 */
+export type TripodState = 'T3' | 'B15' | 'CASH'
 
 /** 현금 슬리브 전용 가상 티커 */
 export const CASH_TICKER = 'CASH'
@@ -154,6 +168,15 @@ export interface ExecutionConfig {
   cashAnnualYieldPct: number
   /** 현금 스윕: 유휴현금(CASH 목표 초과분)이 이 금액을 넘으면 다음날 매수 */
   minTradeUsd: number
+  /**
+   * 체결 시점 (기본 next_open). t 종가로 정한 주문을
+   * - next_open: t+1 시가에 체결 (PRD 4.2 기본 규약)
+   * - next_close: t+1 종가에 체결 (트라이팟 규칙 원안 — 장 마감 주문으로 다음 거래일 종가에 맞춤)
+   * 어느 쪽이든 결정은 t 종가까지의 정보만 쓴다(룩어헤드 없음)
+   */
+  timing?: 'next_open' | 'next_close'
+  /** 유휴현금 금리 원천 (기본 fixed = cashAnnualYieldPct). tbill = 그날 관측한 미국 단기국채(^IRX) 금리 */
+  cashYieldSource?: 'fixed' | 'tbill'
 }
 
 // ─── 세금 설정 (§5) ───────────────────────────────────────────────────────────
@@ -215,8 +238,8 @@ export interface TradeLogEntry {
   fee: number
   /** 매도 시 실현손익 = 양도가액(매도 수수료 차감 후) − 이동평균 취득가액(매수 수수료 포함) — 세법 규약 */
   realizedPnl?: number
-  /** 체결 사유 */
-  reason: 'initial' | 'contribution' | 'rebalance' | 'cash_sweep' | 'forced_tax_sale'
+  /** 체결 사유 (signal = 트라이팟 신호 전환) */
+  reason: 'initial' | 'contribution' | 'rebalance' | 'cash_sweep' | 'forced_tax_sale' | 'signal'
 }
 
 export interface TaxLogEntry {
@@ -258,6 +281,18 @@ export interface RuleEpisode {
   label: string
 }
 
+/** 트라이팟 슬리브 실행 요약 (결과 화면 표시용) */
+export interface TripodRunSummary {
+  /** 슬리브 티커 (TRIPOD / TRIPOD-2X) */
+  sleeve: string
+  /** 신호 전환 체결 기록 (첫 진입 포함) */
+  switches: { date: string; from: TripodState | null; to: TripodState }[]
+  /** 체결 후 보유 상태별 거래일 수 (첫 진입 이후) */
+  daysByState: Record<TripodState, number>
+  /** 마지막 날 종가 판정 (다음 거래일 체결 예정 상태) */
+  lastTarget: TripodState | null
+}
+
 export interface BacktestResult {
   strategyId: string
   daily: DailyPoint[]
@@ -272,6 +307,8 @@ export interface BacktestResult {
   warnings: EngineWarning[]
   finalValue: number
   totalContributions: number
+  /** 트라이팟 슬리브가 있는 전략만 */
+  tripod?: TripodRunSummary
 }
 
 // ─── 지표 (§6) ────────────────────────────────────────────────────────────────
