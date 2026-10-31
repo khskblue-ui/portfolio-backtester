@@ -1,37 +1,39 @@
 {
-  "notified": {},
-  "asOf": "2026-10-29",
+  "notified": {
+    "tripod": "2026-10-30"
+  },
+  "asOf": "2026-10-30",
   "strategies": {
     "tripod": {
-      "exposure": 3,
-      "holding": "TQQQ 100%",
-      "since": "2026-07-30",
-      "changedToday": false
+      "exposure": 1.5,
+      "holding": "QQQ 50% + QLD 50%",
+      "since": "2026-10-30",
+      "changedToday": true
     },
     "t2": {
-      "exposure": 2,
-      "holding": "QLD 100%",
-      "since": "2026-07-30",
-      "changedToday": false
+      "exposure": 1.5,
+      "holding": "QQQ 50% + QLD 50%",
+      "since": "2026-10-30",
+      "changedToday": true
     },
     "te3": {
-      "exposure": 2.4,
-      "holding": "QLD 60% + TQQQ 40%",
-      "since": "2026-10-29",
+      "exposure": 1.8,
+      "holding": "QQQ 20% + QLD 80%",
+      "since": "2026-10-30",
       "changedToday": true
     },
     "tev3": {
-      "exposure": 2,
-      "holding": "QLD 100%",
-      "since": "2026-10-29",
+      "exposure": 1.5,
+      "holding": "QQQ 50% + QLD 50%",
+      "since": "2026-10-30",
       "changedToday": true
     },
     "tev2": {
-      "exposure": 1.5,
-      "holding": "QQQ 50% + QLD 50%",
-      "since": "2026-10-29",
+      "exposure": 1,
+      "holding": "QQQ 100%",
+      "since": "2026-10-30",
       "changedToday": true
     }
   },
-  "nextExecution": "2026-10-30"
+  "nextExecution": "2026-11-02"
 }
