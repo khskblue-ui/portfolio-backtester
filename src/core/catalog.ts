@@ -230,19 +230,51 @@ export function tickerLookalikeNote(ticker: string): string | null {
   return LOOKALIKE_NOTES[ticker.trim().toUpperCase()] ?? null
 }
 
+/** 달러가 아닌 통화로 매겨지는 지수·해외 상장 심볼 (야후 접미사·지수 심볼 기준) */
+const LOCAL_CURRENCY_INDEX: Record<string, string> = {
+  '^KS11': '원화', '^KQ11': '원화', '^N225': '엔화', '^HSI': '홍콩달러', '^FTSE': '파운드', '^GDAXI': '유로', '^STOXX50E': '유로', '^FCHI': '유로',
+}
+const LOCAL_CURRENCY_SUFFIX: [string, string][] = [
+  ['.KS', '원화'], ['.KQ', '원화'], ['.T', '엔화'], ['.HK', '홍콩달러'], ['.L', '파운드(펜스)'], ['.DE', '유로'], ['.PA', '유로'],
+  ['.SS', '위안화'], ['.SZ', '위안화'], ['.TW', '대만달러'],
+]
+
+/**
+ * 달러가 아닌 자산 안내 — 엔진은 모든 가격을 달러로 보고 환율을 넣지 않으며, 세금도 미국 주식 기준(양도세 22%·배당 원천 15%)으로
+ * 매긴다. 국내 상장 주식은 실제 세제가 다르다(소액주주 양도세 비과세 등)
+ */
+export function localCurrencyNote(ticker: string): string | null {
+  const t = ticker.trim().toUpperCase()
+  const cur = LOCAL_CURRENCY_INDEX[t] ?? LOCAL_CURRENCY_SUFFIX.find(([sfx]) => t.endsWith(sfx))?.[1]
+  if (!cur) return null
+  return (
+    `${cur} 가격을 달러처럼 그대로 씁니다. 환율이 반영되지 않아 달러 자산과의 비교가 맞지 않고, 세금도 미국 주식 기준으로 계산합니다` +
+    (cur === '원화' ? '(국내 상장 주식의 실제 세제와 다름)' : '')
+  )
+}
+
 /** 티커의 에피스테믹 주의사항 (카탈로그 외 티커도 ^/=F 패턴으로 감지) */
 export function assetCautionFor(ticker: string): string | null {
   const t = ticker.toUpperCase()
   const look = tickerLookalikeNote(t)
   if (look) return look
+  const fx = localCurrencyNote(t)
   const entry = ASSET_CATALOG.find((e) => e.ticker === t)
-  if (entry?.note) return entry.note
-  if (t.startsWith('^')) return PRICE_INDEX_NOTE
-  if (t.endsWith('=F')) return '선물 근월물 — 롤오버 왜곡 가능'
-  if (t.endsWith('-SIM')) return '가상 합성 자산 — 실존 상품이 아닌 시뮬레이션'
-  if (t.endsWith('-EXT')) return '연결 시계열(상장 전 구간은 합성 자산)'
-  if (t.endsWith('-HIST')) return HIST_NOTE_COMMON
-  return null
+  const base = entry?.note
+    ? entry.note
+    : t.startsWith('^')
+      ? PRICE_INDEX_NOTE
+      : t.endsWith('=F')
+        ? '선물 근월물 — 롤오버 왜곡 가능'
+        : t.endsWith('-SIM')
+          ? '가상 합성 자산 — 실존 상품이 아닌 시뮬레이션'
+          : t.endsWith('-EXT')
+            ? '연결 시계열(상장 전 구간은 합성 자산)'
+            : t.endsWith('-HIST')
+              ? HIST_NOTE_COMMON
+              : null
+  if (base && fx) return `${base}. ${fx}`
+  return base ?? fx
 }
 
 /** 리포 번들 월간 합성 자산 여부 (-HIST) */

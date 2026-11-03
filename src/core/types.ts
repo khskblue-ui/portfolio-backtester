@@ -333,6 +333,8 @@ export interface BacktestResult {
   /** 유휴현금 이자 원천징수 합계 (세금 반영 시, 손으로 만든 결과 객체를 위해 선택 필드) */
   interestWithheldUsd?: number
   totalFeesUsd: number
+  /** 스프레드·슬리피지 비용 합 (체결가에 이미 반영 — 비용 표시용, 손으로 만든 결과 객체를 위해 선택 필드) */
+  totalSpreadUsd?: number
   totalTaxesUsd: number
   warnings: EngineWarning[]
   finalValue: number

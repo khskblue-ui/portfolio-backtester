@@ -35,7 +35,7 @@ export function isCryptoTicker(ticker: string): boolean {
 // ─── Yahoo 조회 ───────────────────────────────────────────────────────────────
 
 interface YahooChartResult {
-  meta?: { gmtoffset?: number; dataGranularity?: string; firstTradeDate?: number | null }
+  meta?: { gmtoffset?: number; exchangeTimezoneName?: string; dataGranularity?: string; firstTradeDate?: number | null }
   timestamp?: number[]
   events?: { dividends?: Record<string, { amount: number; date: number }> }
   indicators?: {
@@ -44,8 +44,30 @@ interface YahooChartResult {
   }
 }
 
-/** UTC 타임스탬프 + 거래소 오프셋 → 거래소 로컬 "YYYY-MM-DD" */
-function toLocalDate(ts: number, gmtoffset: number): string {
+const tzFormatters = new Map<string, Intl.DateTimeFormat | null>()
+
+/**
+ * UTC 타임스탬프 → 거래소 로컬 "YYYY-MM-DD". 거래소 시간대(exchangeTimezoneName)가 있으면 그 시간대의 그날 서머타임으로
+ * 바꾼다. meta.gmtoffset은 '조회한 날'의 오프셋 하나라서, 선물(GC=F 등)처럼 현지 자정(서머타임 중 04:00 UTC)에 찍힌 봉을
+ * 겨울에 받으면 서머타임 기간 봉이 모두 하루 앞(일요일 포함)으로 밀렸다(2026-11 검수: GC=F 2023~24 봉의 65%,
+ * 이튿날 GLD와 상관 0.76 = 하루 미리 보기). 시간대가 없거나 처리할 수 없으면 예전처럼 gmtoffset을 쓴다
+ */
+function toLocalDate(ts: number, gmtoffset: number, timeZone?: string): string {
+  if (timeZone) {
+    let fmt = tzFormatters.get(timeZone)
+    if (fmt === undefined) {
+      try {
+        fmt = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })
+      } catch {
+        fmt = null
+      }
+      tzFormatters.set(timeZone, fmt)
+    }
+    if (fmt) {
+      const p = Object.fromEntries(fmt.formatToParts(new Date(ts * 1000)).map((x) => [x.type, x.value]))
+      if (p.year && p.month && p.day) return `${p.year}-${p.month}-${p.day}`
+    }
+  }
   return new Date((ts + gmtoffset) * 1000).toISOString().slice(0, 10)
 }
 
@@ -202,6 +224,7 @@ export function parseYahooChart(json: unknown, ticker: string): DailySeries {
   if (!result?.timestamp?.length) throw new Error(`${ticker} 데이터 없음`)
 
   const gmtoffset = result.meta?.gmtoffset ?? 0
+  const timeZone = result.meta?.exchangeTimezoneName
   const timestamps = result.timestamp
   const opens = result.indicators?.quote?.[0]?.open ?? []
   const closes = result.indicators?.quote?.[0]?.close ?? []
@@ -221,7 +244,7 @@ export function parseYahooChart(json: unknown, ticker: string): DailySeries {
       if (c == null) continue
       if (o == null) o = c
     } else if (o == null || c == null || !(o > 0) || !(c > 0)) continue
-    const d = toLocalDate(timestamps[i], gmtoffset)
+    const d = toLocalDate(timestamps[i], gmtoffset, timeZone)
     // 동일 날짜 중복 행이면 마지막 값으로 덮어씀
     if (dates.length > 0 && dates[dates.length - 1] === d) {
       open[open.length - 1] = o
@@ -240,7 +263,8 @@ export function parseYahooChart(json: unknown, ticker: string): DailySeries {
   for (const key of Object.keys(divEvents)) {
     const ev = divEvents[key]
     if (!ev || !(ev.amount > 0)) continue
-    dividends[toLocalDate(ev.date, gmtoffset)] = (dividends[toLocalDate(ev.date, gmtoffset)] ?? 0) + ev.amount
+    const d = toLocalDate(ev.date, gmtoffset, timeZone)
+    dividends[d] = (dividends[d] ?? 0) + ev.amount
   }
 
   if (dates.length === 0) throw new Error(`${ticker} 유효한 가격 데이터 없음`)

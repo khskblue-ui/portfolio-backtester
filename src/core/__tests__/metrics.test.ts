@@ -141,6 +141,20 @@ describe('연도별 수익률 (6.4 서브기간)', () => {
   })
 })
 
+describe('연도별 수익률: 0일짜리 해는 만들지 않는다', () => {
+  it('시작일이 그해 마지막 거래일이면 그해 행이 없다', () => {
+    const m = computeMetrics(
+      makeResult([
+        { date: '2019-12-31', value: 100, flow: 100 },
+        { date: '2020-01-02', value: 101 },
+        { date: '2020-01-03', value: 102 },
+      ])
+    )
+    expect(m.annualReturns.map((a) => a.year)).toEqual([2020])
+    expect(m.annualReturns[0].from).toBe('2019-12-31')
+  })
+})
+
 describe('최장 회복기간의 미회복 표시', () => {
   it('가장 긴 수면하 구간이 기간 끝까지 이어지면 미회복', () => {
     const m = computeMetrics(
@@ -191,5 +205,25 @@ describe('검증 워크플로 확정 이슈 회귀 테스트', () => {
       { date: '2024-02-01', amount: 1500 },
     ])
     expect(r).toBeCloseTo(Math.pow(1.5, 365 / 31) - 1, 4)
+  })
+})
+
+describe('XIRR 장기 실행 (2026-11 검수)', () => {
+  it('150년 월 적립도 넘치지 않고 연 9%를 찾는다 (이전: 100000000.0%)', () => {
+    const flows: { date: string; amount: number }[] = []
+    const end = Date.UTC(2021, 0, 1)
+    let fv = 0
+    for (let y = 1871; y < 2021; y++)
+      for (let m = 0; m < 12; m++) {
+        const t = Date.UTC(y, m, 1)
+        flows.push({ date: new Date(t).toISOString().slice(0, 10), amount: -100 })
+        fv += 100 * Math.pow(1.09, (end - t) / (365 * 86_400_000))
+      }
+    flows.push({ date: '2021-01-01', amount: fv })
+    expect(xirr(flows)).toBeCloseTo(0.09, 6)
+  })
+  it('손실 구간(음의 수익률)도 그대로 찾는다', () => {
+    const years = (Date.parse('2000-01-01') - Date.parse('1900-01-01')) / (365 * 86_400_000)
+    expect(xirr([{ date: '1900-01-01', amount: -100 }, { date: '2000-01-01', amount: 100 * Math.pow(0.97, years) }])).toBeCloseTo(-0.03, 6)
   })
 })

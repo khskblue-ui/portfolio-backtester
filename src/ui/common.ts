@@ -127,6 +127,20 @@ export function rulePathsDiffer(a: { ruleEpisodes: unknown[] }, b: { ruleEpisode
   return JSON.stringify(a.ruleEpisodes) !== JSON.stringify(b.ruleEpisodes)
 }
 
+/** 거래 비용 = 수수료 + 스프레드·슬리피지 (스프레드는 체결가에 들어 있어 수익률에는 이미 반영) */
+export const tradingCostUsd = (r: { totalFeesUsd: number; totalSpreadUsd?: number }) => r.totalFeesUsd + (r.totalSpreadUsd ?? 0)
+
+/** 연말 정산 세금의 종류별 표기 — 양도세 $1,234 + 금융소득 종합과세 $56 (없으면 양도세 $0) */
+export function yearEndTaxLabel(taxes: { kind: string; taxUsd: number }[]): string {
+  const name: Record<string, string> = { capital_gains: '양도세', dividend_comprehensive: '금융소득 종합과세', crypto: '가상자산 양도세' }
+  const sum = new Map<string, number>()
+  for (const t of taxes) sum.set(t.kind, (sum.get(t.kind) ?? 0) + t.taxUsd)
+  const parts = Object.keys(name)
+    .filter((k) => (sum.get(k) ?? 0) > 0)
+    .map((k) => `${name[k]} ${fmtUsd(sum.get(k)!)}`)
+  return parts.length > 0 ? parts.join(' + ') : '양도세 $0'
+}
+
 /** 거래 사유 표기 (엔진 TradeLogEntry.reason) */
 const TRADE_REASON_LABEL: Record<string, string> = {
   initial: '초기 매수',

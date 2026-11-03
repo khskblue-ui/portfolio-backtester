@@ -3,7 +3,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts'
 import { Printer, X } from 'lucide-react'
 import type { StrategyRun, AlignedDataBundle, StrategyConfig } from '@/core'
 import { assetCautionFor, assetCautionList, executionTiming, TRIPOD_SLEEVES } from '@/core'
-import { SERIES_COLORS_LIGHT, fmtUsd, fmtSignedUsd, fmtPct, type SharedSettings, uniqueRunLabels, nbspShortParens, fmtUnderwater, yearLabel, tradeReasonSummary, fmtDrag, rulePathsDiffer } from './common'
+import { SERIES_COLORS_LIGHT, fmtUsd, fmtSignedUsd, fmtPct, type SharedSettings, uniqueRunLabels, nbspShortParens, fmtUnderwater, yearLabel, tradeReasonSummary, fmtDrag, rulePathsDiffer, tradingCostUsd } from './common'
 
 /** 보고서 차트 폭(px) — A4 세로(210mm)에서 기본 여백과 본문 좌우 패딩을 뺀 인쇄 영역(약 650px) 안에 들어가는 값 */
 const REPORT_CHART_WIDTH = 620
@@ -52,11 +52,14 @@ export function ReportView({
     const n = runs[0].postTax.metrics.growthOf1.length
     const step = Math.max(1, Math.ceil(n / 400))
     const rows: Record<string, string | number>[] = []
-    for (let i = 0; i < n; i += step) {
+    const pushRow = (i: number) => {
       const row: Record<string, string | number> = { date: runs[0].postTax.metrics.growthOf1[i].date }
       for (const r of runs) row[labelOf.get(r.config.id)!] = Number(r.postTax.metrics.growthOf1[i].value.toFixed(4))
       rows.push(row)
     }
+    for (let i = 0; i < n; i += step) pushRow(i)
+    // 표본 간격이 마지막 날에 맞지 않으면 끝 구간이 빠져 차트가 일찍 끝난다 — 마지막 날은 항상 넣는다
+    if ((n - 1) % step !== 0) pushRow(n - 1)
     return rows
   }, [runs, labelOf])
 
@@ -256,7 +259,12 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
     { label: '배당 (총 / 원천징수)', post: `${fmtUsd(post.result.dividendsGrossUsd)} / ${fmtUsd(post.result.dividendsWithheldUsd)}`, pre: `${fmtUsd(pre.result.dividendsGrossUsd)} / $0` },
     { label: '기간 중 낸 세금 (양도세·배당·이자 원천)', post: fmtUsd(post.result.totalTaxesUsd + post.result.dividendsWithheldUsd + (post.result.interestWithheldUsd ?? 0)), pre: '$0' },
     { label: '청산 시 추가 양도세', post: fmtUsd(post.result.liquidation?.taxUsd ?? 0), pre: '$0' },
-    { label: '거래 비용', post: fmtUsd(post.result.totalFeesUsd), pre: fmtUsd(pre.result.totalFeesUsd) },
+    { label: '거래 비용 (수수료 + 스프레드)', post: fmtUsd(tradingCostUsd(post.result)), pre: fmtUsd(tradingCostUsd(pre.result)) },
+    {
+      label: '수수료 / 스프레드',
+      post: `${fmtUsd(post.result.totalFeesUsd)} / ${fmtUsd(post.result.totalSpreadUsd ?? 0)}`,
+      pre: `${fmtUsd(pre.result.totalFeesUsd)} / ${fmtUsd(pre.result.totalSpreadUsd ?? 0)}`,
+    },
     { label: '거래 횟수', post: String(post.result.trades.length), pre: String(pre.result.trades.length) },
     { label: taxEnabled ? '거래 구성 (세후 실행)' : '거래 구성', post: tradeReasonSummary(post.result.trades) || '없음', pre: '' },
   ]

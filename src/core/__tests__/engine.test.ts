@@ -716,3 +716,66 @@ describe('새 돈만 배분: 현금 슬리브의 시세 변동분은 트리거�
     for (const t of contrib) expect(t.shares * t.price).toBeCloseTo(600, 6)
   })
 })
+
+describe('무매도 + 주기 매도만 (2026-11 검수)', () => {
+  it('트리거가 밴드여도 N개월째 월초에 밴드가 깨져 있으면 팔아서 맞춘다', () => {
+    // A가 꾸준히 올라 50/50에서 밴드(5%p)를 넘는다. 평소엔 무매도, 매월 첫 거래일(1개월 주기)에만 매도 허용
+    const n = 90
+    const dates = makeDates('2023-01-02', n)
+    const a = constSeries(100, n).map((_, i) => 100 * Math.pow(1.01, i))
+    const b = makeBundle(dates, { A: { close: a }, B: { close: constSeries(100, n) } })
+    const r = runBacktest(
+      cleanStrategy({
+        sleeves: [{ ticker: 'A', targetWeight: 0.5 }, { ticker: 'B', targetWeight: 0.5 }],
+        rebalance: { trigger: 'bands', bandAbsPct: 5, periodMonths: 1, mode: 'no_sell_except_periodic' },
+      }),
+      b
+    )
+    const sells = r.trades.filter((t) => t.side === 'SELL')
+    expect(sells.length).toBeGreaterThan(0)
+    for (const t of sells) {
+      const k = dates.indexOf(t.date)
+      expect(dates[k - 1].slice(0, 7), t.date).not.toBe(dates[k - 2].slice(0, 7)) // 결정일(전날)이 월초
+      expect(t.ticker).toBe('A')
+    }
+  })
+})
+
+describe('낙폭 규칙의 고점은 세후 기준 (2026-11 검수)', () => {
+  it('연말 세금일의 세전 값이 새 고점이어도, 세후 값이 전 고점 이상이면 규칙이 발동하지 않는다', () => {
+    // A가 두 배 → 11월 초 리밸런싱으로 이익 12,500 실현 → 2023년 양도세 (12.5M − 2.5M원) × 22% ÷ 1,000 = 2,200달러.
+    // 12/29(그해 마지막 거래일) A +3%로 세전 1.5225 = 새 고점, 세금 뒤 1.5005 ≥ 전 고점 1.5 → 낙폭 0
+    const n = 80
+    const dates = makeDates('2023-10-02', n)
+    const last2023 = dates.filter((d) => d.startsWith('2023')).length - 1
+    const a = constSeries(100, n).map((_, i) => (i < 10 ? 100 : i < last2023 ? 200 : 206))
+    const b = makeBundle(dates, { A: { close: a }, B: { close: constSeries(100, n) } })
+    const base = cleanStrategy({ sleeves: [{ ticker: 'A', targetWeight: 0.5 }, { ticker: 'B', targetWeight: 0.5 }] })
+    const r = runBacktest(
+      {
+        ...base,
+        contribution: { initialUsd: 100_000, monthlyUsd: 0, allocation: 'to_underweight', rules: [{ drawdownPct: 1, contributionMultiplier: 2 }] },
+        rebalance: { trigger: 'periodic', periodMonths: 1, mode: 'sell_to_target' },
+        tax: { ...base.tax, enabled: true },
+      },
+      b
+    )
+    expect(r.taxes.find((t) => t.year === 2023)?.taxUsd).toBeCloseTo(2_200, 6)
+    expect(r.ruleEpisodes).toHaveLength(0)
+    expect(r.warnings.filter((w) => w.code === 'dd_rule')).toHaveLength(0)
+  })
+})
+
+describe('비용 표시: 스프레드도 따로 집계 (2026-11 검수)', () => {
+  it('매수 체결가에 들어간 스프레드를 totalSpreadUsd로 더한다', () => {
+    const n = 10
+    const dates = makeDates('2023-01-02', n)
+    const b = makeBundle(dates, { A: { close: constSeries(100, n) } })
+    const base = cleanStrategy({ sleeves: [{ ticker: 'A', targetWeight: 1 }] })
+    const r = runBacktest({ ...base, costs: { feeBps: 7, spreadBps: 3 } }, b)
+    const shares = 10_000 / (100 * 1.0003 * 1.0007)
+    expect(r.trades).toHaveLength(1)
+    expect(r.totalSpreadUsd).toBeCloseTo(shares * 100 * 0.0003, 9)
+    expect(r.totalFeesUsd).toBeCloseTo(shares * 100 * 1.0003 * 0.0007, 9)
+  })
+})

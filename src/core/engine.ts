@@ -162,6 +162,8 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
   let interestWithheldUsd = 0
   let yearInterest = 0
   let totalFeesUsd = 0
+  /** 스프레드·슬리피지로 체결가가 불리해진 금액 합 (수익률에는 체결가로 이미 반영 — 비용 표시용) */
+  let totalSpreadUsd = 0
   let totalTaxesUsd = 0
 
   // 연 단위 손익통산 그룹 (5.2/5.4) — 연도별·자산군별 실현손익 누적
@@ -302,6 +304,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     // ── 5.5) 낙폭 관측 (growth-of-$1 — 납입 효과 제거, metrics 6.2와 같은 자) ──
     // 오늘 종가 관측이 오늘 저녁의 결정(6)과 내일의 유입(4)에 적용된다.
     if (prevCloseValue > 0) growth *= Math.max(0, (value - externalFlow) / prevCloseValue)
+    const peakBeforeToday = growthPeak
     if (growth > growthPeak) growthPeak = growth
     prevCloseValue = value
     if (ddRules.length > 0) {
@@ -367,13 +370,25 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
         // 세금발 낙폭 규칙 발동이 다음 달(1월) 유입에서 누락되는 1스텝 지연 방지
         if (valueBeforeTax > 0) {
           growth *= Math.max(0, value / valueBeforeTax)
+          // 오늘 세전 값이 새 고점이었다면 그 고점도 세후로 — 차트의 낙폭(세후 기준)보다 규칙이 깊게 보던 것을 바로잡는다
+          growthPeak = Math.max(peakBeforeToday, growth)
           prevCloseValue = value
           if (ddRules.length > 0) {
             const ddPeakT = (1 - growth / growthPeak) * 100
             const ddInvT = cumContributions > 0 ? Math.max(0, (1 - value / cumContributions) * 100) : 0
+            const ddOfT = (r: DrawdownRule) => ((r.basis ?? 'peak') === 'invested' ? ddInvT : ddPeakT)
             let next: DrawdownRule | null = null
-            for (const r of ddRules) if (((r.basis ?? 'peak') === 'invested' ? ddInvT : ddPeakT) >= r.drawdownPct) next = r
-            if ((next?.drawdownPct ?? -1) !== (activeRule?.drawdownPct ?? -1)) trackEpisode(next, date)
+            for (const r of ddRules) if (ddOfT(r) >= r.drawdownPct) next = r
+            if ((next?.drawdownPct ?? -1) !== (activeRule?.drawdownPct ?? -1)) {
+              trackEpisode(next, date)
+              warnings.push({
+                date,
+                code: 'dd_rule',
+                message: next
+                  ? `낙폭 규칙 발동 (연말 세금 납부 뒤 ${(next.basis ?? 'peak') === 'invested' ? '투입원금 대비' : '전고점 대비'} −${ddOfT(next).toFixed(1)}%)`
+                  : `낙폭 규칙 해제 (연말 세금 납부 뒤 기준 낙폭 −${Math.max(ddPeakT, ddInvT).toFixed(1)}%)`,
+              })
+            }
             activeRule = next
           }
         }
@@ -466,6 +481,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     dividendsWithheldUsd,
     interestWithheldUsd,
     totalFeesUsd,
+    totalSpreadUsd,
     totalTaxesUsd,
     warnings,
     finalValue: daily[N - 1].value,
@@ -509,7 +525,8 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
   /** 매도 — 이동평균 원가로 실현손익 계산 (5.1), 순매도대금을 반환 */
   function execSell(ticker: string, shares: number, i: number, side: 'open' | 'close', reason: TradeLogEntry['reason']): number {
     const sl = state[ticker]
-    const px = priceAt(ticker, i, side) * (1 - spreadRate)
+    const raw = priceAt(ticker, i, side)
+    const px = raw * (1 - spreadRate)
     const notional = shares * px
     const fee = notional * feeRate
     const avgCost = sl.shares > 0 ? sl.totalCost / sl.shares : 0
@@ -523,6 +540,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     cash += notional - fee
     cashLedger += notional - fee
     totalFeesUsd += fee
+    totalSpreadUsd += shares * (raw - px)
     const taxClass = resolveTaxClass(ticker, config.sleeves.find((s) => s.ticker === ticker)?.taxClass)
     if (taxClass !== 'exempt') yearRealized[taxClass] += realized
     trades.push({ date: dates[i], ticker, side: 'SELL', shares, price: px, fee, realizedPnl: realized, reason })
@@ -531,7 +549,8 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
 
   /** 매수 — 예산(수수료 포함)만큼, 정수주 모드는 내림. 실제 지출액을 반환 */
   function execBuy(ticker: string, budget: number, i: number, side: 'open' | 'close', reason: TradeLogEntry['reason']): number {
-    const px = priceAt(ticker, i, side) * (1 + spreadRate)
+    const raw = priceAt(ticker, i, side)
+    const px = raw * (1 + spreadRate)
     // budget = shares×px + shares×px×feeRate → shares = budget / (px×(1+feeRate))
     let shares = budget / (px * (1 + feeRate))
     if (!config.execution.fractionalShares) shares = Math.floor(shares)
@@ -544,6 +563,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     cash -= notional + fee
     cashLedger -= notional + fee
     totalFeesUsd += fee
+    totalSpreadUsd += shares * (px - raw)
     trades.push({ date: dates[i], ticker, side: 'BUY', shares, price: px, fee, reason })
     return notional + fee
   }
@@ -684,11 +704,10 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     // 리밸런싱 트리거 판정 (4.4)
     const isMonthStart = i > 0 && monthOf(dates[i - 1]) !== monthOf(date)
     const periodMonths = config.rebalance.periodMonths ?? 0
+    // N개월째 월초 — 주기 트리거의 발동일이자 '무매도 + 주기 매도만'의 매도 허용일(트리거 종류와 무관)
+    const periodicDay = periodMonths > 0 && isMonthStart && monthIndex(date) % periodMonths === 0
     const periodicDue =
-      (config.rebalance.trigger === 'periodic' || config.rebalance.trigger === 'band_or_periodic') &&
-      periodMonths > 0 &&
-      isMonthStart &&
-      monthIndex(date) % periodMonths === 0
+      (config.rebalance.trigger === 'periodic' || config.rebalance.trigger === 'band_or_periodic') && periodicDay
 
     let bandBreached = false
     if (config.rebalance.trigger === 'bands' || config.rebalance.trigger === 'band_or_periodic') {
@@ -736,9 +755,11 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
       }
     }
 
+    // '무매도 + 주기 매도만'은 N개월째 월초에만 매도를 허용한다. 예전에는 주기 트리거일 때만 그날을 계산해서, 트리거가
+    // '밴드'면 매도가 한 번도 일어나지 않았다(2026-11 검수)
     const sellsAllowed =
       config.rebalance.mode === 'sell_to_target' ||
-      (config.rebalance.mode === 'no_sell_except_periodic' && periodicDue)
+      (config.rebalance.mode === 'no_sell_except_periodic' && periodicDay)
     // 트라이팟 신호 전환 때 바깥 비중도 맞추기 (연구 적립식 문서의 '트라이팟 60%+현금 40%' 정의)
     const tripodSwitchDue = !!config.rebalance.onTripodSwitch && nextTri != null && triHeld != null && nextTri.target !== triHeld
     const triggerFired =

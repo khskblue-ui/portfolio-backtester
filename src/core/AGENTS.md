@@ -91,6 +91,16 @@ import 그래프는 엄격한 비순환: `types` → {`synthetic`,`tax`,`metrics
 - 배분(`planAllocation`): to_underweight는 CASH까지 포함한 부족분 비례(연구 `dca.mjs`의 fill과 같음), pro_rata는 CASH 몫 포함
   목표 비중, fixed_split은 CASH 부족분을 먼저 채운 뒤 직접 정한 비율. 밴드·과대 경고는 새 돈을 배분한 뒤의 비중과 그날 유효 목표로 판정.
 - 시장 몫이 `minTradeUsd` 미만이면 CASH 몫은 확정하고 시장 몫만 `unalloc`에 남겨 쌓는다.
+- '투입'은 목표를 넘는 현금이 새 돈보다 많을 때만이다(`excess > unalloc`). 아니면 트리거 발동일도 평소 배분이라 CASH도 몫을 받는다.
+- '무매도 + 주기 매도만'의 매도 허용일(N개월째 월초)은 트리거 종류와 무관하다(밴드 트리거와도 동작).
+- 낙폭 규칙의 고점은 세후: 연말 세금일에는 `growthPeak = max(그날 전 고점, 세후 growth)`.
+- 비용: 수수료 `totalFeesUsd`와 스프레드 `totalSpreadUsd`를 따로 쌓는다(스프레드는 체결가에 이미 반영, 표시용).
+
+### 데이터 날짜 (2026-11)
+
+- 야후 봉의 로컬 날짜는 `meta.exchangeTimezoneName`으로 그날의 서머타임까지 반영해 정한다(`toLocalDate`). 조회 시점의
+  `gmtoffset` 하나로 바꾸면 현지 자정에 찍히는 선물 봉이 서머타임 기간에 하루 앞으로 밀려 하루 미리 보기가 됐다. 시간대가 없으면
+  예전처럼 `gmtoffset`(테스트·FIXTURES 서버의 페이로드).
 
 <!-- 추가 2026-10-27 -->
 ### 트라이팟 신호 슬리브 (TRIPOD / TRIPOD-2X)

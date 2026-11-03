@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { alignToCommonCalendar, hashBundle, isCryptoTicker } from '../data'
+import { alignToCommonCalendar, hashBundle, isCryptoTicker, parseYahooChart } from '../data'
 import type { DailySeries } from '../types'
 
 function series(ticker: string, dates: string[], price = 100, dividends: Record<string, number> = {}): DailySeries {
@@ -351,5 +351,51 @@ describe('감사 회귀: 선두 결측 forward-fill', () => {
     const btc: DailySeries = { ticker: 'BTC-USD', dates: ['2019-01-02', '2022-12-30', '2023-01-04'], open: [400, 7200, 9000], close: [400, 7200, 9000], adjClose: [400, 7200, 9000], dividends: {} }
     const b = alignToCommonCalendar([eq, btc], { startDate: '2023-01-02' })
     expect(b.series['BTC-USD'].close[0]).toBe(7200) // 직전 관측치 (400이면 유령 수익)
+  })
+})
+
+describe('야후 봉 날짜 = 거래소 시간대의 그날 (2026-11 검수: 선물 서머타임 하루 밀림)', () => {
+  // 선물은 현지 자정에 찍힌다: 서머타임(7월) 04:00 UTC, 표준시(1월) 05:00 UTC. 조회 시점 오프셋(겨울 −18000) 하나로 바꾸면
+  // 7월 봉이 하루 앞(전날)으로 밀렸다
+  const at = (iso: string) => Date.parse(iso) / 1000
+  const payload = (meta: Record<string, unknown>) => ({
+    chart: {
+      result: [
+        {
+          meta,
+          timestamp: [at('2023-01-10T05:00:00Z'), at('2023-07-10T04:00:00Z')],
+          events: { dividends: { x: { amount: 1, date: at('2023-07-10T04:00:00Z') } } },
+          indicators: { quote: [{ open: [1, 1], close: [1, 1] }], adjclose: [{ adjclose: [1, 1] }] },
+        },
+      ],
+    },
+  })
+  it('시간대가 있으면 서머타임을 날짜별로 반영한다', () => {
+    const s = parseYahooChart(payload({ gmtoffset: -18000, exchangeTimezoneName: 'America/New_York' }), 'GC=F')
+    expect(s.dates).toEqual(['2023-01-10', '2023-07-10'])
+    expect(Object.keys(s.dividends)).toEqual(['2023-07-10'])
+  })
+  it('시간대가 없거나 알 수 없으면 예전처럼 gmtoffset으로 바꾼다', () => {
+    expect(parseYahooChart(payload({ gmtoffset: -18000 }), 'GC=F').dates).toEqual(['2023-01-10', '2023-07-09'])
+    expect(parseYahooChart(payload({ gmtoffset: -18000, exchangeTimezoneName: 'Not/AZone' }), 'GC=F').dates).toEqual(['2023-01-10', '2023-07-09'])
+  })
+})
+
+describe('주의 문구: 헷갈리는 티커와 달러가 아닌 자산 (2026-11 검수)', async () => {
+  const { assetCautionFor, tickerLookalikeNote, localCurrencyNote } = await import('../catalog')
+  it('GOLD·BTC·ETH는 이름과 다른 상품이라 입력 때 알린다', () => {
+    expect(tickerLookalikeNote('gold')).toContain('Gold.com')
+    expect(tickerLookalikeNote('BTC')).toContain('BTC-USD')
+    expect(tickerLookalikeNote('ETH')).toContain('ETH-USD')
+    expect(tickerLookalikeNote('GLD')).toBeNull()
+    expect(assetCautionFor('GOLD')).toContain('금 가격이 아니라')
+  })
+  it('원화 지수·국내 상장 주식은 환율·세제 차이를 함께 알린다', () => {
+    expect(localCurrencyNote('^KS11')).toContain('원화')
+    expect(localCurrencyNote('005930.KS')).toContain('국내 상장 주식')
+    expect(localCurrencyNote('7203.T')).toContain('엔화')
+    expect(localCurrencyNote('SPY')).toBeNull()
+    expect(assetCautionFor('^KS11')).toContain('배당 미포함')
+    expect(assetCautionFor('^KS11')).toContain('환율이 반영되지 않아')
   })
 })

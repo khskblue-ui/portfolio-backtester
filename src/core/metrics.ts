@@ -85,7 +85,8 @@ export function computeMetrics(result: BacktestResult): Metrics {
   for (let t = 1; t < n; t++) {
     const y = Number(daily[t].date.slice(0, 4))
     if (y !== curYear) {
-      annualReturns.push({ year: curYear, returnPct: (yearProd - 1) * 100, from: yearFrom, to: daily[t - 1].date })
+      // 시작일이 그해 마지막 거래일이면 잰 구간이 0일이라 행을 만들지 않는다
+      if (daily[t - 1].date !== yearFrom) annualReturns.push({ year: curYear, returnPct: (yearProd - 1) * 100, from: yearFrom, to: daily[t - 1].date })
       yearFrom = daily[t - 1].date
       curYear = y
       yearProd = 1
@@ -130,25 +131,31 @@ export function xirr(flows: { date: string; amount: number }[]): number {
   if (flows.length < 2) return NaN
   const t0 = Date.parse(flows[0].date)
   const yearsFrom = flows.map((f) => (Date.parse(f.date) - t0) / (365 * 86_400_000))
+  const T = Math.max(...yearsFrom)
 
-  const npv = (rate: number) =>
-    flows.reduce((sum, f, i) => sum + f.amount / Math.pow(1 + rate, yearsFrom[i]), 0)
+  // 이분법에는 NPV의 부호만 필요하다. 그대로 계산하면 76년이 넘는 기간에서 (1+r)^−t가 넘쳐 Infinity−Infinity = NaN이
+  // 되고(월 적립 1871~2026 실행이 MWRR 100000000.0%로 나왔다), 그래서 r<0이면 양수 (1+r)^T를 곱해 지수를 T−t ≥ 0으로,
+  // r≥0이면 지수 −t ≤ 0 그대로 둔다. 어느 쪽도 거듭제곱이 1을 넘지 않아 넘치지 않고, 아주 작은 값은 0이 될 뿐이다
+  const npvSign = (rate: number) => {
+    const base = 1 + rate
+    let s = 0
+    for (let i = 0; i < flows.length; i++) s += flows[i].amount * Math.pow(base, rate < 0 ? T - yearsFrom[i] : -yearsFrom[i])
+    return Math.sign(s)
+  }
 
   let lo = -0.9999
   let hi = 1e6 // 단기간 백테스트의 연환산(예: 1개월 +50% ≈ 연 117배)도 브래킷 안에 들어오도록
-  let fLo = npv(lo)
-  const fHi = npv(hi)
-  if (fLo * fHi > 0) return NaN
-  for (let iter = 0; iter < 200; iter++) {
+  const sLo = npvSign(lo)
+  const sHi = npvSign(hi)
+  if (sLo === 0) return lo
+  if (sHi === 0) return hi
+  if (!(sLo * sHi < 0)) return NaN
+  for (let iter = 0; iter < 200 && hi - lo >= 1e-10; iter++) {
     const mid = (lo + hi) / 2
-    const fMid = npv(mid)
-    if (Math.abs(fMid) < 1e-10 || hi - lo < 1e-10) return mid
-    if (fLo * fMid < 0) {
-      hi = mid
-    } else {
-      lo = mid
-      fLo = fMid
-    }
+    const sMid = npvSign(mid)
+    if (sMid === 0) return mid
+    if (sMid === sLo) lo = mid
+    else hi = mid
   }
   return (lo + hi) / 2
 }

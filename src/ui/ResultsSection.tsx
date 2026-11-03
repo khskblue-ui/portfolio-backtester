@@ -14,7 +14,7 @@ import {
 import { NumberInput } from './NumberInput'
 import { assetCautionList, executionTiming, TRIPOD_SLEEVES, type StrategyRun, type AlignedDataBundle, type TripodState } from '@/core'
 import { HelpTip } from './HelpTip'
-import { cardCls, fmtUsd, fmtSignedUsd, fmtPct, fmtSignedPct, uniqueRunLabels, nbspShortParens, fmtUnderwater, yearLabel, tradeReasonSummary, fmtDrag, rulePathsDiffer } from './common'
+import { cardCls, fmtUsd, fmtSignedUsd, fmtPct, fmtSignedPct, uniqueRunLabels, nbspShortParens, fmtUnderwater, yearLabel, tradeReasonSummary, fmtDrag, rulePathsDiffer, tradingCostUsd, yearEndTaxLabel } from './common'
 
 /**
  * 결과 섹션 (§7) — TWRR 기준 정렬 비교표 + growth-of-$1 오버레이 +
@@ -69,13 +69,12 @@ export function ResultsSection({
     const step = Math.max(1, Math.ceil(n / 500))
     const rows: Record<string, string | number>[] = []
     const pushRow = (i: number) => {
-      const row: Record<string, string | number> = {
-        date: runs[0][taxView].metrics.growthOf1[i].date,
-        __contrib: runs[0][taxView].result.daily[i].cumContributions,
-      }
+      const row: Record<string, string | number> = { date: runs[0][taxView].metrics.growthOf1[i].date }
+      // 투입 원금은 전략마다 다를 수 있다(낙폭 규칙의 적립 배수) — 전략별로 담는다
       for (const r of runs) {
         row[labelOf.get(r.config.id)!] = Number(r[taxView].metrics.growthOf1[i].value.toFixed(4))
         row[`${labelOf.get(r.config.id)!}__value`] = r[taxView].result.daily[i].value
+        row[`${labelOf.get(r.config.id)!}__contrib`] = r[taxView].result.daily[i].cumContributions
       }
       rows.push(row)
     }
@@ -396,7 +395,13 @@ export function ResultsSection({
                   평가이익의 세금은 들어 있지 않고, "청산 후 가치"에서 따로 뺍니다.
                 </HelpTip>
               </th>
-              <th className="text-right px-3 py-3 font-medium">비용</th>
+              <th className="text-right px-3 py-3 font-medium">
+                비용
+                <HelpTip title="비용 — 수수료와 스프레드" align="right">
+                  매매할 때 낸 수수료와, 스프레드·슬리피지 때문에 시세보다 불리하게 체결된 금액의 합입니다. 스프레드는 체결 가격에
+                  이미 들어 있어 수익률에는 반영돼 있고, 여기서는 얼마였는지 따로 보여 줍니다.
+                </HelpTip>
+              </th>
               <th className="text-right px-3 py-3 font-medium">거래</th>
             </tr>
           </thead>
@@ -423,7 +428,7 @@ export function ResultsSection({
                   <td className="text-right px-3 py-2.5">
                     {fmtUsd(r.postTax.result.totalTaxesUsd + r.postTax.result.dividendsWithheldUsd + (r.postTax.result.interestWithheldUsd ?? 0))}
                   </td>
-                  <td className="text-right px-3 py-2.5">{fmtUsd(res.totalFeesUsd)}</td>
+                  <td className="text-right px-3 py-2.5">{fmtUsd(tradingCostUsd(res))}</td>
                   <td className="text-right px-3 py-2.5" title={tradeReasonSummary(res.trades)}>{res.trades.length}</td>
                 </tr>
               )
@@ -553,7 +558,7 @@ export function ResultsSection({
                     </div>
                   )}
                   <div className="text-xs text-gray-400 mt-0.5">
-                    양도세 {fmtUsd(res.totalTaxesUsd)} + 배당 원천 {fmtUsd(res.dividendsWithheldUsd)}
+                    {yearEndTaxLabel(res.taxes)} + 배당 원천 {fmtUsd(res.dividendsWithheldUsd)}
                     {(res.interestWithheldUsd ?? 0) > 0 && <> + 이자 원천 {fmtUsd(res.interestWithheldUsd ?? 0)}</>}. 실현익 과세와 원천징수가 만드는 복리 드래그
                   </div>
                   {res.liquidation && (
@@ -667,22 +672,23 @@ function MoneyTooltip({
 }) {
   if (!active || !payload || payload.length === 0) return null
   const row = payload[0].payload ?? {}
-  const contrib = Number(row['__contrib'] ?? 0)
 
-  // 평가액 큰 순으로 정렬
+  // 평가액 큰 순으로 정렬. 수익금은 각 전략 자기 원금 기준
   const entries = payload
     .map((p) => {
       const name = String(p.dataKey ?? '')
       const value = Number(row[`${name}__value`] ?? 0)
-      return { name, value, profit: value - contrib }
+      const contrib = Number(row[`${name}__contrib`] ?? 0)
+      return { name, value, contrib, profit: value - contrib }
     })
     .sort((a, b) => b.value - a.value)
+  const sameContrib = entries.every((e) => Math.abs(e.contrib - entries[0].contrib) < 0.5)
 
   return (
     <div className="rounded border border-[#d3d8e3] dark:border-[#363a45] bg-[#ffffff] dark:bg-[#1e222d] shadow-lg p-3 text-xs space-y-1.5 max-w-xs">
       <div className="font-semibold text-zinc-900 dark:text-zinc-100">{label}</div>
       <div className="text-zinc-500 dark:text-zinc-400 pb-1 border-b border-[#d3d8e3] dark:border-[#363a45]">
-        투입 원금 {fmtUsd(contrib)}
+        {sameContrib ? `투입 원금 ${fmtUsd(entries[0].contrib)}` : '투입 원금이 전략마다 다릅니다 (낙폭 규칙의 적립 배수)'}
       </div>
       {entries.map((e) => (
         <div key={e.name} className="flex items-baseline gap-1.5">
@@ -690,11 +696,14 @@ function MoneyTooltip({
             className="w-2 h-2 rounded-full flex-shrink-0 self-center"
             style={{ backgroundColor: colorByName.get(e.name) }}
           />
-          <span className="text-zinc-600 dark:text-zinc-300 truncate">{e.name}</span>
+          <span className="text-zinc-600 dark:text-zinc-300 truncate">
+            {e.name}
+            {!sameContrib && <span className="text-zinc-400"> · 원금 {fmtUsd(e.contrib)}</span>}
+          </span>
           <span className="ml-auto text-right whitespace-nowrap">
             <span className="font-semibold text-zinc-900 dark:text-zinc-100">{fmtUsd(e.value)}</span>
             <span className={e.profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>
-              {' '}{fmtSignedUsd(e.profit)} ({fmtSignedPct(contrib > 0 ? (e.profit / contrib) * 100 : 0)})
+              {' '}{fmtSignedUsd(e.profit)} ({fmtSignedPct(e.contrib > 0 ? (e.profit / e.contrib) * 100 : 0)})
             </span>
           </span>
         </div>
