@@ -775,11 +775,11 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     }
 
     // 매수만: 새 돈 배분(평소) 또는 목표를 넘는 현금 투입(무매도 모드의 트리거 발동일·낙폭 규칙으로 현금 목표가 낮아진 날).
+    // 목표를 넘는 현금이 새 돈보다 많을 때만 '투입'이다 — 아니면 그날도 새 돈 배분과 같다(CASH가 모자라면 CASH도 몫을 받는다).
     // 트라이팟 몫 현금은 자유현금이 아니다
-    const deploy = triggerFired || cashTargetLowered
-    const plan = deploy
-      ? planAllocation(Math.max(normalPool, freeCash - effCash * value), i, value, effCash, mktScale, true)
-      : normalPlan
+    const excess = freeCash - effCash * value
+    const deployExcess = (triggerFired || cashTargetLowered) && excess > unalloc + 1e-9
+    const plan = deployExcess ? planAllocation(excess, i, value, effCash, mktScale, true) : normalPlan
     const marketTotal = Object.values(plan.budgets).reduce((a, b) => a + b, 0)
     if (marketTotal < config.execution.minTradeUsd) {
       // 너무 작아 체결하지 않음 — 현금 슬리브 몫은 현금으로 확정하고, 시장 몫만 새 돈으로 남겨 다음 날 다시 배분
@@ -789,7 +789,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     unalloc = 0
     const isContributionLike = daily.length === 0 || (daily[daily.length - 1]?.cumContributions ?? 0) < cumContributions
     const reason: TradeLogEntry['reason'] =
-      i === 0 ? 'initial' : triggerFired ? 'rebalance' : cashTargetLowered ? 'dd_rule' : isContributionLike ? 'contribution' : 'cash_sweep'
+      i === 0 ? 'initial' : deployExcess ? (triggerFired ? 'rebalance' : 'dd_rule') : isContributionLike ? 'contribution' : 'cash_sweep'
     for (const [ticker, budget] of Object.entries(plan.budgets)) {
       if (budget > 1e-9) {
         if (isTripodTicker(ticker)) {
@@ -809,7 +809,8 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
    *   남으면 목표 비중 비례. (가장-미달-우선 워터폴이 아님 — 명세 고정)
    * - pro_rata: 현재 상태와 무관하게 목표 비중대로(현금 슬리브 몫 포함)
    * - fixed_split: 현금 슬리브의 부족분을 먼저 채우고, 나머지를 직접 정한 비율대로
-   * deploy(목표를 넘는 현금 투입)이거나 현금 목표가 0이면 pool 전체가 시장 몫이다.
+   * 현금 슬리브의 몫은 '자유현금 − pool'을 현재 보유로 보고 정하므로, pool이 목표를 넘는 현금 전체(excessDeploy)면
+   * 부족분 비례·고정 분할은 저절로 전부 시장 몫이 된다. 목표비중 비례만 그 경우를 따로 시장 몫으로 돌린다.
    * 반환: budgets(시장 슬리브별 매수 예산), cashPart(현금 슬리브가 갖는 몫)
    */
   function planAllocation(
@@ -818,25 +819,24 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     value: number,
     effCash: number,
     mktScale: number,
-    deploy: boolean
+    excessDeploy: boolean
   ): { budgets: Record<string, number>; cashPart: number } {
     const budgets: Record<string, number> = {}
     if (!(pool > 1e-9) || marketSleeves.length === 0) return { budgets, cashPart: Math.max(0, pool) }
     const policy = config.contribution.allocation
     const freeCash = cash - triCash
-    const toMarketOnly = deploy || effCash <= 1e-12
     const marketTargetSum = marketSleeves.reduce((sum, s) => sum + s.targetWeight, 0)
     const sum = () => Object.values(budgets).reduce((a, b) => a + b, 0)
 
     if (policy === 'fixed_split' && config.contribution.fixedSplit) {
-      const marketPart = toMarketOnly ? pool : Math.max(0, Math.min(pool, freeCash - effCash * value))
+      const marketPart = effCash <= 1e-12 ? pool : Math.max(0, Math.min(pool, freeCash - effCash * value))
       for (const s of marketSleeves) budgets[s.ticker] = marketPart * (config.contribution.fixedSplit[s.ticker] ?? 0)
       return { budgets, cashPart: pool - sum() }
     }
     if (marketTargetSum <= 0) return { budgets, cashPart: pool }
 
     if (policy === 'pro_rata') {
-      const marketPart = toMarketOnly ? pool : pool * (1 - effCash)
+      const marketPart = excessDeploy || effCash <= 1e-12 ? pool : pool * (1 - effCash)
       for (const s of marketSleeves) budgets[s.ticker] = marketPart * (s.targetWeight / marketTargetSum)
       return { budgets, cashPart: pool - sum() }
     }
@@ -850,9 +850,10 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
       totalShortfall += sf
     }
     // 현금 슬리브의 현재 몫 = 자유현금 − 배분 대상 금액
-    const cashShort = toMarketOnly ? 0 : Math.max(0, effCash * value - (freeCash - pool))
+    const cashShort = Math.max(0, effCash * value - (freeCash - pool))
     totalShortfall += cashShort
-    const w = (s: SleeveConfig) => (toMarketOnly ? s.targetWeight / marketTargetSum : s.targetWeight * mktScale)
+    // 잔여는 CASH까지 목표 비중 비례(시장 슬리브 합 = 1 − 유효현금, 나머지는 cashPart로 현금에 남는다)
+    const w = (s: SleeveConfig) => s.targetWeight * mktScale
     if (totalShortfall <= 1e-9) {
       // 부족 슬리브 없음 → 목표비중 비례
       for (const s of marketSleeves) budgets[s.ticker] = pool * w(s)

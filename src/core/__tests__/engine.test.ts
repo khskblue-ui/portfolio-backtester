@@ -665,6 +665,28 @@ describe('새 돈만 배분: 현금 슬리브의 시세 변동분은 트리거�
     }
   })
 
+  it('무매도 + 밴드: 밴드가 매일 깨져 있어도 목표 초과 현금이 없으면 적립금은 CASH 부족분까지 나눈다', () => {
+    // A 50 / B 20 / CASH 30. A가 5일째 두 배가 돼 밴드(5%p)가 계속 깨진 상태. 2월 적립 1,000달러가 들어오는 날 평가액 16,000:
+    // 부족분 B 0.2×16,000−2,000 = 1,200, CASH 0.3×16,000−3,000 = 1,800 → B 400, CASH 600 (A는 과대라 0)
+    const close = constSeries(100, n).map((_, i) => (i < 5 ? 100 : 200))
+    const b = makeBundle(dates, { A: { close }, B: { close: constSeries(50, n) } })
+    const r = runBacktest(
+      cleanStrategy({
+        sleeves: [{ ticker: 'A', targetWeight: 0.5 }, { ticker: 'B', targetWeight: 0.2 }, { ticker: 'CASH', targetWeight: 0.3 }],
+        contribution: { initialUsd: 10_000, monthlyUsd: 0, allocation: 'to_underweight', overrides: [{ from: '2023-02', to: '2023-02', monthlyUsd: 1_000 }] },
+        rebalance: { trigger: 'bands', bandAbsPct: 5, mode: 'no_sell' },
+      }),
+      b
+    )
+    const feb = dates.findIndex((d) => d.startsWith('2023-02'))
+    const buys = r.trades.filter((t) => t.date === dates[feb + 1])
+    expect(buys).toHaveLength(1)
+    expect(buys[0].ticker).toBe('B')
+    expect(buys[0].reason).toBe('contribution')
+    expect(buys[0].shares * buys[0].price).toBeCloseTo(400, 6)
+    expect(r.trades.filter((t) => t.ticker === 'A' && t.reason !== 'initial')).toHaveLength(0)
+  })
+
   it('정수주 잔액은 새 돈으로 남지만 한 주를 살 수 없으면 거래를 만들지 않는다', () => {
     const b = makeBundle(dates, { A: { close: constSeries(300, n) } })
     const r = runBacktest(
