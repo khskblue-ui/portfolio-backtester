@@ -47,17 +47,24 @@ export function computeMetrics(result: BacktestResult): Metrics {
   let peakDate = growthOf1[0].date
   let maxDrawdownPct = 0
   let maxUnderwaterDays = 0
+  let maxUnderwaterPeak = ''
   for (const p of growthOf1) {
     if (p.value >= peak) {
       peak = p.value
       peakDate = p.date
     } else {
       const uw = Math.round((Date.parse(p.date) - Date.parse(peakDate)) / 86_400_000)
-      if (uw > maxUnderwaterDays) maxUnderwaterDays = uw
+      if (uw > maxUnderwaterDays) {
+        maxUnderwaterDays = uw
+        maxUnderwaterPeak = peakDate
+      }
       const dd = (p.value / peak - 1) * 100
       if (dd < maxDrawdownPct) maxDrawdownPct = dd
     }
   }
+  // 가장 긴 수면하 구간이 기간 끝까지 이어졌으면(마지막 날도 그 전고점 아래) 회복 기간이 아니라 진행 중인 손실 구간이다
+  const last = growthOf1[growthOf1.length - 1]
+  const maxUnderwaterOngoing = maxUnderwaterDays > 0 && maxUnderwaterPeak === peakDate && last.value < peak
 
   // ── 변동성 (스텝 수익률 → 연환산) ──
   // 연환산 계수 = 실제 관측된 스텝/년 (일별 ≈ 252, 역사 월간 = 12) — 해상도에 자동 적응
@@ -70,19 +77,22 @@ export function computeMetrics(result: BacktestResult): Metrics {
   const volAnnualPct = Math.sqrt(variance) * Math.sqrt(stepsPerYear) * 100
 
   // ── 연도별 TWRR (서브기간 견고성 — 6.4) ──
-  const annualReturns: { year: number; returnPct: number }[] = []
+  // from·to = 그해 수익을 잰 구간(전년 마지막 종가 또는 시작일 → 그해 마지막 관측일). 시작·끝 해는 1년이 안 될 수 있다
+  const annualReturns: { year: number; returnPct: number; from: string; to: string }[] = []
   let yearProd = 1
   let curYear = Number(daily[0].date.slice(0, 4))
+  let yearFrom = daily[0].date
   for (let t = 1; t < n; t++) {
     const y = Number(daily[t].date.slice(0, 4))
     if (y !== curYear) {
-      annualReturns.push({ year: curYear, returnPct: (yearProd - 1) * 100 })
+      annualReturns.push({ year: curYear, returnPct: (yearProd - 1) * 100, from: yearFrom, to: daily[t - 1].date })
+      yearFrom = daily[t - 1].date
       curYear = y
       yearProd = 1
     }
     yearProd *= 1 + dailyReturns[t - 1]
   }
-  annualReturns.push({ year: curYear, returnPct: (yearProd - 1) * 100 })
+  annualReturns.push({ year: curYear, returnPct: (yearProd - 1) * 100, from: yearFrom, to: daily[n - 1].date })
 
   // ── MWRR (XIRR — 6.1) ──
   const flows: { date: string; amount: number }[] = []
@@ -102,6 +112,7 @@ export function computeMetrics(result: BacktestResult): Metrics {
     growthOf1,
     maxDrawdownPct,
     maxUnderwaterDays,
+    maxUnderwaterOngoing,
     volAnnualPct,
     annualReturns,
     finalValue: result.finalValue,

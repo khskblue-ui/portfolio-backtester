@@ -103,6 +103,50 @@ export const nbspShortParens = (text: string, maxLen = 12) =>
   )
 
 export const fmtPct = (v: number) => (Number.isFinite(v) ? `${v.toFixed(1)}%` : '—')
+
+/** 최장 회복기간 표기 — 기간 끝까지 회복하지 못한 구간이면 '미회복'을 붙인다 */
+export const fmtUnderwater = (m: { maxUnderwaterDays: number; maxUnderwaterOngoing?: boolean }) =>
+  `${m.maxUnderwaterDays}${m.maxUnderwaterOngoing ? '\u00a0미회복' : ''}`
+
+/** 연도별 수익률 라벨 — 시작·끝 해가 1년이 안 되면 잰 달을 붙인다 (예: 2021 (8~12월)) */
+export function yearLabel(a: { year: number; from?: string; to?: string }): string {
+  if (!a.from || !a.to) return String(a.year)
+  const startMonth = Number(a.from.slice(0, 4)) === a.year ? Number(a.from.slice(5, 7)) : 1
+  const endMonth = Number(a.to.slice(5, 7))
+  return startMonth > 1 || endMonth < 12 ? `${a.year} (${startMonth}~${endMonth}월)` : String(a.year)
+}
+
+/** 세금 드래그(세전 TWRR − 세후 TWRR, %p/년) 표기 — 세후가 더 높게 나온 경로 효과면 + 부호 */
+export const fmtDrag = (drag: number) => `${drag >= 0 ? '−' : '+'}${Math.abs(drag).toFixed(2)}%p/년`
+
+/**
+ * 세전·세후 실행에서 낙폭 규칙 발동 구간이 달랐는가 — 원천징수 몇 달러 차이로 문턱을 넘는 날이 달라지면 두 실행의 매매가
+ * 갈라져, 세전−세후 차이에 세금이 아닌 경로 효과가 섞인다
+ */
+export function rulePathsDiffer(a: { ruleEpisodes: unknown[] }, b: { ruleEpisodes: unknown[] }): boolean {
+  return JSON.stringify(a.ruleEpisodes) !== JSON.stringify(b.ruleEpisodes)
+}
+
+/** 거래 사유 표기 (엔진 TradeLogEntry.reason) */
+const TRADE_REASON_LABEL: Record<string, string> = {
+  initial: '초기 매수',
+  contribution: '적립',
+  rebalance: '리밸런싱',
+  cash_sweep: '배당·잔액 재투자',
+  dd_rule: '낙폭 규칙 투입',
+  signal: '신호 전환',
+  forced_tax_sale: '세금 납부 매도',
+}
+
+/** 거래 횟수의 사유별 구성 — "초기 매수 3 · 배당·잔액 재투자 6" */
+export function tradeReasonSummary(trades: { reason: string }[]): string {
+  const count = new Map<string, number>()
+  for (const t of trades) count.set(t.reason, (count.get(t.reason) ?? 0) + 1)
+  return Object.keys(TRADE_REASON_LABEL)
+    .filter((k) => count.has(k))
+    .map((k) => `${TRADE_REASON_LABEL[k]} ${count.get(k)}`)
+    .join(' · ')
+}
 export const fmtSignedPct = (v: number) =>
   Number.isFinite(v) ? `${v < 0 ? '−' : '+'}${Math.abs(v).toFixed(1)}%` : '—'
 

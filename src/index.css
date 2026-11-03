@@ -78,13 +78,15 @@ table td {
 }
 .font-mono,
 code {
-  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: 'IBM Plex Mono', 'IBM Plex Sans KR', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-/* 원장(ledger) 표: 첫 컬럼 외 숫자는 모노스페이스 */
+/* 원장(ledger) 표: 첫 컬럼 외 숫자는 모노스페이스.
+   모노 글꼴에는 한글이 없어 한글은 IBM Plex Sans KR로 잇는다 — 시스템 대체 글꼴에 맡기면 일부 환경의 PDF 저장에서
+   머리글 한글("TWRR/년"의 '년' 등)이 빠졌다 */
 .ledger-table td:not(:first-child),
 .ledger-table th:not(:first-child) {
-  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: 'IBM Plex Mono', 'IBM Plex Sans KR', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   letter-spacing: -0.01em;
 }

@@ -4,6 +4,7 @@ import {
   isTripodTicker,
   executionTiming,
   tripodConflictsFor,
+  tickerLookalikeNote,
   TRIPOD_SLEEVES,
   type StrategyConfig,
   type AllocationPolicy,
@@ -12,7 +13,7 @@ import {
 } from '@/core'
 import { NumberInput } from './NumberInput'
 import { HelpTip } from './HelpTip'
-import { cardCls, inputCls, selectCls, labelCls } from './common'
+import { cardCls, inputCls, selectCls, labelCls, nbspShortParens } from './common'
 
 /** 전략 편집 카드 — 슬리브·적립 배분·리밸런싱 규칙 DSL */
 export function StrategyCard({
@@ -76,7 +77,8 @@ export function StrategyCard({
           </span>
         </div>
         {strategy.sleeves.map((sleeve, i) => (
-          <div key={i} className="flex items-center gap-1.5">
+          <div key={i}>
+          <div className="flex items-center gap-1.5">
             <input
               value={sleeve.ticker}
               onChange={(e) =>
@@ -128,6 +130,10 @@ export function StrategyCard({
             >
               <Trash2 className="w-3 h-3" />
             </button>
+          </div>
+          {tickerLookalikeNote(sleeve.ticker) && (
+            <p className="mt-1 text-[11px] leading-relaxed text-amber-700 dark:text-amber-400">{nbspShortParens(tickerLookalikeNote(sleeve.ticker)!)}</p>
+          )}
           </div>
         ))}
         {strategy.contribution.allocation === 'fixed_split' && Math.abs(splitSum - 1) > 1e-6 && (
@@ -213,11 +219,13 @@ export function StrategyCard({
           <label className={labelCls}>
             적립 배분
             <HelpTip title="적립 배분">
-              매달 들어오는 적립금을 어느 자산에 나눠 살지 정하는 규칙.
-              <br />· <b>부족한 자산 우선</b>: 목표 비중보다 부족한 자산부터, 부족분에 비례해 채움.
+              새로 들어온 돈을 어느 자산에 나눠 살지 정하는 규칙입니다. 초기 투자금, 월 적립금, 배당금, 체결하고 남은 잔액이
+              여기에 해당합니다. CASH도 목표 비중만큼 몫을 받고, 현금 이자는 현금에 그대로 쌓입니다. 시세가 움직여 생긴 비중
+              차이는 건드리지 않습니다. 그건 리밸런싱 트리거가 맡습니다.
+              <br />· <b>부족한 자산 우선</b>: CASH를 포함해 목표 비중보다 부족한 자산부터, 부족분에 비례해 채움.
               적립만으로 자연스럽게 리밸런싱 효과
-              <br />· <b>목표비중 비례</b>: 현재 상태와 무관하게 항상 목표 비중대로
-              <br />· <b>고정 분할</b>: 자산별로 직접 정한 비율대로 (적립% 입력란이 생김)
+              <br />· <b>목표비중 비례</b>: 현재 상태와 무관하게 항상 목표 비중대로(CASH 몫 포함)
+              <br />· <b>고정 분할</b>: CASH의 부족분을 먼저 채우고, 나머지를 자산별로 직접 정한 비율대로. 적립% 입력란이 생깁니다
             </HelpTip>
           </label>
           <select
@@ -237,7 +245,7 @@ export function StrategyCard({
             리밸런싱 트리거
             <HelpTip title="리밸런싱 트리거" align="right">
               무너진 비중을 언제 목표로 되돌릴지 정하는 조건.
-              <br />· <b>없음</b>: 리밸런싱 안 함 (적립 배분만)
+              <br />· <b>없음</b>: 리밸런싱 안 함 (적립 배분만). 하락장에서 CASH 비중이 목표보다 커져도 그대로 둡니다
               <br />· <b>주기</b>: N개월마다 정기 실행
               <br />· <b>밴드</b>: 비중이 목표 ±X%p를 벗어나는 순간
               <br />· <b>밴드 + 주기</b>: 둘 중 하나라도 충족되면
@@ -261,8 +269,8 @@ export function StrategyCard({
             <HelpTip title="매도 정책">
               트리거가 발동했을 때 매도를 허용할지.
               <br />· <b>매도 허용</b>: 초과 자산을 팔아 목표 비중 복원
-              <br />· <b>무매도</b>: 절대 팔지 않음. 적립을 미달 자산에 몰아주는 것만으로 조정.
-              양도세가 이연되지만, 과대 비중을 오래 못 닫을 수 있음(경고 표시)
+              <br />· <b>무매도</b>: 절대 팔지 않음. 적립을 미달 자산에 몰아주는 것만으로 조정하고, 트리거가 발동한 날에는
+              목표를 넘는 현금도 미달 자산에 씁니다(매수만). 양도세가 이연되지만, 과대 비중을 오래 못 닫을 수 있음(경고 표시)
               <br />· <b>무매도 + 주기 매도만</b>: 평소엔 무매도, N개월마다만 매도 허용
             </HelpTip>
           </label>
@@ -340,7 +348,8 @@ export function StrategyCard({
             <br />· <b>적립 배수</b>: 발동 중 월 적립금에 곱할 배수 (예: 2 = 두 배)
             <br />· <b>현금 목표 %</b>: 발동 중 현금 목표 비중을 이 값으로 대체
             (빈칸 = 유지). 0이면 현금을 전량 투입하고, 시장 자산 목표는 비례
-            확대됩니다. 규칙 발동·해제는 결과의 경고 로그에 기록됩니다.
+            확대됩니다. 현금 목표가 낮아지는 날(발동하거나 더 깊은 단계로 내려간 날) 목표를 넘는 현금을 한 번 투입하고,
+            같은 단계에서 더 빠질 때는 따라 사지 않습니다. 규칙 발동·해제는 결과의 경고 로그에 기록됩니다.
           </HelpTip>
         </label>
         {(strategy.contribution.rules ?? []).map((r, i) => {

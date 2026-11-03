@@ -14,7 +14,7 @@ export { runBacktest, validateStrategy, executionTiming, tbillEffectiveYield } f
 export { isTripodTicker, tripodComponentsFor, tripodConflictsFor, tripodExposure, TRIPOD_SLEEVES, TRIPOD_RULE } from './tripod'
 export { computeMetrics, xirr } from './metrics'
 export { defaultTaxConfig } from './tax'
-export { ASSET_CATALOG, assetCautionFor, assetCautionList, type CatalogEntry, type AssetGroup } from './catalog'
+export { ASSET_CATALOG, assetCautionFor, assetCautionList, tickerLookalikeNote, type CatalogEntry, type AssetGroup } from './catalog'
 export * from './presets'
 
 export interface StrategyRun {

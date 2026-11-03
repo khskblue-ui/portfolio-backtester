@@ -132,9 +132,40 @@ describe('연도별 수익률 (6.4 서브기간)', () => {
       ])
     )
     expect(m.annualReturns).toHaveLength(2)
-    expect(m.annualReturns[0]).toEqual({ year: 2022, returnPct: expect.closeTo(10, 6) })
+    // from·to = 잰 구간: 첫해는 시작일부터, 다음 해는 전년 마지막 종가부터
+    expect(m.annualReturns[0]).toEqual({ year: 2022, returnPct: expect.closeTo(10, 6), from: '2022-12-29', to: '2022-12-30' })
     expect(m.annualReturns[1].year).toBe(2023)
     expect(m.annualReturns[1].returnPct).toBeCloseTo(21, 6)
+    expect(m.annualReturns[1].from).toBe('2022-12-30')
+    expect(m.annualReturns[1].to).toBe('2023-01-03')
+  })
+})
+
+describe('최장 회복기간의 미회복 표시', () => {
+  it('가장 긴 수면하 구간이 기간 끝까지 이어지면 미회복', () => {
+    const m = computeMetrics(
+      makeResult([
+        { date: '2023-01-02', value: 100, flow: 100 },
+        { date: '2023-01-03', value: 110 },
+        { date: '2023-01-10', value: 90 },
+        { date: '2023-01-20', value: 100 },
+      ])
+    )
+    expect(m.maxUnderwaterDays).toBe(17)
+    expect(m.maxUnderwaterOngoing).toBe(true)
+  })
+  it('회복한 구간이 가장 길면 미회복이 아니다 (마지막 짧은 하락은 별개)', () => {
+    const m = computeMetrics(
+      makeResult([
+        { date: '2023-01-02', value: 100, flow: 100 },
+        { date: '2023-01-03', value: 90 },
+        { date: '2023-02-02', value: 95 },
+        { date: '2023-02-03', value: 101 },
+        { date: '2023-02-06', value: 99 },
+      ])
+    )
+    expect(m.maxUnderwaterDays).toBe(31) // 1/2 고점 → 2/2(마지막으로 밑돈 날)
+    expect(m.maxUnderwaterOngoing).toBe(false)
   })
 })
 

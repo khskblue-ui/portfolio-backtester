@@ -215,9 +215,26 @@ export const ASSET_CATALOG: CatalogEntry[] = [
   { ticker: 'ETH-USD', label: '이더리움', group: '크립토', startYear: 2017 },
 ]
 
+/**
+ * 이름과 실제 상품이 다른 야후 심볼 — 입력하는 순간 알린다 (2026-11 야후 메타데이터로 확인).
+ * 예: 'GOLD'를 금으로 알고 넣으면 귀금속 유통 기업 주식(배당 포함)으로 계산된다
+ */
+const LOOKALIKE_NOTES: Record<string, string> = {
+  GOLD: 'GOLD는 금 가격이 아니라 Gold.com, Inc.(옛 A-Mark Precious Metals, 귀금속 유통 기업) 주식입니다. 금은 GLD·IAU(ETF)나 GC=F(선물)를 쓰세요',
+  BTC: 'BTC는 비트코인 현물이 아니라 2024-07에 상장한 그레이스케일 비트코인 미니 트러스트 ETF입니다. 비트코인 가격은 BTC-USD를 쓰세요',
+  ETH: 'ETH는 이더리움 현물이 아니라 2024-07에 상장한 그레이스케일 이더리움 미니 트러스트 ETF입니다. 이더리움 가격은 ETH-USD를 쓰세요',
+}
+
+/** 이름이 헷갈리는 티커의 안내 (없으면 null) */
+export function tickerLookalikeNote(ticker: string): string | null {
+  return LOOKALIKE_NOTES[ticker.trim().toUpperCase()] ?? null
+}
+
 /** 티커의 에피스테믹 주의사항 (카탈로그 외 티커도 ^/=F 패턴으로 감지) */
 export function assetCautionFor(ticker: string): string | null {
   const t = ticker.toUpperCase()
+  const look = tickerLookalikeNote(t)
+  if (look) return look
   const entry = ASSET_CATALOG.find((e) => e.ticker === t)
   if (entry?.note) return entry.note
   if (t.startsWith('^')) return PRICE_INDEX_NOTE

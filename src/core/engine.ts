@@ -14,6 +14,12 @@
  * 4) 외부 현금 유입 (초기 납입 / 월 적립 — 매월 첫 거래일)
  * 5) 종가 평가
  * 6) 의사결정 (적립 배분 → 리밸런싱 — 4.4 순서) → 내일 체결
+ *
+ * ### 새 돈과 현금 슬리브 (unalloc)
+ * 평소에는 새로 들어온 돈(초기금·적립금·순배당·체결하고 남은 예산)만 적립 배분 규칙으로 나눈다. 시세가 움직여 현금 비중이
+ * 목표를 넘은 부분은 리밸런싱 트리거가 발동한 날(무매도 모드면 매수만)이나 낙폭 규칙이 더 깊은 단계로 내려간 날에만 투자한다.
+ * 그래서 트리거 '없음'은 정말로 리밸런싱을 하지 않는다. 현금 목표가 0이면 남는 현금은 전부 새 돈과 같다.
+ * 밴드 판정은 그날의 새 돈을 배분한 뒤의 비중으로 한다(적립금이 잠시 현금 비중을 키워 밴드를 건드리는 일 방지).
  * 7) 연말 세금 정산 (5.2 연 손익통산) — 현금 차감, 부족 시 다음날 강제 매도
  * 8) 기록 + 리컨실 검증 (4.7)
  *
@@ -128,6 +134,13 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
   const state: Record<string, SleeveState> = {}
   for (const t of positions) state[t] = { ticker: t, shares: 0, totalCost: 0 }
   let cash = 0
+  /**
+   * 아직 어느 슬리브에도 배분하지 않은 새 돈 — 자유현금(cash − triCash)에 포함된 꼬리표.
+   * 적립·순배당·미체결 예산이 쌓이고, 의사결정에서 배분되면 줄어든다 (0 ≤ unalloc ≤ max(0, cash − triCash))
+   */
+  let unalloc = 0
+  /** 직전 의사결정의 유효 현금 목표 — 낙폭 규칙이 더 깊어져 목표가 내려간 날을 알아보는 데 쓴다 */
+  let prevEffCash = cashTarget
   let cumContributions = 0
   let pendingOrders: Order[] = []
   /** 트라이팟 슬리브 몫 현금 — cash에 포함된 꼬리표 (0 ≤ triCash ≤ cash) */
@@ -243,6 +256,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
       interestWithheldUsd += withheld
       yearInterest += interest
       triCash += triCash * growthF * (1 - interestWh) // 슬리브 몫 현금도 같은 금리
+      unalloc += unalloc * growthF * (1 - interestWh) // 배분 전 새 돈의 이자는 새 돈에, 현금 슬리브의 이자는 현금 슬리브에 남는다
     }
 
     // ── 2) 배당 (오늘 체결 전 보유분 = ex-date 전일 보유자) ──
@@ -253,6 +267,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
         const { netUsd, withheldUsd } = applyDividendWithholding(gross, config.tax)
         cash += netUsd
         cashLedger += netUsd
+        unalloc += netUsd
         dividendsGrossUsd += gross
         dividendsWithheldUsd += withheldUsd
         yearGrossDividends += gross
@@ -278,6 +293,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
       cash += externalFlow
       cashLedger += externalFlow
       cumContributions += externalFlow
+      unalloc += externalFlow
     }
 
     // ── 5) 종가 평가 ──
@@ -343,6 +359,7 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
         totalTaxesUsd += taxDue
         // 세금은 계좌 현금 전체에서 낸다 — 자유현금이 모자라면 트라이팟 몫 현금이 나머지를 낸다
         if (triCash > cash) triCash = Math.max(0, cash)
+        unalloc = Math.min(unalloc, Math.max(0, cash - triCash))
         const valueBeforeTax = value
         value -= taxDue
         // 낙폭 관측(5.5)은 세전 값으로 이미 갱신됐으므로 세후 값으로 소급 보정 —
@@ -559,14 +576,18 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
 
     if (tri) {
       triCash += deposit * scale
+      // 현금이 모자라 못 넣은 몫은 다시 새 돈으로 — 다음 의사결정이 배분한다
+      unalloc += deposit * (1 - scale)
       tripodSettle(i, side, tri, scale)
     }
 
     for (const o of buyOrders) {
       const budget = o.amount * scale
-      if (budget < 1e-9) continue
-      execBuy(o.ticker, budget, i, side, o.reason)
+      // 정수주 잔액·현금 부족으로 쓰지 못한 예산은 현금 슬리브가 아니라 새 돈으로 남긴다
+      const spent = budget < 1e-9 ? 0 : execBuy(o.ticker, budget, i, side, o.reason)
+      unalloc += o.amount - spent
     }
+    unalloc = Math.min(Math.max(0, unalloc), Math.max(0, cash - triCash))
     pendingOrders = []
     pendingTri = null
   }
@@ -598,18 +619,22 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     if (tripodWeights(want, triTop)[3] >= 1 || triCash <= 1e-9) return
     if (!switching && tri.depositSplit) {
       tri.depositSplit.forEach((b, k) => {
-        if (b * scale > 1e-9) execBuy(triComps[k], b * scale, i, side, tri.depositReason)
+        if (b * scale > 1e-9) triCash -= execBuy(triComps[k], b * scale, i, side, tri.depositReason)
       })
-      triCash = 0 // 남은 몫(정수주 잔액·부동소수 잔차)은 자유현금으로
+      // 남은 몫(정수주 잔액·부동소수 잔차)은 자유현금의 새 돈으로 — 바깥 배분이 다시 쓴다
+      unalloc += Math.max(0, triCash)
+      triCash = 0
       return
     }
     // 전환(또는 첫 진입): 슬리브 몫 현금 전체를 체결 가격 기준 미달분에 배분
     const buyReason = switching && !firstEntry ? 'signal' : tri.depositReason
     const split = splitDeposit(triCash, want, pxOf, 1, true)
+    let spent = 0
     split.forEach((b, k) => {
-      if (b > 1e-9) execBuy(triComps[k], b, i, side, buyReason)
+      if (b > 1e-9) spent += execBuy(triComps[k], b, i, side, buyReason)
     })
-    // 현금 상태가 아니면 남은 몫(정수주 잔액·부동소수 잔차)은 자유현금으로 돌려 바깥 배분이 다시 쓰게 한다
+    // 현금 상태가 아니면 남은 몫(정수주 잔액·부동소수 잔차)은 자유현금의 새 돈으로 돌려 바깥 배분이 다시 쓰게 한다
+    unalloc += Math.max(0, triCash - spent)
     triCash = 0
   }
 
@@ -635,13 +660,26 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     const date = dates[i]
     if (value <= 0) return []
 
-    const weights: Record<string, number> = {}
-    for (const s of config.sleeves) weights[s.ticker] = sleeveValue(s, i) / value
-
     // 낙폭 규칙의 현금 목표 대체 — 시장 목표는 (1−유효현금)/(1−기본현금)으로 비례 확대
     const effCash = activeRule?.cashTargetOverride != null ? activeRule.cashTargetOverride : cashTarget
     const mktScale = cashTarget < 1 ? (1 - effCash) / (1 - cashTarget) : 1
     const effTarget = (s: SleeveConfig) => (s.ticker === CASH_TICKER ? effCash : s.targetWeight * mktScale)
+    // 낙폭 규칙의 발동·단계 변경·해제로 현금 목표가 낮아진 날 — 목표를 넘는 현금을 한 번 투입한다
+    const cashTargetLowered = effCash < prevEffCash - 1e-12
+    prevEffCash = effCash
+
+    // 오늘의 새 돈을 평소 규칙대로 배분한 계획. 현금 목표가 0이면 남는 현금이 모두 새 돈이다
+    const freeCash = cash - triCash
+    unalloc = Math.min(Math.max(0, unalloc), Math.max(0, freeCash))
+    const normalPool = effCash <= 1e-12 ? Math.max(0, freeCash) : unalloc
+    const normalPlan = planAllocation(normalPool, i, value, effCash, mktScale, false)
+
+    // 비중은 새 돈을 배분한 뒤 기준 (적립금이 잠시 현금 비중을 키워 밴드·과대 경고를 건드리지 않게)
+    const weights: Record<string, number> = {}
+    for (const s of config.sleeves) {
+      const v = s.ticker === CASH_TICKER ? freeCash - normalPool + normalPlan.cashPart : sleeveValue(s, i) + (normalPlan.budgets[s.ticker] ?? 0)
+      weights[s.ticker] = v / value
+    }
 
     // 리밸런싱 트리거 판정 (4.4)
     const isMonthStart = i > 0 && monthOf(dates[i - 1]) !== monthOf(date)
@@ -667,19 +705,21 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     }
 
     // no_sell 모드에서 과대 슬리브 플래그 (4.4 — 무동작+경고, 장기화 시 band_unclosable)
-    // day 0(초기 매수 전 전액 현금)은 제외. CASH는 매도 없이 스윕 매수로 해소 가능하므로 제외.
+    // day 0(초기 매수 전 전액 현금)은 제외. CASH는 팔 증권이 아니라서 제외.
+    // 기준은 그날 유효한 목표(낙폭 규칙이 현금 목표를 바꾸면 시장 목표도 비례 확대)
     if (config.rebalance.mode !== 'sell_to_target' && i > 0) {
       for (const s of config.sleeves) {
         if (s.ticker === CASH_TICKER) continue
         const bandAbs = (config.rebalance.bandAbsPct ?? 5) / 100
-        const over = weights[s.ticker] - s.targetWeight > bandAbs
+        const tw = effTarget(s)
+        const over = weights[s.ticker] - tw > bandAbs
         if (over) {
           if (overweightEpisode[s.ticker] == null) {
             overweightEpisode[s.ticker] = i
             warnings.push({
               date,
               code: 'no_sell_overweight',
-              message: `${s.ticker} 과대(${(weights[s.ticker] * 100).toFixed(1)}% > 목표 ${(s.targetWeight * 100).toFixed(0)}%) — 무매도 모드라 매도 불가, 적립 희석만 가능`,
+              message: `${s.ticker} 과대(${(weights[s.ticker] * 100).toFixed(1)}% > 목표 ${(tw * 100).toFixed(0)}%) — 무매도 모드라 매도 불가, 적립 희석만 가능`,
             })
           } else if (!bandWarned[s.ticker] && daysBetween(dates[overweightEpisode[s.ticker]], date) >= 183) {
             bandWarned[s.ticker] = true
@@ -707,7 +747,8 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
     const orders: Order[] = []
 
     if (triggerFired && sellsAllowed) {
-      // 전면 리밸런싱: 목표 대비 초과분 매도(주식 수 확정) + 미달분 매수(예산)
+      // 전면 리밸런싱: 목표 대비 초과분 매도(주식 수 확정) + 미달분 매수(예산). 새 돈도 이 배분에 모두 들어간다
+      unalloc = 0
       const reason = i === 0 ? 'initial' : 'rebalance'
       for (const s of marketSleeves) {
         const target = effTarget(s) * value
@@ -733,15 +774,23 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
       return orders
     }
 
-    // 적립/유휴현금 배분 (4.3 + 4.5 현금 스윕) — 매수만. 트라이팟 몫 현금은 자유현금이 아니다
-    const targetCashUsd = effCash * value
-    const investable = cash - triCash - targetCashUsd
-    if (investable < config.execution.minTradeUsd) return orders
-
-    const budgets = allocateBuys(investable, i, value, mktScale)
+    // 매수만: 새 돈 배분(평소) 또는 목표를 넘는 현금 투입(무매도 모드의 트리거 발동일·낙폭 규칙으로 현금 목표가 낮아진 날).
+    // 트라이팟 몫 현금은 자유현금이 아니다
+    const deploy = triggerFired || cashTargetLowered
+    const plan = deploy
+      ? planAllocation(Math.max(normalPool, freeCash - effCash * value), i, value, effCash, mktScale, true)
+      : normalPlan
+    const marketTotal = Object.values(plan.budgets).reduce((a, b) => a + b, 0)
+    if (marketTotal < config.execution.minTradeUsd) {
+      // 너무 작아 체결하지 않음 — 현금 슬리브 몫은 현금으로 확정하고, 시장 몫만 새 돈으로 남겨 다음 날 다시 배분
+      unalloc = Math.min(unalloc, marketTotal)
+      return orders
+    }
+    unalloc = 0
     const isContributionLike = daily.length === 0 || (daily[daily.length - 1]?.cumContributions ?? 0) < cumContributions
-    const reason = i === 0 ? 'initial' : isContributionLike ? 'contribution' : 'cash_sweep'
-    for (const [ticker, budget] of Object.entries(budgets)) {
+    const reason: TradeLogEntry['reason'] =
+      i === 0 ? 'initial' : triggerFired ? 'rebalance' : cashTargetLowered ? 'dd_rule' : isContributionLike ? 'contribution' : 'cash_sweep'
+    for (const [ticker, budget] of Object.entries(plan.budgets)) {
       if (budget > 1e-9) {
         if (isTripodTicker(ticker)) {
           if (nextTri) {
@@ -755,56 +804,66 @@ export function runBacktest(config: StrategyConfig, bundle: AlignedDataBundle): 
   }
 
   /**
-   * 4.3 적립 배분 타이브레이킹 — 결정론 고정:
-   * to_underweight = "부족분 비례 배분". 전 슬리브 부족분이 충족되면
-   * 잔여는 목표비중 비례. (가장-미달-우선 워터폴이 아님 — 명세 고정)
+   * 4.3 적립 배분 — pool(자유현금 안의 배분 대상 금액)을 시장 슬리브 예산과 현금 슬리브 몫으로 나눈다. 결정론 고정:
+   * - to_underweight: 현금 슬리브까지 포함해 목표 대비 부족분에 비례(연구 dca.mjs의 fill과 같음). 부족분을 다 채우고
+   *   남으면 목표 비중 비례. (가장-미달-우선 워터폴이 아님 — 명세 고정)
+   * - pro_rata: 현재 상태와 무관하게 목표 비중대로(현금 슬리브 몫 포함)
+   * - fixed_split: 현금 슬리브의 부족분을 먼저 채우고, 나머지를 직접 정한 비율대로
+   * deploy(목표를 넘는 현금 투입)이거나 현금 목표가 0이면 pool 전체가 시장 몫이다.
+   * 반환: budgets(시장 슬리브별 매수 예산), cashPart(현금 슬리브가 갖는 몫)
    */
-  function allocateBuys(investable: number, i: number, value: number, mktScale = 1): Record<string, number> {
+  function planAllocation(
+    pool: number,
+    i: number,
+    value: number,
+    effCash: number,
+    mktScale: number,
+    deploy: boolean
+  ): { budgets: Record<string, number>; cashPart: number } {
     const budgets: Record<string, number> = {}
+    if (!(pool > 1e-9) || marketSleeves.length === 0) return { budgets, cashPart: Math.max(0, pool) }
     const policy = config.contribution.allocation
+    const freeCash = cash - triCash
+    const toMarketOnly = deploy || effCash <= 1e-12
+    const marketTargetSum = marketSleeves.reduce((sum, s) => sum + s.targetWeight, 0)
+    const sum = () => Object.values(budgets).reduce((a, b) => a + b, 0)
 
     if (policy === 'fixed_split' && config.contribution.fixedSplit) {
-      for (const s of marketSleeves) {
-        budgets[s.ticker] = investable * (config.contribution.fixedSplit[s.ticker] ?? 0)
-      }
-      return budgets
+      const marketPart = toMarketOnly ? pool : Math.max(0, Math.min(pool, freeCash - effCash * value))
+      for (const s of marketSleeves) budgets[s.ticker] = marketPart * (config.contribution.fixedSplit[s.ticker] ?? 0)
+      return { budgets, cashPart: pool - sum() }
+    }
+    if (marketTargetSum <= 0) return { budgets, cashPart: pool }
+
+    if (policy === 'pro_rata') {
+      const marketPart = toMarketOnly ? pool : pool * (1 - effCash)
+      for (const s of marketSleeves) budgets[s.ticker] = marketPart * (s.targetWeight / marketTargetSum)
+      return { budgets, cashPart: pool - sum() }
     }
 
-    const marketTargetSum = marketSleeves.reduce((sum, s) => sum + s.targetWeight, 0)
-    if (policy === 'pro_rata' || marketTargetSum <= 0) {
-      for (const s of marketSleeves) {
-        budgets[s.ticker] = marketTargetSum > 0
-          ? investable * (s.targetWeight / marketTargetSum)
-          : investable / marketSleeves.length
-      }
-      return budgets
-    }
-
-    // to_underweight: 투입 후 총가치 기준 부족분에 비례
-    const projected = value // 적립분은 이미 cash에 반영돼 value에 포함
+    // to_underweight: 배분 뒤 총가치(=value, pool은 이미 현금으로 들어 있다) 기준 부족분에 비례
     const shortfalls: Record<string, number> = {}
     let totalShortfall = 0
     for (const s of marketSleeves) {
-      const current = sleeveValue(s, i)
-      const sf = Math.max(0, s.targetWeight * mktScale * projected - current)
+      const sf = Math.max(0, s.targetWeight * mktScale * value - sleeveValue(s, i))
       shortfalls[s.ticker] = sf
       totalShortfall += sf
     }
+    // 현금 슬리브의 현재 몫 = 자유현금 − 배분 대상 금액
+    const cashShort = toMarketOnly ? 0 : Math.max(0, effCash * value - (freeCash - pool))
+    totalShortfall += cashShort
+    const w = (s: SleeveConfig) => (toMarketOnly ? s.targetWeight / marketTargetSum : s.targetWeight * mktScale)
     if (totalShortfall <= 1e-9) {
       // 부족 슬리브 없음 → 목표비중 비례
-      for (const s of marketSleeves) budgets[s.ticker] = investable * (s.targetWeight / marketTargetSum)
-      return budgets
+      for (const s of marketSleeves) budgets[s.ticker] = pool * w(s)
+    } else if (pool <= totalShortfall) {
+      for (const s of marketSleeves) budgets[s.ticker] = pool * (shortfalls[s.ticker] / totalShortfall)
+    } else {
+      // 부족분 전액 충족 + 잔여는 목표비중 비례
+      const residual = pool - totalShortfall
+      for (const s of marketSleeves) budgets[s.ticker] = shortfalls[s.ticker] + residual * w(s)
     }
-    if (investable <= totalShortfall) {
-      for (const s of marketSleeves) budgets[s.ticker] = investable * (shortfalls[s.ticker] / totalShortfall)
-      return budgets
-    }
-    // 부족분 전액 충족 + 잔여는 목표비중 비례
-    const residual = investable - totalShortfall
-    for (const s of marketSleeves) {
-      budgets[s.ticker] = shortfalls[s.ticker] + residual * (s.targetWeight / marketTargetSum)
-    }
-    return budgets
+    return { budgets, cashPart: pool - sum() }
   }
 }
 

@@ -3,7 +3,10 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts'
 import { Printer, X } from 'lucide-react'
 import type { StrategyRun, AlignedDataBundle, StrategyConfig } from '@/core'
 import { assetCautionFor, assetCautionList, executionTiming, TRIPOD_SLEEVES } from '@/core'
-import { SERIES_COLORS_LIGHT, fmtUsd, fmtSignedUsd, fmtPct, type SharedSettings, uniqueRunLabels, nbspShortParens } from './common'
+import { SERIES_COLORS_LIGHT, fmtUsd, fmtSignedUsd, fmtPct, type SharedSettings, uniqueRunLabels, nbspShortParens, fmtUnderwater, yearLabel, tradeReasonSummary, fmtDrag, rulePathsDiffer } from './common'
+
+/** 보고서 차트 폭(px) — A4 세로(210mm)에서 기본 여백과 본문 좌우 패딩을 뺀 인쇄 영역(약 650px) 안에 들어가는 값 */
+const REPORT_CHART_WIDTH = 620
 
 /**
  * 백테스트 결과 보고서 — 브라우저 인쇄(⌘/Ctrl+P → PDF 저장)로 생성.
@@ -168,7 +171,7 @@ export function ReportView({
                   <td className={`${tdCls} text-right font-semibold`}>{fmtPct(m.twrrAnnualPct)}</td>
                   <td className={`${tdCls} text-right`}>{fmtPct(m.mwrrAnnualPct)}</td>
                   <td className={`${tdCls} text-right`}>{fmtPct(m.maxDrawdownPct)}</td>
-                  <td className={`${tdCls} text-right`}>{m.maxUnderwaterDays}</td>
+                  <td className={`${tdCls} text-right whitespace-nowrap`}>{fmtUnderwater(m)}</td>
                   <td className={`${tdCls} text-right`}>{fmtPct(m.volAnnualPct)}</td>
                   <td className={`${tdCls} text-right font-semibold`}>{fmtUsd(m.finalValue)}</td>
                   <td className={`${tdCls} text-right`}>{fmtUsd(m.liquidatedValue)}</td>
@@ -181,8 +184,9 @@ export function ReportView({
 
         {/* 누적 수익률 차트 (라이트 고정) */}
         <h2 className="text-lg font-bold mb-2">누적 수익률 (TWRR{shared.taxEnabled ? ' · 세후' : ''})</h2>
-        <div className="mb-6 overflow-x-auto">
-          <LineChart data={chartData} width={860} height={300} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+        {/* 폭은 A4 세로 인쇄 영역(기본 여백)에 맞춘 고정값 — 화면 폭으로 그리면 PDF에서 오른쪽 구간과 범례가 잘린다 */}
+        <div className="mb-6">
+          <LineChart data={chartData} width={REPORT_CHART_WIDTH} height={300} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
             <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#6b7280' }} stroke="#6b7280" minTickGap={60} tickFormatter={(d: string) => d.slice(0, 7)} />
             <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} stroke="#6b7280" width={yAxisWidth} domain={['auto', 'auto']} tickFormatter={yTick} />
@@ -242,7 +246,7 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
     { label: 'TWRR/년 (전략 자체)', post: fmtPct(post.metrics.twrrAnnualPct), pre: fmtPct(pre.metrics.twrrAnnualPct) },
     { label: 'MWRR/년 (실제 경험)', post: fmtPct(post.metrics.mwrrAnnualPct), pre: fmtPct(pre.metrics.mwrrAnnualPct) },
     { label: 'MDD (최대 낙폭)', post: fmtPct(post.metrics.maxDrawdownPct), pre: fmtPct(pre.metrics.maxDrawdownPct) },
-    { label: '최장 회복기간 (달력일)', post: String(post.metrics.maxUnderwaterDays), pre: String(pre.metrics.maxUnderwaterDays) },
+    { label: '최장 회복기간 (달력일)', post: fmtUnderwater(post.metrics), pre: fmtUnderwater(pre.metrics) },
     { label: '변동성/년', post: fmtPct(post.metrics.volAnnualPct), pre: fmtPct(pre.metrics.volAnnualPct) },
     { label: '최종 가치', post: fmtUsd(post.metrics.finalValue), pre: fmtUsd(pre.metrics.finalValue) },
     { label: '청산 후 가치 (마지막 날 전량 매도)', post: fmtUsd(post.metrics.liquidatedValue), pre: fmtUsd(pre.metrics.liquidatedValue) },
@@ -254,6 +258,7 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
     { label: '청산 시 추가 양도세', post: fmtUsd(post.result.liquidation?.taxUsd ?? 0), pre: '$0' },
     { label: '거래 비용', post: fmtUsd(post.result.totalFeesUsd), pre: fmtUsd(pre.result.totalFeesUsd) },
     { label: '거래 횟수', post: String(post.result.trades.length), pre: String(pre.result.trades.length) },
+    { label: taxEnabled ? '거래 구성 (세후 실행)' : '거래 구성', post: tradeReasonSummary(post.result.trades) || '없음', pre: '' },
   ]
 
   const thCls = 'text-left px-2 py-1 font-semibold text-gray-500 border-b border-gray-300'
@@ -324,7 +329,13 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
         </div>
       </div>
 
-      <h3 className="font-semibold text-gray-600 mb-1">핵심 지표 {taxEnabled && <span className="font-normal text-gray-400">— 세후 vs 세전 (세금 드래그 −{drag.toFixed(2)}%p/년)</span>}</h3>
+      <h3 className="font-semibold text-gray-600 mb-1">핵심 지표 {taxEnabled && <span className="font-normal text-gray-400">— 세후 vs 세전 (세금 드래그 {fmtDrag(drag)})</span>}</h3>
+      {taxEnabled && rulePathsDiffer(pre.result, post.result) && (
+        <p className="text-xs text-amber-800 mb-1">
+          세전·세후 실행에서 낙폭 규칙이 발동한 날이 달라 매매가 갈라졌습니다. 원천징수 몇 달러 차이로 문턱을 넘는 날이 바뀐 경로
+          효과라서, 두 열의 차이를 세금 효과로 읽으면 안 됩니다.
+        </p>
+      )}
       <table className="ledger-table w-full text-xs mb-4">
         <thead>
           <tr>
@@ -345,18 +356,15 @@ function StrategyDetail({ run, color, taxEnabled }: { run: StrategyRun; color: s
       </table>
 
       <h3 className="font-semibold text-gray-600 mb-1">연도별 수익률 (TWRR{taxEnabled ? ' · 세후' : ''})</h3>
-      <table className="w-full text-xs mb-3">
-        <tbody>
-          <tr>
-            {post.metrics.annualReturns.map((a) => (
-              <td key={a.year} className={`${tdCls} text-center`}>
-                <div className="text-gray-400">{a.year}</div>
-                <div className={`font-medium ${a.returnPct < 0 ? 'text-red-600' : ''}`}>{fmtPct(a.returnPct)}</div>
-              </td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
+      {/* 여러 줄로 감싼다 — 한 줄 표는 긴 기간(30년 이상)에서 인쇄 폭을 넘어 오른쪽 해가 잘렸다 */}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] text-xs mb-3">
+        {post.metrics.annualReturns.map((a) => (
+          <div key={a.year} className="px-2 py-1 border-b border-gray-100 text-center">
+            <div className="text-gray-400 whitespace-nowrap">{yearLabel(a)}</div>
+            <div className={`font-medium ${a.returnPct < 0 ? 'text-red-600' : ''}`}>{fmtPct(a.returnPct)}</div>
+          </div>
+        ))}
+      </div>
 
       {post.result.warnings.length > 0 && (
         <p className="text-xs text-gray-500">

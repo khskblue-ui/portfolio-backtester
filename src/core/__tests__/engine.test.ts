@@ -482,7 +482,7 @@ describe('낙폭 대응 규칙 + 기간별 적립 조정 (전일 관측 — 룩�
     expect(flowOf('2023-04')).toBe(2_000)
   })
 
-  it('현금 목표 대체: 발동 다음 거래일에 현금이 시장으로 스윕 매수된다', () => {
+  it('현금 목표 대체: 발동 다음 거래일에 현금이 시장으로 투입된다 (사유 dd_rule)', () => {
     const r = runBacktest(
       cleanStrategy({
         sleeves: [{ ticker: 'A', targetWeight: 0.7 }, { ticker: 'CASH', targetWeight: 0.3 }],
@@ -491,7 +491,7 @@ describe('낙폭 대응 규칙 + 기간별 적립 조정 (전일 관측 — 룩�
       bundle
     )
     // 1/30 종가 관측(포트 낙폭 ≈ −28%) → 1/31 시가에 현금 투입
-    expect(r.trades.some((t) => t.side === 'BUY' && t.reason === 'cash_sweep' && t.date === '2023-01-31')).toBe(true)
+    expect(r.trades.some((t) => t.side === 'BUY' && t.reason === 'dd_rule' && t.date === '2023-01-31')).toBe(true)
     const last = r.daily[r.daily.length - 1]
     expect(last.cash / last.value).toBeLessThan(0.02) // 현금 목표 0%로 유지
     // 급락 전에는 70/30 유지 (규칙 미발동)
@@ -577,5 +577,120 @@ describe('낙폭 규칙 발동 구간(ruleEpisodes) 기록', () => {
     expect(r.ruleEpisodes[0].from).toBe(dates[20]) // 급락 관측일
     expect(r.ruleEpisodes[0].to).toBe(dates[45]) // 회복 관측일
     expect(r.ruleEpisodes[0].label).toBe('−10%')
+  })
+})
+
+describe('새 돈만 배분: 현금 슬리브의 시세 변동분은 트리거가 있을 때만 투자 (2026-11 보고서 점검)', () => {
+  // A: 100에서 10일 유지 → 30거래일 동안 매일 1%씩 하락 → 이후 유지. 현금 비중이 목표 40%를 계속 넘어선다
+  const n = 70
+  const dates = makeDates('2023-01-02', n)
+  const falling = constSeries(100, n).map((_, i) => (i < 10 ? 100 : 100 * Math.pow(0.99, Math.min(i - 9, 30))))
+  const fallingBundle = makeBundle(dates, { A: { close: falling } })
+  const mix = (rebalance: Parameters<typeof cleanStrategy>[0]['rebalance'], extra: Partial<Parameters<typeof cleanStrategy>[0]> = {}) =>
+    cleanStrategy({
+      sleeves: [{ ticker: 'A', targetWeight: 0.6 }, { ticker: 'CASH', targetWeight: 0.4 }],
+      contribution: { initialUsd: 10_000, monthlyUsd: 0, allocation: 'to_underweight' },
+      rebalance,
+      ...extra,
+    })
+
+  it('트리거 없음: 하락장에서 현금 비중이 목표를 넘어도 추가 매수가 없다 (초기 매수 1건)', () => {
+    const r = runBacktest(mix({ trigger: 'none', mode: 'no_sell' }), fallingBundle)
+    expect(r.trades).toHaveLength(1)
+    expect(r.trades[0].reason).toBe('initial')
+    const last = r.daily[n - 1]
+    expect(last.cash).toBeCloseTo(4_000, 6) // 현금 슬리브는 그대로
+    expect(last.cash / last.value).toBeGreaterThan(0.45) // 목표보다 커진 채로 둔다
+  })
+
+  it('주기 1개월: 리밸런싱일 다음 거래일에만 매매한다', () => {
+    const r = runBacktest(mix({ trigger: 'periodic', periodMonths: 1, mode: 'sell_to_target' }), fallingBundle)
+    const monthStarts = dates.filter((d, i) => i > 0 && d.slice(0, 7) !== dates[i - 1].slice(0, 7))
+    const execDays = new Set(monthStarts.map((d) => dates[dates.indexOf(d) + 1]))
+    const later = r.trades.filter((t) => t.reason !== 'initial')
+    expect(later.length).toBeGreaterThan(0)
+    for (const t of later) {
+      expect(t.reason, t.date).toBe('rebalance')
+      expect(execDays.has(t.date), t.date).toBe(true)
+    }
+  })
+
+  it('작은 배당은 최소 거래금액이 될 때까지 쌓였다가, 현금 슬리브 몫을 뺀 시장 몫만 산다', () => {
+    // 상수 가격 100, 60주 보유 → 주당 1달러 배당 3번 (각 60달러). 매번 시장 몫 60%가 새 돈으로 쌓여 세 번째에 108달러 매수
+    const b = makeBundle(dates, { A: { close: constSeries(100, n), dividends: { 15: 1, 30: 1, 45: 1 } } })
+    const r = runBacktest(mix({ trigger: 'none', mode: 'no_sell' }), b)
+    const sweeps = r.trades.filter((t) => t.reason === 'cash_sweep')
+    expect(sweeps).toHaveLength(1)
+    expect(sweeps[0].date).toBe(dates[46])
+    expect(sweeps[0].shares * sweeps[0].price).toBeCloseTo(108, 6)
+    const last = r.daily[n - 1]
+    expect(last.value).toBeCloseTo(10_180, 6)
+    expect(last.cash).toBeCloseTo(4_072, 6) // 4,000 + 배당 180 중 현금 몫 40%
+  })
+
+  it('낙폭 규칙으로 현금 목표가 낮아지면 그날 한 번 투입하고, 발동 중 추가 하락에는 따라 사지 않는다', () => {
+    // A 70 / 현금 30, −10%에서 현금 10%. 10일째 85(포트 −10.5%) → 이후 70까지 하락해도 같은 단계라 추가 투입 없음
+    const close = constSeries(100, n).map((_, i) => (i < 10 ? 100 : i === 10 ? 85 : Math.max(70, 85 - (i - 10) * 0.75)))
+    const b = makeBundle(dates, { A: { close } })
+    const r = runBacktest(
+      cleanStrategy({
+        sleeves: [{ ticker: 'A', targetWeight: 0.7 }, { ticker: 'CASH', targetWeight: 0.3 }],
+        contribution: { initialUsd: 10_000, monthlyUsd: 0, allocation: 'to_underweight', rules: [{ drawdownPct: 10, cashTargetOverride: 0.1 }] },
+      }),
+      b
+    )
+    const later = r.trades.filter((t) => t.reason !== 'initial')
+    expect(later).toHaveLength(1)
+    expect(later[0].reason).toBe('dd_rule')
+    expect(later[0].date).toBe(dates[11])
+    // 투입액 = 현금 3,000 − 10% × 8,950
+    expect(later[0].shares * later[0].price).toBeCloseTo(3_000 - 895, 6)
+  })
+
+  it('무매도 + 밴드: 현금 비중이 밴드를 넘은 날에만 목표를 넘는 현금을 사서 40%로 되돌린다', () => {
+    const r = runBacktest(mix({ trigger: 'bands', bandAbsPct: 5, mode: 'no_sell' }), fallingBundle)
+    const later = r.trades.filter((t) => t.reason !== 'initial')
+    expect(later.length).toBeGreaterThan(0)
+    for (const t of later) {
+      expect(t.reason).toBe('rebalance')
+      expect(t.side).toBe('BUY')
+      const k = dates.indexOf(t.date)
+      // 결정일(전일) 종가 기준 현금 비중이 45% 이상이었다
+      const prev = r.daily[k - 1]
+      expect(prev.cash / prev.value).toBeGreaterThanOrEqual(0.45 - 1e-9)
+      // 체결 뒤(시가 = 전일 종가라 가격 변화 없음) 현금 비중이 정확히 40%
+      const decided = r.daily[k - 1]
+      const afterCash = decided.cash - t.shares * t.price
+      expect(afterCash / decided.value).toBeCloseTo(0.4, 9)
+    }
+  })
+
+  it('정수주 잔액은 새 돈으로 남지만 한 주를 살 수 없으면 거래를 만들지 않는다', () => {
+    const b = makeBundle(dates, { A: { close: constSeries(300, n) } })
+    const r = runBacktest(
+      cleanStrategy({
+        sleeves: [{ ticker: 'A', targetWeight: 1 }],
+        contribution: { initialUsd: 1_000, monthlyUsd: 0, allocation: 'to_underweight' },
+        execution: { fractionalShares: false, cashAnnualYieldPct: 0, minTradeUsd: 100 },
+      }),
+      b
+    )
+    expect(r.trades).toHaveLength(1)
+    expect(r.trades[0].shares).toBe(3)
+    expect(r.warnings.filter((w) => w.code === 'reconciliation')).toHaveLength(0)
+  })
+
+  it('목표비중 비례: 새 돈은 현금 슬리브 몫까지 목표 비중대로 나눈다 (현금 비중 초과와 무관)', () => {
+    const r = runBacktest(
+      cleanStrategy({
+        sleeves: [{ ticker: 'A', targetWeight: 0.6 }, { ticker: 'CASH', targetWeight: 0.4 }],
+        contribution: { initialUsd: 10_000, monthlyUsd: 1_000, allocation: 'pro_rata' },
+        rebalance: { trigger: 'none', mode: 'no_sell' },
+      }),
+      fallingBundle
+    )
+    const contrib = r.trades.filter((t) => t.reason === 'contribution')
+    expect(contrib.length).toBeGreaterThan(0)
+    for (const t of contrib) expect(t.shares * t.price).toBeCloseTo(600, 6)
   })
 })

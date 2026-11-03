@@ -14,7 +14,7 @@ import {
 import { NumberInput } from './NumberInput'
 import { assetCautionList, executionTiming, TRIPOD_SLEEVES, type StrategyRun, type AlignedDataBundle, type TripodState } from '@/core'
 import { HelpTip } from './HelpTip'
-import { cardCls, fmtUsd, fmtSignedUsd, fmtPct, fmtSignedPct, uniqueRunLabels, nbspShortParens } from './common'
+import { cardCls, fmtUsd, fmtSignedUsd, fmtPct, fmtSignedPct, uniqueRunLabels, nbspShortParens, fmtUnderwater, yearLabel, tradeReasonSummary, fmtDrag, rulePathsDiffer } from './common'
 
 /**
  * 결과 섹션 (§7) — TWRR 기준 정렬 비교표 + growth-of-$1 오버레이 +
@@ -352,7 +352,7 @@ export function ResultsSection({
                 최장 회복기간(일)
                 <HelpTip title="최장 회복기간(일) — 전고점 아래에 머문 최장 기간" align="right">
                   이전 최고 기록(전고점)을 되찾지 못한 채 <b>그 아래에 머문 가장 긴
-                  기간(달력일)</b>입니다. 기간 끝까지 회복 못 한 구간도 포함합니다.
+                  기간(달력일)</b>입니다. 기간 끝까지 회복 못 한 구간도 포함하고, 그때는 숫자 옆에 "미회복"이 붙습니다.
                   <br />예: 365일 = 1년 내내 "계좌가 최고점보다 낮은 상태".
                   <br />숫자가 클수록 <b>오래 물려있는 고통</b>이 긴 전략입니다.
                 </HelpTip>
@@ -413,7 +413,7 @@ export function ResultsSection({
                   <td className="text-right px-3 py-2.5 font-semibold">{fmtPct(m.twrrAnnualPct)}</td>
                   <td className="text-right px-3 py-2.5">{fmtPct(m.mwrrAnnualPct)}</td>
                   <td className="text-right px-3 py-2.5 text-red-500">{fmtPct(m.maxDrawdownPct)}</td>
-                  <td className="text-right px-3 py-2.5">{m.maxUnderwaterDays}</td>
+                  <td className="text-right px-3 py-2.5 whitespace-nowrap">{fmtUnderwater(m)}</td>
                   <td className="text-right px-3 py-2.5">{fmtPct(m.volAnnualPct)}</td>
                   <td className="text-right px-3 py-2.5 font-semibold">{fmtUsd(m.finalValue)}</td>
                   <td className="text-right px-3 py-2.5 font-semibold">{fmtUsd(m.liquidatedValue)}</td>
@@ -424,12 +424,21 @@ export function ResultsSection({
                     {fmtUsd(r.postTax.result.totalTaxesUsd + r.postTax.result.dividendsWithheldUsd + (r.postTax.result.interestWithheldUsd ?? 0))}
                   </td>
                   <td className="text-right px-3 py-2.5">{fmtUsd(res.totalFeesUsd)}</td>
-                  <td className="text-right px-3 py-2.5">{res.trades.length}</td>
+                  <td className="text-right px-3 py-2.5" title={tradeReasonSummary(res.trades)}>{res.trades.length}</td>
                 </tr>
               )
             })}
           </tbody>
         </table>
+        {/* 거래 횟수 구성 — 적립이 없어도 배당 재투자·리밸런싱·낙폭 규칙 투입이 거래로 잡힌다 */}
+        <div className="px-4 py-2.5 border-t border-[#e9edf4] dark:border-[#262b38] text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400 space-y-0.5">
+          {sorted.map((r) => (
+            <p key={r.config.id}>
+              <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: colorOf.get(r.config.id) }} />
+              거래 {r[taxView].result.trades.length}건: {tradeReasonSummary(r[taxView].result.trades) || '없음'}
+            </p>
+          ))}
+        </div>
       </div>
 
       {/* 트라이팟 신호 요약 — 전환 횟수·상태별 보유 기간·마지막 판정 */}
@@ -536,7 +545,13 @@ export function ResultsSection({
                     <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: colorOf.get(r.config.id) }} />
                     {nbspShortParens(labelOf.get(r.config.id)!)}
                   </div>
-                  <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100">−{drag.toFixed(2)}%p/년</div>
+                  <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{fmtDrag(drag)}</div>
+                  {rulePathsDiffer(r.preTax.result, r.postTax.result) && (
+                    <div className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                      세전·세후 실행에서 낙폭 규칙이 발동한 날이 달라 매매가 갈라졌습니다. 원천징수 몇 달러 차이로 문턱을 넘는 날이
+                      바뀐 경로 효과라서, 이 차이를 세금 효과로 읽으면 안 됩니다.
+                    </div>
+                  )}
                   <div className="text-xs text-gray-400 mt-0.5">
                     양도세 {fmtUsd(res.totalTaxesUsd)} + 배당 원천 {fmtUsd(res.dividendsWithheldUsd)}
                     {(res.interestWithheldUsd ?? 0) > 0 && <> + 이자 원천 {fmtUsd(res.interestWithheldUsd ?? 0)}</>}. 실현익 과세와 원천징수가 만드는 복리 드래그
@@ -578,7 +593,7 @@ export function ResultsSection({
           <tbody>
             {years.map((y) => (
               <tr key={y} className="border-b border-[#e9edf4] dark:border-[#262b38] text-zinc-800 dark:text-zinc-200">
-                <td className="px-4 py-2">{y}</td>
+                <td className="px-4 py-2 whitespace-nowrap">{yearLabel(sorted[0][taxView].metrics.annualReturns.find((x) => x.year === y) ?? { year: y })}</td>
                 {sorted.map((r) => {
                   const a = r[taxView].metrics.annualReturns.find((x) => x.year === y)
                   return (

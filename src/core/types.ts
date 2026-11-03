@@ -168,7 +168,10 @@ export interface ExecutionConfig {
   fractionalShares: boolean
   /** 유휴현금 연 수익률 (%) — SGOV/단기국채 근사(PRD 4.5) */
   cashAnnualYieldPct: number
-  /** 현금 스윕: 유휴현금(CASH 목표 초과분)이 이 금액을 넘으면 다음날 매수 */
+  /**
+   * 최소 매수 금액: 새 돈(적립·순배당·체결 잔액)에서 시장 자산으로 갈 몫이 이 금액 이상일 때만 다음 거래일에 산다.
+   * 모자라면 새 돈으로 쌓아 두었다가 다음 결정에서 다시 배분한다. CASH 목표를 넘은 시세 변동분은 사지 않는다(engine 머리말)
+   */
   minTradeUsd: number
   /**
    * 체결 시점. t 종가로 정한 주문을
@@ -246,8 +249,12 @@ export interface TradeLogEntry {
   fee: number
   /** 매도 시 실현손익 = 양도가액(매도 수수료 차감 후) − 이동평균 취득가액(매수 수수료 포함) — 세법 규약 */
   realizedPnl?: number
-  /** 체결 사유 (signal = 트라이팟 신호 전환) */
-  reason: 'initial' | 'contribution' | 'rebalance' | 'cash_sweep' | 'forced_tax_sale' | 'signal'
+  /**
+   * 체결 사유 — initial 초기 매수 · contribution 적립 · rebalance 리밸런싱(무매도 모드의 매수만 하는 날 포함)
+   * · cash_sweep 배당·체결 잔액 재투자 · dd_rule 낙폭 규칙으로 현금 목표가 낮아진 날의 투입 · forced_tax_sale 세금 납부 매도
+   * · signal 트라이팟 신호 전환
+   */
+  reason: 'initial' | 'contribution' | 'rebalance' | 'cash_sweep' | 'dd_rule' | 'forced_tax_sale' | 'signal'
 }
 
 export interface TaxLogEntry {
@@ -349,10 +356,12 @@ export interface Metrics {
   maxDrawdownPct: number
   /** 최장 회복기간 (달력일 — 전고점 날짜부터 그 아래에 머문 실제 경과일, 해상도 불변) */
   maxUnderwaterDays: number
+  /** 그 최장 구간이 기간 끝까지 회복하지 못한 채 이어지는 중인가 (true면 "회복기간"이 아니라 진행 중인 수면하 기간) */
+  maxUnderwaterOngoing: boolean
   /** 스텝 변동성 연환산 (%) — 연환산 계수는 관측 스텝/년(일별 ≈252, 역사 월간 12) */
   volAnnualPct: number
-  /** 연도별 TWRR (%) — 서브기간 견고성(6.4) */
-  annualReturns: { year: number; returnPct: number }[]
+  /** 연도별 TWRR (%) — 서브기간 견고성(6.4). from·to는 잰 구간(시작·끝 해는 1년 미만일 수 있음) */
+  annualReturns: { year: number; returnPct: number; from: string; to: string }[]
   finalValue: number
   totalContributions: number
   /** 청산 후 가치 (BacktestResult.liquidation.valueUsd) */
