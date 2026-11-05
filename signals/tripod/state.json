@@ -1,20 +1,20 @@
 {
   "notified": {
-    "tripod": "2026-10-30"
+    "tripod": "2026-11-04"
   },
-  "asOf": "2026-11-03",
+  "asOf": "2026-11-04",
   "strategies": {
     "tripod": {
-      "exposure": 1.5,
-      "holding": "QQQ 50% + QLD 50%",
-      "since": "2026-10-30",
-      "changedToday": false
+      "exposure": 3,
+      "holding": "TQQQ 100%",
+      "since": "2026-11-04",
+      "changedToday": true
     },
     "t2": {
-      "exposure": 1.5,
-      "holding": "QQQ 50% + QLD 50%",
-      "since": "2026-10-30",
-      "changedToday": false
+      "exposure": 2,
+      "holding": "QLD 100%",
+      "since": "2026-11-04",
+      "changedToday": true
     },
     "te3": {
       "exposure": 1.8,
@@ -35,5 +35,5 @@
       "changedToday": false
     }
   },
-  "nextExecution": "2026-11-04"
+  "nextExecution": "2026-11-05"
 }
