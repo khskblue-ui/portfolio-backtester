@@ -1,39 +1,39 @@
 {
   "notified": {
-    "tripod": "2026-11-04"
+    "tripod": "2026-11-05"
   },
-  "asOf": "2026-11-04",
+  "asOf": "2026-11-05",
   "strategies": {
     "tripod": {
-      "exposure": 3,
-      "holding": "TQQQ 100%",
-      "since": "2026-11-04",
+      "exposure": 1.5,
+      "holding": "QQQ 50% + QLD 50%",
+      "since": "2026-11-05",
       "changedToday": true
     },
     "t2": {
-      "exposure": 2,
-      "holding": "QLD 100%",
-      "since": "2026-11-04",
+      "exposure": 1.5,
+      "holding": "QQQ 50% + QLD 50%",
+      "since": "2026-11-05",
       "changedToday": true
     },
     "te3": {
-      "exposure": 1.8,
-      "holding": "QQQ 20% + QLD 80%",
-      "since": "2026-10-30",
-      "changedToday": false
+      "exposure": 0,
+      "holding": "현금 100%",
+      "since": "2026-11-05",
+      "changedToday": true
     },
     "tev3": {
-      "exposure": 1.5,
-      "holding": "QQQ 50% + QLD 50%",
-      "since": "2026-10-30",
-      "changedToday": false
+      "exposure": 0,
+      "holding": "현금 100%",
+      "since": "2026-11-05",
+      "changedToday": true
     },
     "tev2": {
-      "exposure": 1,
-      "holding": "QQQ 100%",
-      "since": "2026-10-30",
-      "changedToday": false
+      "exposure": 0,
+      "holding": "현금 100%",
+      "since": "2026-11-05",
+      "changedToday": true
     }
   },
-  "nextExecution": "2026-11-05"
+  "nextExecution": "2026-11-06"
 }
