@@ -26,7 +26,7 @@ const RULE = {
 /**
  * opt: { rule(false면 사지도 팔지도 않고 금, 암호화폐 상한만 적용), lower(현금 하한 적용), lowerTo(하한에서 채우는 선), upper(현금 상한),
  *        fill(살 때 금과 암호화폐 먼저), trim(금, 암호화폐 상한 적용), contrib(새로 들어오는 돈: 연간, 전체 자산 대비), tax(매도 차익 세율) }
- * 결정은 그날 종가, 체결은 다음 거래일 종가. 현금 하한은 매달 첫 거래일에만 본다. 낙폭의 기준 최고가는 계산 시작일 뒤의 최고 종가.
+ * 결정은 그날 종가, 체결은 다음 거래일 종가(현금 상한과 하한 모두 매일 본다). 낙폭의 기준 최고가는 계산 시작일 뒤의 최고 종가.
  * 수익률은 새 돈의 영향을 뺀 시간가중 수익률(V).
  */
 function sim(dates, assets, base, opt = {}) {
@@ -88,7 +88,7 @@ function sim(dates, assets, base, opt = {}) {
     if (o.rule) {
       if (!stepped) { if (qdd <= RULE.firstDd) { stepped = true; stepDay = d; pendBuy = 'first' } }
       else if (cw >= o.upper) pendBuy = 'upper'
-      else if (o.lower && newMonth && cw <= RULE.lower) pendSell = true
+      else if (o.lower && cw <= RULE.lower) pendSell = true
     }
     if (o.trim) for (const a of others) if ((hold[a.key] * px(a, d)) / T >= RULE.trimAt) pendTrim.push(a.key)
     series.push({ d, V: nav, qdd, w: weights(d, T) })
@@ -508,8 +508,8 @@ const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>
   <h3>규칙 여섯 가지</h3>
   <div class="rules">
     <div class="rulecard"><b><span class="no">1</span>처음 한 번</b>${chips([`QQQ가 최고가보다 ${p0(-RULE.firstDd)} 넘게 하락`, `현금 ${p0(RULE.startCash)} → ${p0(RULE.target)}`])}<p>한 번만 씁니다.</p></div>
-    <div class="rulecard"><b><span class="no">2</span>현금 상한 ${p0(RULE.upper)}</b>${chips([`현금 ${p0(RULE.upper)} 이상`, `${p0(RULE.target)}까지 써서 삼`])}<p>처음 한 번을 산 뒤부터 봅니다.</p></div>
-    <div class="rulecard"><b><span class="no">3</span>현금 하한 ${p0(RULE.lower)}</b>${chips([`현금 ${p0(RULE.lower)} 이하`, `QQQ를 팔아 ${p0(RULE.lowerTo)}까지`])}<p>한 달에 한 번 확인합니다.</p></div>
+    <div class="rulecard"><b><span class="no">2</span>현금 상한 ${p0(RULE.upper)}</b>${chips([`현금 ${p0(RULE.upper)} 이상`, `${p0(RULE.target)}까지 써서 삼`])}<p>처음 한 번을 산 뒤부터, 다음 거래일 종가에 삽니다.</p></div>
+    <div class="rulecard"><b><span class="no">3</span>현금 하한 ${p0(RULE.lower)}</b>${chips([`현금 ${p0(RULE.lower)} 이하`, `QQQ를 팔아 ${p0(RULE.lowerTo)}까지`])}<p>다음 거래일 종가에 팝니다.</p></div>
     <div class="rulecard"><b><span class="no">4</span>살 때의 순서</b>${chips([`금과 암호화폐를 ${p0(RULE.fillTo)}까지`, '남은 돈은 QQQ'])}<p>${p0(RULE.fillTo)}보다 적을 때만 채웁니다.</p></div>
     <div class="rulecard"><b><span class="no">5</span>새로 들어오는 돈</b>${chips([`현금 ${p0(RULE.target)} 미만`, '현금에 둠'], [`현금 ${p0(RULE.target)} 이상`, '기준보다 모자란 자산을 삼'])}<p>월급, 배당, 이자입니다.</p></div>
     <div class="rulecard"><b><span class="no">6</span>금, 암호화폐 상한 ${p0(RULE.trimAt)}</b>${chips([`금이나 암호화폐가 ${p0(RULE.trimAt)} 초과`, `${p0(RULE.trimTo)}로 줄이고 현금에`])}<p>둘을 따로 봅니다.</p></div>
@@ -532,10 +532,10 @@ const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>
     <div class="step"><div class="no">1</div><div class="q"><b>금이나 암호화폐가 전체의 ${p0(RULE.trimAt)}를 넘었나</b>암호화폐는 비트코인, 이더리움, 관련 주식을 합칩니다.</div><div class="a"><span class="yes">넘었으면</span>${p0(RULE.trimTo)}로 줄이고 판 돈은 현금에 둡니다.</div></div>
     <div class="step"><div class="no">2</div><div class="q"><b>아직 한 번도 사지 않았고, QQQ가 최고가에서 ${p0(-RULE.firstDd)} 넘게 내렸나</b>지금은 아직 사지 않은 상태입니다.</div><div class="a"><span class="yes">그렇다면</span>현금을 ${p0(RULE.target)}까지 써서 삽니다. 그 뒤의 기준 비중은 ${mixText(BASELINE)}입니다.</div></div>
     <div class="step"><div class="no">3</div><div class="q"><b>현금이 ${p0(RULE.upper)} 이상인가</b>처음 한 번을 산 뒤부터 봅니다.</div><div class="a"><span class="yes">그렇다면</span>현금을 ${p0(RULE.target)}까지 써서 삽니다. 금과 암호화폐를 ${p0(RULE.fillTo)}까지 채우고 나머지로 QQQ를 삽니다.</div></div>
-    <div class="step"><div class="no">4</div><div class="q"><b>현금이 ${p0(RULE.lower)} 이하인가</b>한 달에 한 번, 새로 들어온 돈을 넣는 날에 봅니다.</div><div class="a"><span class="yes">그렇다면</span>QQQ를 팔아 현금을 ${p0(RULE.lowerTo)}까지 채웁니다.</div></div>
+    <div class="step"><div class="no">4</div><div class="q"><b>현금이 ${p0(RULE.lower)} 이하인가</b>매일 종가로 봅니다.</div><div class="a"><span class="yes">그렇다면</span>QQQ를 팔아 현금을 ${p0(RULE.lowerTo)}까지 채웁니다.</div></div>
     <div class="step"><div class="no">5</div><div class="q"><b>새로 들어온 돈이 있나</b>월급, 배당, 이자입니다.</div><div class="a"><span class="yes">있으면</span>현금이 ${p0(RULE.target)}보다 적으면 현금에 둡니다. 아니면 기준 비중보다 모자란 자산을 삽니다.</div></div>
   </div>
-  <p class="foot">어디에도 해당하지 않으면 아무것도 하지 않습니다.</p>
+  <p class="foot">매일 종가로 확인하고, 해당하면 다음 거래일 종가에 사고팝니다. 달마다 따로 맞추지 않습니다. 어디에도 해당하지 않으면 아무것도 하지 않습니다.</p>
 </section>
 
 <section class="page">
@@ -641,19 +641,17 @@ ${recordsPage()}
   </tbody></table>
   <ul class="take">
     <li>3번 규칙으로 QQQ를 팔 때는 ISA나 연금 계좌에 든 것부터 팝니다.</li>
-    <li>일반 계좌에서 팔 때는 12월과 1월로 나누면 250만 원 공제를 두 번 받습니다. 3번 규칙은 며칠 늦어도 위험이 커지지 않습니다.</li>
     <li>같은 해에 손실이 난 해외 종목이 있으면 함께 팔아 이익과 합칩니다.</li>
   </ul>
 
   <h2 style="margin-top:18pt">아직 정하지 않은 것</h2>
   <table class="t"><thead><tr><th style="width:24%">항목</th><th style="width:36%">지금</th><th>고를 수 있는 것</th></tr></thead><tbody>
     <tr><td>암호화폐 안의 구성</td><td>합계로만 봅니다. 계산에는 비트코인만 넣었습니다.</td><td>채울 때 비트코인만 사기 / 비트코인, 이더리움, 관련 주식의 비율 정하기</td></tr>
-    <tr><td>1번과 2번을 확인하는 주기</td><td>계산은 매일 종가로 보고 다음 거래일에 샀습니다.</td><td>매일 보기 / 주 1회 정한 요일에 보기</td></tr>
     <tr><td>새로 들어온 돈을 나누는 방법</td><td>기준 비중보다 가장 모자란 자산 하나를 삽니다.</td><td>그대로 두기 / 모자란 만큼 비례해서 나누기</td></tr>
     <tr><td>생활에 돈이 필요할 때</td><td>정하지 않았습니다.</td><td>현금에서 꺼내고 3번 규칙에 맡기기 / 기준 비중보다 넘치는 자산부터 팔기</td></tr>
     <tr><td>QQQ 최고가의 기준</td><td>1번 규칙에만 씁니다. 역대 최고 종가(달러)입니다.</td><td>증권사 화면의 시세로 보기 / 배당을 넣은 수정주가로 보기</td></tr>
   </tbody></table>
-  <p class="foot">계산 방법: 일별 수정주가(배당 재투자 가정)를 썼고, 현금에는 미국 3개월 국채 금리로 이자를 붙였습니다. 그날 종가로 판단하고 다음 거래일 종가에 사고팔았습니다. 현금 하한은 매달 첫 거래일에만 확인했습니다. QQQ 최고가는 각 구간을 시작한 뒤의 최고 종가입니다. 금은 GLD, 비트코인은 BTC-USD입니다. 돈이 새로 들어오는 경우의 수익률은 그 돈이 들어온 효과를 뺀 값입니다. 생성: scripts/reserve/build-report.mjs</p>
+  <p class="foot">계산 방법: 일별 수정주가(배당 재투자 가정)를 썼고, 현금에는 미국 3개월 국채 금리로 이자를 붙였습니다. 그날 종가로 판단하고 다음 거래일 종가에 사고팔았습니다. QQQ 최고가는 각 구간을 시작한 뒤의 최고 종가입니다. 금은 GLD, 비트코인은 BTC-USD입니다. 돈이 새로 들어오는 경우의 수익률은 그 돈이 들어온 효과를 뺀 값입니다. 생성: scripts/reserve/build-report.mjs</p>
 </section>
 </body></html>`
 
