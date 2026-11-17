@@ -44,7 +44,7 @@ function sim(dates, assets, base, opt = {}) {
   const others = assets.filter((a) => a.key !== 'qqq'), qA = assets.find((a) => a.key === 'qqq')
   const weights = (d, T) => ({ ...Object.fromEntries(assets.map((a) => [a.key, (hold[a.key] * px(a, d)) / T])), cash: cash / T })
   let peakQ = QQQ.get(dates[0]), irx = 0, stepped = false, nav = 100, lastPost = 100
-  let pendBuy = null, pendSell = false, pendTrim = []
+  let pendBuy = null, pendSell = false, pendTrim = [], stepDay = null
   const series = [{ d: dates[0], V: 100, qdd: 0, w: { ...Object.fromEntries(assets.map((a) => [a.key, base[a.key]])), cash: base.cash } }]
   const events = []
   for (let i = 1; i < dates.length; i++) {
@@ -53,7 +53,7 @@ function sim(dates, assets, base, opt = {}) {
     cash *= 1 + (irx / 100) * ((Date.parse(d) - Date.parse(prev)) / 864e5 / 365)
     for (const key of pendTrim) {
       const a = assets.find((x) => x.key === key), T = total(d), cur = hold[key] * px(a, d), s = cur - RULE.trimTo * T
-      if (s > 0) { sell(a, s, d); events.push({ d, type: 'trim', key, from: cur / T, pct: s / T }) }
+      if (s > 0) { const cashFrom = cash / T; sell(a, s, d); events.push({ d, type: 'trim', key, from: cur / T, pct: s / T, cashFrom, cashTo: cash / total(d) }) }
     }
     pendTrim = []
     if (pendSell) {
@@ -86,7 +86,7 @@ function sim(dates, assets, base, opt = {}) {
     if (q > peakQ) peakQ = q
     const qdd = q / peakQ - 1, cw = cash / T
     if (o.rule) {
-      if (!stepped) { if (qdd <= RULE.firstDd) { stepped = true; pendBuy = 'first' } }
+      if (!stepped) { if (qdd <= RULE.firstDd) { stepped = true; stepDay = d; pendBuy = 'first' } }
       else if (cw >= o.upper) pendBuy = 'upper'
       else if (o.lower && newMonth && cw <= RULE.lower) pendSell = true
     }
@@ -100,7 +100,7 @@ function sim(dates, assets, base, opt = {}) {
   const rec = series.find((s) => s.d > mddDay && s.V >= series.find((x) => x.d === mddPeak).V)?.d ?? null
   const buys = events.filter((e) => e.type === 'buy'), sells = events.filter((e) => e.type === 'sell')
   const firstDay = buys[0]?.d ?? null, after = firstDay ? series.filter((s) => s.d > firstDay) : []
-  return { series, events, buys, sells, trims: events.filter((e) => e.type === 'trim'), cagr: (last.V / 100) ** (1 / yrs) - 1, mdd, mddDay, rec, final: last, firstBuy: firstDay, yrs, taxPaid, avgCash: series.reduce((x, s) => x + s.w.cash, 0) / series.length, minCashAfter: after.length ? Math.min(...after.map((s) => s.w.cash)) : null }
+  return { series, events, buys, sells, trims: events.filter((e) => e.type === 'trim'), cagr: (last.V / 100) ** (1 / yrs) - 1, mdd, mddDay, rec, final: last, firstBuy: firstDay, stepDay, yrs, taxPaid, avgCash: series.reduce((x, s) => x + s.w.cash, 0) / series.length, minCashAfter: after.length ? Math.min(...after.map((s) => s.w.cash)) : null }
 }
 
 const A_QQQ = { key: 'qqq', name: 'QQQ', px: QQQ }, A_GOLD = { key: 'gold', name: '금', px: GLD }, A_BTC = { key: 'btc', name: '비트코인', px: BTC }
@@ -146,7 +146,7 @@ const xAxis = (dates, x, y) => yearTicks(dates).map((d) => `<line x1="${x(d).toF
 const pathOf = (pts) => pts.map(([px, py], i) => `${i ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`).join('')
 
 function valueChart(s) {
-  const H = 168, T = 14, B = 26, x = xScale(s.dates), keep = new Set()
+  const H = 150, T = 14, B = 26, x = xScale(s.dates), keep = new Set()
   const a = sample(s.plan.series, keep), b = sample(s.hold.series, keep)
   const all = [...a, ...b].map((p) => p.V), lo = Math.min(...all), hi = Math.max(...all)
   const l0 = Math.log10(lo * 0.9), l1 = Math.log10(hi * 1.1)
@@ -167,27 +167,45 @@ function valueChart(s) {
   </svg>`
 }
 
+/** 현금 비중 선 아래에 사고판 기록을 줄로 붙인다. 세로 점선이 기록과 현금 비중이 바뀐 자리를 잇는다 */
 function cashChart(s) {
-  const H = 158, T = 10, B = 26, x = xScale(s.dates)
-  const marks = [...s.plan.buys, ...s.plan.sells], keep = new Set(marks.map((e) => e.d))
-  const a = sample(s.plan.series, keep)
-  const hi = Math.max(0.5, Math.ceil(Math.max(...a.map((p) => p.w.cash), ...marks.map((e) => e.from)) * 10) / 10)
-  const y = (v) => T + (1 - v / hi) * (H - T - B)
+  const r = s.plan, x = xScale(s.dates)
+  const rows = [
+    { label: '산 날', ev: r.buys, mark: (cx, cy) => `<circle cx="${cx}" cy="${cy}" r="4.5" fill="${C.ink}" stroke="#fff" stroke-width="1.5"/>` },
+    { label: 'QQQ를 판 날', ev: r.sells, mark: (cx, cy) => `<path d="M${cx},${cy - 5.5}l5.5,5.5l-5.5,5.5l-5.5,-5.5z" fill="#fff" stroke="${C.ink}" stroke-width="1.8"/>` },
+    { label: `${[...new Set(r.trims.map((e) => NAME[e.key]))].join(', ')}을 줄인 날`, ev: r.trims, mark: (cx, cy, e) => `<path d="M${cx},${cy - 5.5}l6,10.5h-12z" fill="${C[e.key]}" stroke="#fff" stroke-width="1.2"/>` },
+  ].filter((row) => row.ev.length)
+  const T = 24, PH = 116, GAP = 10, LH = 30, B = 20, H = T + PH + GAP + rows.length * LH + B
+  const laneY = (i) => T + PH + GAP + i * LH + LH / 2 + 3
+  const all = rows.flatMap((row) => row.ev), keep = new Set(all.map((e) => e.d))
+  const a = sample(r.series, keep), byDay = new Map(r.series.map((p) => [p.d, p]))
+  const hi = Math.max(0.5, Math.ceil(Math.max(...a.map((p) => p.w.cash), ...r.buys.map((e) => e.from)) * 10) / 10)
+  const y = (v) => T + (1 - v / hi) * PH
   const ticks = []; for (let v = 0; v <= hi + 1e-9; v += 0.1) ticks.push(v)
   const lines = [[RULE.upper, `현금 상한 ${p0(RULE.upper)}`, C.ink2, ''], [RULE.target, `기준 ${p0(RULE.target)}`, C.ink3, ' stroke-dasharray="3 3"'], [RULE.lower, `현금 하한 ${p0(RULE.lower)}`, C.ink2, '']]
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="현금 비중과 사고판 날">
+  const x0 = x(s.dates[0]), x1 = x(r.stepDay ?? s.dates.at(-1))
+  const lane = (row, i) => {
+    let lastX = -99, below = false
+    return `<rect x="${ML}" y="${laneY(i) - LH / 2 + 1}" width="${W - MR - ML}" height="${LH - 2}" fill="#f4f6f9"/>
+      <text x="${W - MR + 6}" y="${laneY(i) + 3.5}" class="lbl2">${row.label}</text>
+      ${row.ev.map((e) => { const cx = x(e.d); below = cx - lastX < 24 ? !below : false; lastX = cx; return `<text x="${cx.toFixed(1)}" y="${(laneY(i) + (below ? 15 : -8)).toFixed(1)}" text-anchor="middle" class="lbl">${p0(e.pct)}</text>${row.mark(cx.toFixed(1), laneY(i), e)}` }).join('')}`
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="현금 비중과 사고판 기록">
+    <path d="M${x0.toFixed(1)},${T - 8}v-5H${x1.toFixed(1)}v5" fill="none" stroke="${C.ink2}" stroke-width="1"/>
+    <text x="${(x0 + 4).toFixed(1)}" y="${T - 15}" class="lbl2">1번 규칙으로 처음 사기 전에는 현금이 ${p0(RULE.upper)}를 넘어도 사지 않습니다</text>
     ${ticks.map((v) => `<line x1="${ML}" x2="${W - MR}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="${C.grid}"/><text x="${ML - 6}" y="${(y(v) + 3.5).toFixed(1)}" text-anchor="end" class="tick">${p0(v)}</text>`).join('')}
     <rect x="${ML}" y="${y(RULE.upper).toFixed(1)}" width="${W - MR - ML}" height="${(y(RULE.lower) - y(RULE.upper)).toFixed(1)}" fill="${C.cash}" opacity="0.1"/>
     ${lines.map(([v, label, color, dash]) => `<line x1="${ML}" x2="${W - MR}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="${color}" stroke-width="1"${dash}/><text x="${W - MR + 6}" y="${(y(v) + 3.5).toFixed(1)}" class="lbl2">${label}</text>`).join('')}
+    ${rows.map(lane).join('')}
+    ${rows.flatMap((row, i) => row.ev.map((e) => `<line x1="${x(e.d).toFixed(1)}" x2="${x(e.d).toFixed(1)}" y1="${y(Math.max(byDay.get(e.d).w.cash, e.from ?? 0, e.cashFrom ?? 0)).toFixed(1)}" y2="${(laneY(i) - 7).toFixed(1)}" stroke="${C.ink3}" stroke-width="0.8" stroke-dasharray="2 2"/>`)).join('')}
     <path d="${pathOf(a.map((p) => [x(p.d), y(p.w.cash)]))}" fill="none" stroke="${C.cash}" stroke-width="2" stroke-linejoin="round"/>
-    ${s.plan.buys.map((e) => `<circle cx="${x(e.d).toFixed(1)}" cy="${y(e.from).toFixed(1)}" r="4.5" fill="${C.ink}" stroke="#fff" stroke-width="2"/>`).join('')}
-    ${s.plan.sells.map((e) => `<path d="M${x(e.d).toFixed(1)},${(y(e.from) - 5.5).toFixed(1)}l5.5,5.5l-5.5,5.5l-5.5,-5.5z" fill="#fff" stroke="${C.ink}" stroke-width="1.8"/>`).join('')}
+    ${rows.map((row, i) => row.ev.map((e) => row.mark(x(e.d).toFixed(1), laneY(i), e)).join('')).join('')}
     ${xAxis(s.dates, x, H - B)}
   </svg>`
 }
 
 function weightChart(s) {
-  const H = 158, T = 8, B = 26, x = xScale(s.dates)
+  const H = 128, T = 8, B = 26, x = xScale(s.dates)
   const keep = new Set(s.plan.events.map((e) => e.d))
   const a = sample(s.plan.series, keep), keys = STACK.filter((k) => k in s.base)
   const y = (v) => T + (1 - v) * (H - T - B)
@@ -258,7 +276,9 @@ const tiles = (s) => {
 }
 const partsText = (s, parts) => s.assets.filter((a) => Math.round((parts[a.key] ?? 0) * 100) >= 1).map((a) => `${a.name} ${p0(parts[a.key])}`).join(', ')
 const eventTable = (s) => {
-  const rows = s.plan.events.filter((e) => e.type !== 'trim').map((e) => (e.type === 'buy'
+  const rows = s.plan.events.map((e) => (e.type === 'trim'
+    ? `<tr><td>${ymd(e.d)}</td><td>줄임</td><td class="n">${p0(e.pct)}</td><td class="n">${p0(e.cashFrom)} → ${p0(e.cashTo)}</td><td class="n"></td><td>6번 규칙: ${NAME[e.key]} ${p0(e.from)} → ${p0(RULE.trimTo)}</td></tr>`
+    : e.type === 'buy'
     ? `<tr><td>${ymd(e.d)}</td><td>삼</td><td class="n">${p0(e.pct)}</td><td class="n">${p0(e.from)} → ${p0(e.to)}</td><td class="n">${p0(e.qdd)}</td><td>${e.first ? '1번 규칙' : `2번 규칙(현금 ${p0(RULE.upper)} 이상)`}: ${partsText(s, e.parts)}</td></tr>`
     : `<tr><td>${ymd(e.d)}</td><td>팖</td><td class="n">${p0(e.pct)}</td><td class="n">${p0(e.from)} → ${p0(e.to)}</td><td class="n"></td><td>3번 규칙(현금 ${p0(RULE.lower)} 이하): QQQ</td></tr>`))
   return `<table class="t dense"><thead><tr><th style="width:13%">날짜</th><th style="width:8%">한 일</th><th class="n" style="width:14%">크기 (전체 대비)</th><th class="n" style="width:15%">현금 비중</th><th class="n" style="width:11%">QQQ 낙폭</th><th>규칙과 산 것, 판 것</th></tr></thead><tbody>${rows.join('') || '<tr><td colspan="6">없음</td></tr>'}</tbody></table>`
@@ -266,8 +286,9 @@ const eventTable = (s) => {
 const takeaways = (s) => {
   const { buys, sells, trims } = s.plan, out = []
   const first = buys[0]
-  if (first?.first) out.push(`처음 산 때는 ${ymK(first.d)}입니다. 현금 ${p0(first.from)}를 ${p0(first.to)}로 줄였습니다.${first.from > RULE.startCash + 0.05 && trims.some((e) => e.d < first.d) ? ' 비트코인을 20%에서 줄인 돈이 현금에 쌓여 있었습니다.' : ''}`)
+  if (first?.first) out.push(`처음 산 때는 ${ymK(first.d)}입니다. 현금 ${p0(first.from)}를 ${p0(first.to)}로 줄였습니다.`)
   else out.push(`QQQ가 최고가에서 ${p0(-RULE.firstDd)} 내렸을 때는 현금이 이미 ${p0(RULE.target)}보다 적어 사지 않았습니다. QQQ가 그 전에 크게 올랐기 때문입니다.`)
+  if (trims.length) out.unshift(`${[...new Set(trims.map((e) => NAME[e.key]))].join(', ')}이 전체의 ${p0(RULE.trimAt)}를 넘어 줄인 것은 ${trims.length}번입니다. 판 돈이 현금으로 와서 그때마다 현금 비중이 올랐습니다.`)
   const upper = buys.filter((e) => !e.first)
   out.push(upper.length ? `현금이 ${p0(RULE.upper)} 이상이 되어 산 것은 ${upper.length}번입니다. 그때 QQQ는 최고가보다 ${upper.map((e) => p0(-e.qdd)).join(', ')} 낮았습니다.` : `처음 산 뒤로 현금이 ${p0(RULE.upper)} 이상이 된 적은 없습니다.`)
   out.push(sells.length ? `현금이 ${p0(RULE.lower)} 이하가 되어 QQQ를 판 것은 ${sells.length}번입니다(${span(sells)}).` : `현금이 ${p0(RULE.lower)} 이하가 된 적은 없습니다.`)
@@ -282,8 +303,7 @@ const scenarioPage = (s, n) => `<section class="page">
   <h3>자산 가치 <span class="hint">시작 = 100, 세로축은 로그 눈금</span></h3>
   ${legend([['ln', C.plan, '규칙대로'], ['ln', C.base, '그냥 둔 경우 (금, 암호화폐 상한만 적용)']])}
   ${valueChart(s)}
-  <h3>현금 비중과 사고판 날 <span class="hint">초록 띠 안에서는 사고팔지 않습니다</span></h3>
-  ${legend([['ln', C.cash, '현금 비중'], ['dot', C.ink, '산 날'], ['dia', C.ink, 'QQQ를 판 날']])}
+  <h3>현금 비중과 사고판 기록 <span class="hint">아래 줄의 숫자는 그날 사고판 크기(전체 대비)이고, 세로 점선이 현금 비중이 바뀐 자리를 가리킵니다</span></h3>
   ${cashChart(s)}
   <h3>비중 변화</h3>
   ${legend(STACK.filter((k) => k in s.base).map((k) => ['sw', C[k], NAME[k]]))}
@@ -293,7 +313,7 @@ const scenarioPage = (s, n) => `<section class="page">
 const recordsPage = () => `<section class="page">
   <div class="kicker">기록</div>
   <h2>사고판 기록</h2>
-  <p class="sub">세 구간에서 규칙에 따라 사고판 날입니다. 크기는 그날 전체 평가액에서 차지하는 비율입니다. 금이나 비트코인을 20%에서 줄인 날은 뺐습니다.</p>
+  <p class="sub">세 구간에서 규칙에 따라 사고판 날입니다. 크기는 그날 전체 평가액에서 차지하는 비율입니다.</p>
   ${SCEN.map((s) => `<h3>${s.title} <span class="hint">${s.sub}</span></h3>${eventTable(s)}`).join('')}
   <p class="foot">현금 비중과 낙폭은 사고판 날의 종가로 계산했습니다. 사고팔지는 그 전 거래일 종가를 보고 정했습니다.</p>
 </section>`
@@ -428,7 +448,7 @@ table.t th { text-align: left; font-weight: 600; color: ${C.ink2}; border-bottom
 table.t td { border-bottom: 1px solid #eceef2; padding: 4pt 6pt; vertical-align: top; }
 table.t .n { text-align: right; font-family: 'IBM Plex Mono', 'IBM Plex Sans KR', monospace; white-space: nowrap; }
 table.t th.n { font-family: inherit; }
-table.t.dense td { padding: 2.6pt 6pt; }
+table.t.dense td { padding: 2pt 6pt; font-size: 8.6pt; }
 table.t.dense { margin: 3pt 0; }
 table.t tr.sep td { border-top: 1.5px solid #c9ccd4; }
 table.t tr.pick td { background: #f4f7ff; font-weight: 600; }
