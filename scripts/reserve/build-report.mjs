@@ -26,7 +26,7 @@ const RULE = {
 }
 
 /**
- * opt: { rule(false면 금, 암호화폐 상한만 적용), lower(현금 하한), lowerTo(하한에서 채우는 선), upper(현금 상한), fill(살 때 금과 암호화폐 먼저),
+ * opt: { partial(true면 전부 되돌리지 않고 필요한 만큼만 사고파는 이전 규칙), rule(false면 금, 암호화폐 상한만 적용), lower(현금 하한), lowerTo(하한에서 채우는 선), upper(현금 상한), fill(살 때 금과 암호화폐 먼저),
  *        trim(금, 암호화폐 상한), sellOthersFirst(3번에서 비중 큰 금, 암호화폐부터 팔기), fillOnSell(3번에서 금, 암호화폐도 채우기),
  *        contrib(새로 들어오는 돈: 연간, 전체 자산 대비), tax(매도 차익 세율) }
  * 그날 종가로 판단하고, 다음 거래일 종가에 조건을 다시 보지 않고 체결한다. 크기는 체결하는 날 종가의 비중으로 맞춘다.
@@ -35,7 +35,7 @@ const RULE = {
  * 수익률은 새로 들어오는 돈의 영향을 뺀 시간가중 수익률(V).
  */
 function sim(dates, assets, base, opt = {}) {
-  const o = { rule: true, lower: true, lowerTo: RULE.lowerTo, upper: RULE.upper, fill: true, trim: true, sellOthersFirst: true, fillOnSell: true, contrib: 0, tax: 0, ...opt }
+  const o = { rule: true, lower: true, lowerTo: RULE.lowerTo, upper: RULE.upper, fill: true, trim: true, sellOthersFirst: true, fillOnSell: true, partial: false, contrib: 0, tax: 0, ...opt }
   const px = (a, d) => a.px.get(d)
   const hold = {}, cost = {}
   for (const a of assets) { hold[a.key] = (100 * base[a.key]) / px(a, dates[0]); cost[a.key] = 100 * base[a.key] }
@@ -62,24 +62,38 @@ function sim(dates, assets, base, opt = {}) {
       const T = total(d), cur = hold[key] * px(byKey[key], d), amt = cur - RULE.trimTo * T
       if (amt > 0) { const cashFrom = cash / T; sell(key, amt, d); events.push({ d, type: 'trim', key, from: cur / T, pct: amt / T, cashFrom, cashTo: cash / total(d) }) }
     }
-    if (pending.act === 'sell') {
-      const T = total(d), from = cash / T, sells = {}, fills = {}
-      const val = (k) => hold[k] * px(byKey[k], d)
-      if (o.sellOthersFirst) for (const a of others) if (val(a.key) / T >= RULE.sellFirstAt) { const amt = val(a.key) - RULE.fillTo * T; sells[a.key] = amt; sell(a.key, amt, d) }
-      if (o.fillOnSell) for (const a of others) { const need = RULE.fillTo * T - val(a.key); if (need > RULE.minTrade * T) fills[a.key] = need }
-      const qSell = Math.max(0, o.lowerTo * T - cash) + Object.values(fills).reduce((x, y) => x + y, 0)
-      if (qSell > RULE.minTrade * T && val('qqq') > qSell) { sells.qqq = qSell; sell('qqq', qSell, d); for (const [k, amt] of Object.entries(fills)) buyA(k, amt, d) }
-      else for (const k of Object.keys(fills)) delete fills[k]
-      const sold = Object.values(sells).reduce((x, y) => x + y, 0)
-      if (sold > 0) events.push({ d, type: 'sell', pct: sold / T, from, to: cash / total(d), sells: Object.fromEntries(Object.entries(sells).map(([k, v]) => [k, v / T])), fills: Object.fromEntries(Object.entries(fills).map(([k, v]) => [k, v / T])) })
-    } else if (pending.act) {
-      const T = total(d), from = cash / T, buy = cash - RULE.target * T
-      if (buy > RULE.minTrade * T) {
-        const need = others.map((a) => (o.fill ? Math.max(0, RULE.fillTo * T - hold[a.key] * px(a, d)) : 0)), sum = need.reduce((x, y) => x + y, 0), k = sum > buy ? buy / sum : 1
-        const parts = { qqq: buy - Math.min(sum, buy) }
-        others.forEach((a, j) => { parts[a.key] = need[j] * k })
-        for (const [key, amt] of Object.entries(parts)) buyA(key, amt, d)
-        events.push({ d, type: 'buy', first: pending.act === 'first', pct: buy / T, from, to: cash / total(d), qdd: QQQ.get(d) / peakQ - 1, parts: Object.fromEntries(Object.entries(parts).map(([key, v]) => [key, v / T])) })
+    if (pending.act && !o.partial) {
+      // 전부 기준 비중으로 되돌린다. 1번과 현금 상한은 현금이 기준보다 많을 때만, 현금 하한은 언제나.
+      const T = total(d), from = cash / T
+      if (pending.act === 'sell' || cash > (RULE.target + RULE.minTrade) * T) {
+        const tgt = (k) => (k === 'qqq' ? 1 - RULE.target - others.length * RULE.fillTo : RULE.fillTo) * T, val = (k) => hold[k] * px(byKey[k], d)
+        const sells = {}, parts = {}
+        for (const a of assets) { const x = val(a.key) - tgt(a.key); if (x > 0) { sells[a.key] = x; sell(a.key, x, d) } }
+        const want = assets.map((a) => Math.max(0, tgt(a.key) - val(a.key))), sum = want.reduce((x, y) => x + y, 0), k = sum > 0 ? Math.min(1, Math.max(0, cash - RULE.target * total(d)) / sum) : 0
+        assets.forEach((a, n) => { if (want[n] * k > 0) { parts[a.key] = want[n] * k; buyA(a.key, want[n] * k, d) } })
+        const to = cash / total(d), up = to > from, share = (obj) => Object.fromEntries(Object.entries(obj).map(([key, v]) => [key, v / T]))
+        events.push({ d, type: up ? 'sell' : 'buy', first: pending.act === 'first', pct: Object.values(up ? sells : parts).reduce((x, y) => x + y, 0) / T, from, to, qdd: QQQ.get(d) / peakQ - 1, parts: share(parts), sells: share(sells), fills: share(up ? parts : {}) })
+      }
+    } else {
+      if (pending.act === 'sell') {
+        const T = total(d), from = cash / T, sells = {}, fills = {}
+        const val = (k) => hold[k] * px(byKey[k], d)
+        if (o.sellOthersFirst) for (const a of others) if (val(a.key) / T >= RULE.sellFirstAt) { const amt = val(a.key) - RULE.fillTo * T; sells[a.key] = amt; sell(a.key, amt, d) }
+        if (o.fillOnSell) for (const a of others) { const need = RULE.fillTo * T - val(a.key); if (need > RULE.minTrade * T) fills[a.key] = need }
+        const qSell = Math.max(0, o.lowerTo * T - cash) + Object.values(fills).reduce((x, y) => x + y, 0)
+        if (qSell > RULE.minTrade * T && val('qqq') > qSell) { sells.qqq = qSell; sell('qqq', qSell, d); for (const [k, amt] of Object.entries(fills)) buyA(k, amt, d) }
+        else for (const k of Object.keys(fills)) delete fills[k]
+        const sold = Object.values(sells).reduce((x, y) => x + y, 0)
+        if (sold > 0) events.push({ d, type: 'sell', pct: sold / T, from, to: cash / total(d), sells: Object.fromEntries(Object.entries(sells).map(([k, v]) => [k, v / T])), fills: Object.fromEntries(Object.entries(fills).map(([k, v]) => [k, v / T])) })
+      } else if (pending.act) {
+        const T = total(d), from = cash / T, buy = cash - RULE.target * T
+        if (buy > RULE.minTrade * T) {
+          const need = others.map((a) => (o.fill ? Math.max(0, RULE.fillTo * T - hold[a.key] * px(a, d)) : 0)), sum = need.reduce((x, y) => x + y, 0), k = sum > buy ? buy / sum : 1
+          const parts = { qqq: buy - Math.min(sum, buy) }
+          others.forEach((a, j) => { parts[a.key] = need[j] * k })
+          for (const [key, amt] of Object.entries(parts)) buyA(key, amt, d)
+          events.push({ d, type: 'buy', first: pending.act === 'first', pct: buy / T, from, to: cash / total(d), qdd: QQQ.get(d) / peakQ - 1, parts: Object.fromEntries(Object.entries(parts).map(([key, v]) => [key, v / T])) })
+        }
       }
     }
     pending = { trims: [], act: null }
@@ -162,11 +176,9 @@ for (const s of SCEN) {
   s.hold = run({ rule: false })
   s.fixed = simFixed(s.dates, s.assets, baseline(s.base))
   s.nolower = run({ lower: false })
-  s.to25 = run({ lowerTo: 0.25 })
+  s.partial = run({ partial: true })
   s.up35 = run({ upper: 0.35 })
-  s.nofill = run({ fill: false })
   s.notrim = run({ trim: false })
-  s.qonly = run({ sellOthersFirst: false, fillOnSell: false })
   s.now30 = sim(s.dates, s.assets, baseline(s.base), { startStepped: true }) // 기다리지 않고 기준 비중으로 시작
   s.c3 = run({ contrib: 0.03 })
   s.c6 = run({ contrib: 0.06 })
@@ -330,10 +342,10 @@ const tiles = (s) => {
 const partsText = (s, parts) => s.assets.filter((a) => Math.round((parts[a.key] ?? 0) * 100) >= 1).map((a) => `${a.name} ${p0(parts[a.key])}`).join(', ')
 const eventTable = (s) => {
   const rows = s.plan.events.map((e) => (e.type === 'trim'
-    ? `<tr><td>${ymd(e.d)}</td><td>줄임</td><td class="n">${p0(e.pct)}</td><td class="n">${p0(e.cashFrom)} → ${p0(e.cashTo)}</td><td class="n"></td><td>6번 규칙: ${NAME[e.key]} ${p0(e.from)} → ${p0(RULE.trimTo)}</td></tr>`
+    ? `<tr><td>${ymd(e.d)}</td><td>줄임</td><td class="n">${p0(e.pct)}</td><td class="n">${p0(e.cashFrom)} → ${p0(e.cashTo)}</td><td class="n"></td><td>4번 규칙: ${NAME[e.key]} ${p0(e.from)} → ${p0(RULE.trimTo)}</td></tr>`
     : e.type === 'buy'
-    ? `<tr><td>${ymd(e.d)}</td><td>삼</td><td class="n">${p0(e.pct)}</td><td class="n">${p0(e.from)} → ${p0(e.to)}</td><td class="n">${p0(e.qdd)}</td><td>${e.first ? '1번 규칙' : `2번 규칙(현금 ${p0(RULE.upper)} 이상)`}: ${partsText(s, e.parts)}</td></tr>`
-    : `<tr><td>${ymd(e.d)}</td><td>팖</td><td class="n">${p0(e.pct)}</td><td class="n">${p0(e.from)} → ${p0(e.to)}</td><td class="n"></td><td>3번 규칙(현금 ${p0(RULE.lower)} 이하): ${partsText(s, e.sells)} 팖${Object.keys(e.fills).length ? `, ${partsText(s, e.fills)} 채움` : ''}</td></tr>`))
+    ? `<tr><td>${ymd(e.d)}</td><td>삼</td><td class="n">${p0(e.pct)}</td><td class="n">${p0(e.from)} → ${p0(e.to)}</td><td class="n">${p0(e.qdd)}</td><td>${e.first ? '1번 규칙' : `2번 규칙(현금 ${p0(RULE.upper)} 이상)`}: ${partsText(s, e.parts)} 삼${partsText(s, e.sells) ? `, ${partsText(s, e.sells)} 팖` : ''}</td></tr>`
+    : `<tr><td>${ymd(e.d)}</td><td>팖</td><td class="n">${p0(e.pct)}</td><td class="n">${p0(e.from)} → ${p0(e.to)}</td><td class="n"></td><td>2번 규칙(현금 ${p0(RULE.lower)} 이하): ${partsText(s, e.sells)} 팖${partsText(s, e.fills) ? `, ${partsText(s, e.fills)} 삼` : ''}</td></tr>`))
   return `<table class="t dense"><thead><tr><th style="width:13%">날짜</th><th style="width:8%">한 일</th><th class="n" style="width:14%">크기 (전체 대비)</th><th class="n" style="width:15%">현금 비중</th><th class="n" style="width:11%">QQQ 낙폭</th><th>규칙과 산 것, 판 것</th></tr></thead><tbody>${rows.join('') || '<tr><td colspan="6">없음</td></tr>'}</tbody></table>`
 }
 const takeaways = (s) => {
@@ -357,7 +369,7 @@ const scenarioPage = (s, n) => `<section class="page">
   ${legend([['ln', C.plan, '규칙대로'], ['ln', C.base, '그냥 둔 경우 (금, 암호화폐 상한만 적용)']])}
   ${valueChart(s)}
   <h3>현금 비중과 사고판 기록 <span class="hint">아래 줄의 숫자는 그날 현금 비중이 바뀐 폭(%p)입니다. 세로 점선을 따라 올라가면 그 자리입니다</span></h3>
-  ${legend([['ln', C.cash, '현금 비중'], ['band', C.cash, '사고팔지 않는 범위'], ...(s.plan.buys.length ? [['dot', C.ink, '산 날 (1번, 2번 규칙)']] : []), ...(s.plan.sells.length ? [['dia', C.ink, '팔아서 현금을 채운 날 (3번 규칙)']] : []), ...[...new Set(s.plan.trims.map((e) => e.key))].map((k) => ['tri', C[k], `${NAME[k]}을 줄인 날 (6번 규칙)`])])}
+  ${legend([['ln', C.cash, '현금 비중'], ['band', C.cash, '사고팔지 않는 범위'], ...(s.plan.buys.length ? [['dot', C.ink, '산 날 (1번, 2번 규칙)']] : []), ...(s.plan.sells.length ? [['dia', C.ink, '팔아서 현금을 채운 날 (2번 규칙)']] : []), ...[...new Set(s.plan.trims.map((e) => e.key))].map((k) => ['tri', C[k], `${NAME[k]}을 줄인 날 (4번 규칙)`])])}
   ${cashChart(s)}
   <h3>비중 변화</h3>
   ${legend(STACK.filter((k) => k in s.base).map((k) => ['sw', C[k], NAME[k]]))}
@@ -434,6 +446,39 @@ const HITS = (() => {
 })()
 const upperBuys = SCEN.flatMap((s) => s.plan.buys.filter((e) => !e.first).map((e) => ({ ...e, s })))
 const up35calm = SCEN.flatMap((s) => s.up35.buys.filter((e) => !e.first && e.qdd > -0.1))
+/** 기준 비중에서 자산이 m만큼 움직인 뒤의 비중 */
+const moved = (m) => { const v = { cash: BASELINE.cash, qqq: BASELINE.qqq * (1 + (m.qqq ?? 0)), gold: BASELINE.gold * (1 + (m.gold ?? 0)), btc: BASELINE.btc * (1 + (m.btc ?? 0)) }, T = v.cash + v.qqq + v.gold + v.btc; return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, x / T])) }
+/** 금과 암호화폐가 g, b만큼 움직일 때, 현금이 c가 되려면 QQQ가 움직여야 하는 폭 */
+const qqqMoveFor = (c, g = 0, b = 0) => (BASELINE.cash / c - BASELINE.cash - BASELINE.gold * (1 + g) - BASELINE.btc * (1 + b)) / BASELINE.qqq - 1
+const mvp = (x) => (x == null || Math.abs(x) < 0.005 ? '그대로' : `${x > 0 ? '+' : '−'}${Math.abs(x * 100).toFixed(0)}%`)
+const UP_CASES = [
+  ['QQQ만 내릴 때', { qqq: qqqMoveFor(RULE.upper) }],
+  ['QQQ와 암호화폐가 함께 내릴 때', { qqq: qqqMoveFor(RULE.upper, 0, -0.6), btc: -0.6 }],
+  ['금은 오르고 나머지가 내릴 때', { qqq: qqqMoveFor(RULE.upper, 0.2, -0.6), gold: 0.2, btc: -0.6 }],
+  ['셋이 같은 폭으로 내릴 때', { qqq: -FALL, gold: -FALL, btc: -FALL }],
+  ['QQQ가 20%, 암호화폐가 50% 내릴 때', { qqq: -0.2, btc: -0.5 }],
+  ['암호화폐만 80% 내릴 때', { btc: -0.8 }],
+]
+const DOWN_CASES = [
+  ['QQQ만 오를 때', { qqq: qqqMoveFor(RULE.lower) }],
+  ['셋이 같은 폭으로 오를 때', { qqq: RISE, gold: RISE, btc: RISE }],
+  ['금과 암호화폐가 50% 오를 때', { qqq: qqqMoveFor(RULE.lower, 0.5, 0.5), gold: 0.5, btc: 0.5 }],
+  ['QQQ가 50%, 금이 20% 오를 때', { qqq: 0.5, gold: 0.2 }],
+  ['암호화폐만 오를 때', { btc: 1.25 }],
+]
+const moveTable = (cases) => `<table class="t dense mv"><thead><tr><th style="width:29%">경우</th><th class="n" style="width:7%">QQQ</th><th class="n" style="width:7%">금</th><th class="n" style="width:9%">암호화폐</th><th style="width:24%">움직인 뒤의 비중</th><th class="n" style="width:7%">현금</th><th>결과</th></tr></thead><tbody>${cases.map(([label, m]) => {
+  const w = moved(m), capped = w.btc >= RULE.trimAt - 1e-9 || w.gold >= RULE.trimAt - 1e-9
+  const res = w.cash >= RULE.upper - 0.002 ? '<b>되돌림 (삼)</b>' : w.cash <= RULE.lower + 0.002 ? '<b>되돌림 (팖)</b>' : capped ? '4번 규칙이 먼저' : '아직 아님'
+  return `<tr><td>${label}</td><td class="n">${mvp(m.qqq)}</td><td class="n">${mvp(m.gold)}</td><td class="n">${mvp(m.btc)}</td><td>${mixBar(w)}</td><td class="n">${p0(w.cash)}</td><td style="white-space:nowrap">${res}</td></tr>`
+}).join('')}</tbody></table>`
+/** 과거 하락: QQQ가 고점에서 저점까지 간 기간에 각 자산이 움직인 폭을 기준 비중에 넣는다 */
+const PAST = [['2000~2002년', '2000-01-01', '2002-12-31'], ['2007~2008년', '2007-06-01', '2009-06-30'], ['2020년 2~3월', '2020-01-01', '2020-04-30'], ['2021~2022년', '2021-10-01', '2023-01-31'], ['2025년 2~4월', '2025-01-01', '2025-05-31']].map(([label, a, b]) => {
+  const dates = [...QQQ.keys()].sort().filter((d) => d >= a && d <= b)
+  const hi = dates.reduce((m, d) => (QQQ.get(d) > QQQ.get(m) ? d : m)), lo = dates.filter((d) => d > hi).reduce((m, d) => (QQQ.get(d) < QQQ.get(m) ? d : m))
+  const chg = (M) => (M.has(hi) && M.has(lo) ? M.get(lo) / M.get(hi) - 1 : null)
+  const m = { qqq: chg(QQQ), gold: chg(GLD), btc: chg(BTC) }
+  return { label, hi, lo, m, w: moved({ qqq: m.qqq, gold: m.gold ?? 0, btc: m.btc ?? 0 }) }
+})
 const fallFor = (c) => 1 - (c / RULE.upper - c) / (1 - c) // 현금 c에서 상한이 되려면 나머지 자산이 내려야 하는 폭
 const usd = (x) => `${x.toFixed(2)}달러`
 /** 자료 마지막 날 기준 QQQ 최고 종가와 1번 규칙의 기준가 */
@@ -461,17 +506,18 @@ check(s14.plan.cagr - s14.hold.cagr > 0.02 && s14.plan.buys[0].first && s14.plan
 for (const s of [s04, s99]) check(Math.abs(s.plan.cagr - s.hold.cagr) < 0.005 && s.tax.cagr < s.holdTax.cagr, `${s.id}: 규칙과 그냥 둔 경우가 0.5%p 안, 세금 넣으면 규칙이 낮음`)
 check(dd22.plan > dd22.hold + 0.03 && s04.hold.final.w.qqq > 0.85, '2004~: 2022년 낙폭은 규칙이 3%p 넘게 얕고 그냥 둔 경우는 QQQ 85% 초과')
 for (const s of [s04, s99]) check(s.nolower.cagr > s.plan.cagr + 0.01 && s.nolower.minCash < 0.05, `${s.id}: 하한을 빼면 수익률은 1%p 넘게 높고 현금은 5% 아래까지`)
-for (const s of [s04, s99]) check(s.to25.cagr >= s.plan.cagr && s.to25.cagr - s.plan.cagr < 0.006 && s.to25.sells.length > s.plan.sells.length, `${s.id}: 25%까지만 채우면 조금 높고 파는 횟수는 더 많음`)
 check(SCEN.every((s) => s.c6.sells.length === 0) && SCEN.every((s) => s.c3.sells.length <= 2), '돈이 6% 들어오면 판 적 없음, 3%면 2번 이하')
 check(s14.plan.buys.every((e) => e.d < '2020-01-01'), '2014~: 2020년과 2022년에는 사지 않음')
 check(s99.plan.mdd < s99.hold.mdd, '1999~: 규칙의 최대 낙폭이 더 깊음')
-check([s14, s04].every((s) => Math.abs(s.nofill.cagr - s.plan.cagr) < 0.003), '사는 순서를 바꿔도 연수익률 차이는 0.3%p 안')
 check(maxOf(s14.notrim, 'btc') > maxOf(s14.plan, 'btc') + 0.05 && s14.notrim.vol > s14.plan.vol + 0.01, '2014~: 상한이 없으면 비트코인 비중과 변동성이 더 큼')
 check(Math.abs(s14.plan.cagr - s14.fixed.cagr) < 0.005 && Math.abs(s14.plan.sharpe - s14.fixed.sharpe) < 0.05, '2014~: 매달 되돌린 경우와 연수익률 0.5%p, 샤프 0.05 안')
 check(s14.hold.avgCash - s14.plan.avgCash > 0.05 && NOBTC.plan.cagr < NOBTC.hold.cagr, '2014~: 그냥 둔 경우가 현금을 5%p 넘게 더 들었고, 비트코인을 빼면 규칙이 낮음')
 check(SCEN.every((s) => Math.abs(s.now30.cagr - s.plan.cagr) < 0.006), '기다리지 않고 기준 비중으로 시작해도 연수익률 차이는 0.6%p 안')
-check(s04.qonly.medW('gold') < 0.07 && s04.plan.medW('gold') > 0.085 && s04.qonly.cagr - s04.plan.cagr < 0.005, '2004~: 팔 때도 채우면 금 중앙값이 8.5% 넘고 대가는 0.5%p 안')
 check(SCEN.every((s) => s.plan.minCash > 0.19) && s14.plan.maxCash > 0.55, '규칙대로면 현금이 19% 아래로 가지 않고, 2014~에서는 1번 전에 55% 넘게 쌓임')
+check(SCEN.every((s) => Math.abs(s.plan.cagr - s.partial.cagr) < 0.004), '전부 되돌리는 경우와 필요한 만큼만 사고파는 경우의 연수익률 차이는 0.4%p 안')
+check(s04.plan.medW('gold') > 0.085, '2004~: 금 비중의 중앙값이 8.5% 넘음')
+check(UP_CASES.slice(0, 4).every(([, m]) => Math.abs(moved(m).cash - RULE.upper) < 0.003) && UP_CASES.slice(4).every(([, m]) => moved(m).cash < RULE.upper - 0.01), '현금 40%가 되는 경우 표')
+check(DOWN_CASES.slice(0, 3).every(([, m]) => Math.abs(moved(m).cash - RULE.lower) < 0.003) && DOWN_CASES.slice(3).every(([, m]) => moved(m).cash > RULE.lower + 0.01), '현금 20%가 되는 경우 표')
 check(Math.abs(s04.nolower.sharpe - s04.plan.sharpe) < 0.04, '2004~: 하한을 빼도 샤프는 비슷함')
 
 const css = `
@@ -520,6 +566,8 @@ table.t td { border-bottom: 1px solid #eceef2; padding: 4pt 6pt; vertical-align:
 table.t .n { text-align: right; font-family: 'IBM Plex Mono', 'IBM Plex Sans KR', monospace; white-space: nowrap; }
 table.t th.n { font-family: inherit; }
 table.t.dense td { padding: 2pt 6pt; font-size: 8.6pt; }
+table.t.mv td { vertical-align: middle; padding: 2.5pt 6pt; }
+table.t.mv .bar { height: 11pt; }
 table.t.dense { margin: 3pt 0; }
 table.t tr.sep td { border-top: 1.5px solid #c9ccd4; }
 table.t tr.pick td { background: #f4f7ff; font-weight: 600; }
@@ -562,7 +610,7 @@ const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>
 <section class="page">
   <div class="kicker">운용 규칙, 2026.11.18 고침(독립 검토 반영), 자료는 ${ymd(s14.dates.at(-1))}까지</div>
   <h1>현금 비중으로 사고파는 규칙</h1>
-  <p class="lead">현금은 전체의 ${p0(RULE.target)}가 기준입니다. ${p0(RULE.upper)} 이상으로 늘면 사고, ${p0(RULE.lower)} 이하로 줄면 팔아서 채웁니다. 지금의 현금 ${p0(RULE.startCash)}는 QQQ가 최고가에서 ${p0(-RULE.firstDd)} 내릴 때 ${p0(RULE.target)}로 줄입니다.</p>
+  <p class="lead">현금은 전체의 ${p0(RULE.target)}가 기준입니다. ${p0(RULE.upper)} 이상으로 늘거나 ${p0(RULE.lower)} 이하로 줄면 전부 기준 비중으로 되돌립니다. 지금의 현금 ${p0(RULE.startCash)}는 QQQ가 최고가에서 ${p0(-RULE.firstDd)} 내릴 때 ${p0(RULE.target)}로 줄입니다.</p>
 
   <h3>지금 비중과 기준 비중</h3>
   <div class="bars">
@@ -574,14 +622,12 @@ const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>
   <h3>현금 비중 눈금</h3>
   ${gauge()}
 
-  <h3>규칙 여섯 가지</h3>
+  <h3>규칙 네 가지</h3>
   <div class="rules">
-    <div class="rulecard"><b><span class="no">1</span>처음 한 번</b>${chips([`QQQ가 최고가보다 ${p0(-RULE.firstDd)} 이상 하락`, `현금을 ${p0(RULE.target)}까지 써서 삼`])}<p>한 번만 씁니다. 그날 현금이 ${p0(RULE.target)} 이하면 사지 않고 쓴 것으로 칩니다.</p></div>
-    <div class="rulecard"><b><span class="no">2</span>현금 상한 ${p0(RULE.upper)}</b>${chips([`현금 ${p0(RULE.upper)} 이상`, `${p0(RULE.target)}까지 써서 삼`])}<p>1번 규칙을 쓴 뒤부터 봅니다.</p></div>
-    <div class="rulecard"><b><span class="no">3</span>현금 하한 ${p0(RULE.lower)}</b>${chips([`현금 ${p0(RULE.lower)} 이하`, `팔아서 현금 ${p0(RULE.lowerTo)}까지`])}<p>금이나 암호화폐가 ${p0(RULE.sellFirstAt)} 이상이면 그것부터, 나머지는 QQQ를 팝니다. 첫날부터 봅니다.</p></div>
-    <div class="rulecard"><b><span class="no">4</span>금과 암호화폐 ${p0(RULE.fillTo)} 채우기</b>${chips(['2번으로 살 때, 3번으로 팔 때', `${p0(RULE.fillTo)}보다 적으면 ${p0(RULE.fillTo)}까지`])}<p>살 때는 남은 돈으로 QQQ를 삽니다. 팔 때는 그만큼 QQQ를 더 팝니다.</p></div>
-    <div class="rulecard"><b><span class="no">5</span>새로 들어오는 돈</b>${chips(['현금이 기준보다 적음', '현금에 둠'], ['현금이 기준 이상', '기준보다 모자란 자산을 삼'])}<p>현금 기준은 1번 규칙 전에는 ${p0(RULE.startCash)}, 뒤에는 ${p0(RULE.target)}입니다.</p></div>
-    <div class="rulecard"><b><span class="no">6</span>금, 암호화폐 상한 ${p0(RULE.trimAt)}</b>${chips([`금이나 암호화폐가 ${p0(RULE.trimAt)} 이상`, `${p0(RULE.trimTo)}로 줄이고 현금에`])}<p>둘을 따로 봅니다.</p></div>
+    <div class="rulecard"><b><span class="no">1</span>처음 한 번</b>${chips([`QQQ가 최고가보다 ${p0(-RULE.firstDd)} 이상 하락`, '기준 비중으로 맞춤'])}<p>현금 ${p0(RULE.startCash)}를 ${p0(RULE.target)}로 줄여 삽니다. 한 번만 씁니다. 그날 현금이 ${p0(RULE.target)} 이하면 사지 않고 쓴 것으로 칩니다.</p></div>
+    <div class="rulecard"><b><span class="no">2</span>현금 ${p0(RULE.lower)}와 ${p0(RULE.upper)}</b>${chips([`현금 ${p0(RULE.upper)} 이상`, '전부 기준 비중으로 되돌림'], [`현금 ${p0(RULE.lower)} 이하`, '전부 기준 비중으로 되돌림'])}<p>${p0(RULE.upper)} 이상은 1번 규칙을 쓴 뒤부터, ${p0(RULE.lower)} 이하는 첫날부터 봅니다.</p></div>
+    <div class="rulecard"><b><span class="no">3</span>새로 들어오는 돈</b>${chips(['현금이 기준보다 적음', '현금에 둠'], ['현금이 기준 이상', '기준보다 모자란 자산을 삼'])}<p>현금 기준은 1번 규칙 전에는 ${p0(RULE.startCash)}, 뒤에는 ${p0(RULE.target)}입니다.</p></div>
+    <div class="rulecard"><b><span class="no">4</span>금, 암호화폐 상한 ${p0(RULE.trimAt)}</b>${chips([`금이나 암호화폐가 ${p0(RULE.trimAt)} 이상`, `${p0(RULE.trimTo)}로 줄이고 현금에`])}<p>둘을 따로 봅니다.</p></div>
   </div>
 </section>
 
@@ -592,20 +638,44 @@ const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>
   ${amountBars()}
   ${legend([['sw', C.cash, '현금'], ['sw', C.qqq, '나머지 자산 (QQQ, 금, 암호화폐)']])}
 
-  <h3>현금이 ${p0(RULE.upper)}가 되려면 나머지 자산이 얼마나 내려야 하나 <span class="hint">그때의 현금 비중에 따라 다릅니다</span></h3>
-  ${hbars([0.2, 0.25, 0.3, 0.35, 0.39].map((c) => ({ label: `현금 ${p0(c)}에서 출발하면`, v: fallFor(c), text: `${p0(fallFor(c))} 하락` })), { Wd: 688, L: 150, R: 150, rh: 19, max: 0.7 })}
-  <p class="foot">2번 규칙은 정해진 하락 폭에서 사는 규칙이 아닙니다. 현금이 ${p0(RULE.target)}일 때는 QQQ가 ${p0(qqqFallFor(0))}쯤 내려야 사지만(금과 암호화폐가 그대로일 때), 금이나 암호화폐를 판 직후처럼 현금이 많을 때는 조금만 내려도 삽니다.</p>
-
   <h3>확인할 때의 순서</h3>
   <div class="flow">
-    <div class="step"><div class="no">1</div><div class="q"><b>금이나 암호화폐가 전체의 ${p0(RULE.trimAt)} 이상인가</b>6번 규칙입니다. 암호화폐는 비트코인, 이더리움, 관련 주식을 합칩니다.</div><div class="a"><span class="yes">그렇다면</span>${p0(RULE.trimTo)}로 줄이고 판 돈은 현금에 둡니다.</div></div>
-    <div class="step"><div class="no">2</div><div class="q"><b>현금이 ${p0(RULE.lower)} 이하인가</b>3번 규칙입니다. 첫날부터 봅니다.</div><div class="a"><span class="yes">그렇다면</span>금이나 암호화폐가 ${p0(RULE.sellFirstAt)} 이상이면 ${p0(RULE.fillTo)}까지 먼저 팝니다. 모자란 만큼 QQQ를 팔아 현금을 ${p0(RULE.lowerTo)}로 맞춥니다. 금과 암호화폐가 ${p0(RULE.fillTo)}보다 적으면 QQQ를 더 팔아 채웁니다.</div></div>
-    <div class="step"><div class="no">3</div><div class="q"><b>1번 규칙을 아직 쓰지 않았고, QQQ가 최고가보다 ${p0(-RULE.firstDd)} 이상 내렸나</b>지금은 아직 쓰지 않은 상태입니다.</div><div class="a"><span class="yes">그렇다면</span>현금을 ${p0(RULE.target)}까지 써서 삽니다. 그 뒤의 기준 비중은 ${mixText(BASELINE)}입니다.</div></div>
-    <div class="step"><div class="no">4</div><div class="q"><b>현금이 ${p0(RULE.upper)} 이상인가</b>2번 규칙입니다. 1번 규칙을 쓴 뒤부터 봅니다.</div><div class="a"><span class="yes">그렇다면</span>현금을 ${p0(RULE.target)}까지 써서 삽니다. 금과 암호화폐를 ${p0(RULE.fillTo)}까지 채우고 나머지로 QQQ를 삽니다.</div></div>
-    <div class="step"><div class="no">5</div><div class="q"><b>새로 들어온 돈이 있나</b>월급, 배당, 이자입니다.</div><div class="a"><span class="yes">있으면</span>현금이 기준보다 적으면 현금에 둡니다. 아니면 기준 비중보다 모자란 자산을 삽니다.</div></div>
+    <div class="step"><div class="no">1</div><div class="q"><b>금이나 암호화폐가 전체의 ${p0(RULE.trimAt)} 이상인가</b>4번 규칙입니다. 암호화폐는 비트코인, 이더리움, 관련 주식을 합칩니다.</div><div class="a"><span class="yes">그렇다면</span>${p0(RULE.trimTo)}로 줄이고 판 돈은 현금에 둡니다.</div></div>
+    <div class="step"><div class="no">2</div><div class="q"><b>현금이 ${p0(RULE.lower)} 이하인가</b>2번 규칙입니다. 첫날부터 봅니다.</div><div class="a"><span class="yes">그렇다면</span>전부 기준 비중(${mixText(BASELINE)})으로 되돌립니다. 기준보다 많은 자산을 팔아 현금과 모자란 자산을 채웁니다.</div></div>
+    <div class="step"><div class="no">3</div><div class="q"><b>1번 규칙을 아직 쓰지 않았고, QQQ가 최고가보다 ${p0(-RULE.firstDd)} 이상 내렸나</b>지금은 아직 쓰지 않은 상태입니다.</div><div class="a"><span class="yes">그렇다면</span>현금이 ${p0(RULE.target)}보다 많으면 전부 기준 비중으로 맞춥니다. 그 뒤로 기준 비중은 ${mixText(BASELINE)}입니다.</div></div>
+    <div class="step"><div class="no">4</div><div class="q"><b>현금이 ${p0(RULE.upper)} 이상인가</b>2번 규칙입니다. 1번 규칙을 쓴 뒤부터 봅니다.</div><div class="a"><span class="yes">그렇다면</span>전부 기준 비중으로 되돌립니다. 현금을 ${p0(RULE.target)}까지 써서 모자란 자산을 삽니다.</div></div>
+    <div class="step"><div class="no">5</div><div class="q"><b>새로 들어온 돈이 있나</b>3번 규칙입니다. 월급, 배당, 이자입니다.</div><div class="a"><span class="yes">있으면</span>현금이 기준보다 적으면 현금에 둡니다. 아니면 기준 비중보다 모자란 자산을 삽니다.</div></div>
   </div>
   <p class="foot">같은 날 여러 가지가 해당하면 위에서부터 차례로 하고, 뒤의 것은 앞의 것을 반영한 현금으로 계산합니다. 어디에도 해당하지 않으면 아무것도 하지 않습니다.</p>
 </section>
+
+<section class="page">
+  <div class="kicker">규칙 풀이 2</div>
+  <h2>현금이 ${p0(RULE.upper)}나 ${p0(RULE.lower)}가 되려면 자산이 얼마나 움직여야 하나</h2>
+  <p class="sub">기준 비중(${mixText(BASELINE)})에서 출발했을 때입니다. 막대는 자산이 움직인 뒤의 비중이고, 맨 오른쪽이 그때의 현금 비중입니다.</p>
+
+  <h3>현금이 ${p0(RULE.upper)} 이상이 되는 경우 <span class="hint">전체 자산이 ${p0(TOTAL_FALL)} 줄었을 때입니다</span></h3>
+  ${moveTable(UP_CASES)}
+  <h3>현금이 ${p0(RULE.lower)} 이하가 되는 경우 <span class="hint">전체 자산이 ${p0(RULE.target / RULE.lower - 1)} 늘었을 때입니다</span></h3>
+  ${moveTable(DOWN_CASES)}
+  ${legend([['sw', C.cash, '현금'], ['sw', C.gold, '금'], ['sw', C.qqq, 'QQQ'], ['sw', C.btc, '암호화폐']])}
+
+  <div class="cols" style="margin-top:8pt">
+    <div>
+      <h3 style="margin-top:4pt">과거 하락을 기준 비중에 넣어 보면</h3>
+      <table class="t dense"><thead><tr><th>하락</th><th class="n">QQQ</th><th class="n">금</th><th class="n">비트코인</th><th class="n">현금 비중</th></tr></thead><tbody>
+        ${PAST.map((e) => `<tr><td>${e.label}</td><td class="n">${mvp(e.m.qqq)}</td><td class="n">${e.m.gold == null ? '' : mvp(e.m.gold)}</td><td class="n">${e.m.btc == null ? '' : mvp(e.m.btc)}</td><td class="n">${e.w.cash >= RULE.upper ? `<b>${pct(e.w.cash)}</b>` : pct(e.w.cash)}</td></tr>`).join('')}
+      </tbody></table>
+      <p class="foot">QQQ가 고점에서 저점까지 간 기간에 각 자산이 움직인 폭입니다. 빈칸은 자료가 없어 그대로 둔 것으로 계산했습니다. 굵은 숫자가 ${p0(RULE.upper)} 이상입니다.</p>
+    </div>
+    <div>
+      <h3 style="margin-top:4pt">현금이 ${p0(RULE.target)}가 아닐 때 <span class="hint">${p0(RULE.upper)}가 되는 데 필요한 나머지 자산의 하락</span></h3>
+      ${hbars([0.2, 0.25, 0.3, 0.35, 0.39].map((c) => ({ label: `현금 ${p0(c)}에서`, v: fallFor(c), text: `${p0(fallFor(c))} 하락` })), { Wd: 330, L: 84, R: 70, rh: 19, max: 0.7 })}
+      <p class="foot">현금이 줄어 있을수록 더 크게 내려야 삽니다. 금이나 암호화폐를 판 직후처럼 현금이 많을 때는 조금만 내려도 삽니다.</p>
+    </div>
+  </div>
+</section>
+
 
 <section class="page">
   <div class="kicker">운용 정의</div>
@@ -614,7 +684,7 @@ const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>
 
   <h3>무엇을 어디에 두나</h3>
   <table class="t"><thead><tr><th style="width:16%">자산</th><th style="width:34%">두는 곳</th><th>사고팔 때</th></tr></thead><tbody>
-    <tr><td>QQQ</td><td>증권사 계좌, 미국 상장 QQQ</td><td>2번으로 사고 3번으로 팝니다.</td></tr>
+    <tr><td>QQQ</td><td>증권사 계좌, 미국 상장 QQQ</td><td>2번 규칙으로 사고팝니다.</td></tr>
     <tr><td>현금</td><td>증권사 계좌, 달러 단기 국채 ETF</td><td>살 때는 이 ETF를 팔아 삽니다. 판 돈은 이 ETF로 둡니다.</td></tr>
     <tr><td>금</td><td>KRX 금현물 계좌와 실물</td><td>사고파는 것은 KRX 금현물 계좌에서 합니다. 실물은 비중 계산에만 넣습니다.</td></tr>
     <tr><td>암호화폐</td><td>거래소 계좌 (관련 주식은 증권사 계좌)</td><td>비트코인, 이더리움, 관련 주식을 합쳐 한 자산으로 봅니다.</td></tr>
@@ -651,10 +721,10 @@ const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>
 
   <h3>1번 규칙을 쓰기 전(지금)에 적용하는 것</h3>
   <table class="t"><tbody>
-    <tr><td style="width:26%">3번 (현금 하한)</td><td>적용합니다. 현금이 ${p0(RULE.lower)} 이하면 팔아서 ${p0(RULE.lowerTo)}까지 채웁니다.</td></tr>
-    <tr><td>6번 (금, 암호화폐 상한)</td><td>적용합니다.</td></tr>
-    <tr><td>5번 (새로 들어오는 돈)</td><td>현금 기준을 ${p0(RULE.startCash)}로 봅니다. 현금이 ${p0(RULE.startCash)}보다 적으면 현금에, 아니면 지금 비중(${mixText(NOW)})보다 모자란 자산에 넣습니다.</td></tr>
-    <tr><td>2번 (현금 상한)</td><td>적용하지 않습니다. 금이나 암호화폐를 판 돈이 쌓여 현금이 ${p0(RULE.upper)}를 넘어도 1번 규칙 때까지 둡니다. 2014년 시작 구간에서는 ${p0(s14.plan.maxCash)}까지 쌓였습니다.</td></tr>
+    <tr><td style="width:26%">2번의 현금 ${p0(RULE.lower)} 이하</td><td>적용합니다. 전부 기준 비중(${mixText(BASELINE)})으로 되돌립니다.</td></tr>
+    <tr><td>4번 (금, 암호화폐 상한)</td><td>적용합니다.</td></tr>
+    <tr><td>3번 (새로 들어오는 돈)</td><td>현금 기준을 ${p0(RULE.startCash)}로 봅니다. 현금이 ${p0(RULE.startCash)}보다 적으면 현금에, 아니면 지금 비중(${mixText(NOW)})보다 모자란 자산에 넣습니다.</td></tr>
+    <tr><td>2번의 현금 ${p0(RULE.upper)} 이상</td><td>적용하지 않습니다. 금이나 암호화폐를 판 돈이 쌓여 현금이 ${p0(RULE.upper)}를 넘어도 1번 규칙 때까지 둡니다. 2014년 시작 구간에서는 ${p0(s14.plan.maxCash)}까지 쌓였습니다.</td></tr>
   </tbody></table>
 </section>
 
@@ -668,41 +738,37 @@ const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>
     `${HITS.slice(1, 4).map((h) => h.d.slice(0, 4)).join(', ')}년에는 3년 뒤 QQQ가 ${Math.round(Math.min(...HITS.slice(1, 4).map((h) => h.after3)) * 100)}~${p0(Math.max(...HITS.slice(1, 4).map((h) => h.after3)))} 올라 있었습니다. 다만 ${BASE3Y.from.slice(0, 4)}년 이후에는 아무 날에 사도 3년 뒤 수익률의 중앙값이 ${p0(BASE3Y.med)}였습니다. ${p0(-RULE.firstDd)} 하락이 특별히 좋은 때라는 근거는 아닙니다.`,
     `기다리지 않고 지금 현금 ${p0(RULE.target)}로 시작한 경우의 연수익률은 ${SCEN.map((s) => pct(s.now30.cagr)).join(', ')}로, 규칙대로 한 경우(${SCEN.map((s) => pct(s.plan.cagr)).join(', ')})와 거의 같았습니다. 1번은 수익률보다, 한 번에 사는 부담을 줄이려고 둔 규칙입니다.`,
   ], `QQQ가 최고가에서 ${p0(-RULE.firstDd)} 내린 날, 그로부터 3년 뒤의 QQQ`, hbars(HITS.map((h) => ({ label: ymK(h.d), v: h.after3, text: h.after3 == null ? '아직 3년이 지나지 않음' : `${h.after3 > 0 ? '+' : ''}${p0(h.after3)}`, color: h.after3 < 0 ? C.btc : C.plan })), { L: 86, R: 60 }))}
-  ${why(2, `현금 상한 ${p0(RULE.upper)}`, [
+  ${why(2, `현금이 ${p0(RULE.upper)} 이상이면 삽니다`, [
     '하락 폭 기준을 여러 개 두지 않고 현금 비중 하나만 봅니다.',
-    `한 번에 10%p만 쓰므로 더 내리면 또 살 수 있습니다. 세 구간에서 2번 규칙으로 산 날은 오른쪽 ${upperBuys.length}번이고, 모두 QQQ가 크게 내린 때였습니다.`,
-    `늘 그런 것은 아닙니다. 금이나 암호화폐를 판 직후에는 현금이 많아 얕은 하락에도 삽니다. 독립 검토에서 시작일을 바꿔 가며 계산하니 QQQ가 최고가 근처일 때 산 경우가 있었습니다.`,
+    `한 번에 10%p만 쓰므로 더 내리면 또 살 수 있습니다. 세 구간에서 현금이 ${p0(RULE.upper)} 이상이 되어 산 날은 오른쪽 ${upperBuys.length}번이고, 모두 QQQ가 크게 내린 때였습니다.`,
+    '늘 그런 것은 아닙니다. 금이나 암호화폐를 판 직후에는 현금이 많아 얕은 하락에도 삽니다. 독립 검토에서 시작일을 바꿔 가며 계산하니 QQQ가 최고가 근처일 때 산 경우가 있었습니다.',
     `상한을 35%로 낮추면 그런 매수가 더 잦습니다(${ymK(up35calm[0].d)}).`,
-  ], '세 구간에서 2번 규칙으로 산 날, QQQ가 최고가보다 낮았던 폭', hbars(upperBuys.map((e) => ({ label: ymK(e.d), v: -e.qdd, text: p0(-e.qdd) })), { L: 86, R: 40, max: 1 }))}
-  ${why(3, `현금 하한 ${p0(RULE.lower)}, ${p0(RULE.lowerTo)}까지 채움`, [
-    `하한이 없으면 오르는 장에서 현금이 ${p0(Math.min(s04.nolower.minCash, s99.nolower.minCash))}까지 줄었습니다. 그러면 현금이 다시 ${p0(RULE.upper)}가 될 일이 없어 2번 규칙을 쓸 일이 없어집니다.`,
-    `첫날부터 봅니다. 1번 규칙 전에 하한을 꺼 두면 현금이 9%까지 줄고, 1번이 걸린 직후 급락 중에 QQQ를 파는 경우가 생겼습니다(독립 검토).`,
-    `금이나 암호화폐가 ${p0(RULE.sellFirstAt)} 이상이면 그것부터 팝니다. 현금 비중을 줄인 것이 그 자산인데 QQQ를 팔면, 며칠 뒤 6번 규칙이 걸려 QQQ를 되사는 일이 생겼습니다(독립 검토, 시작일 133개 중 17개).`,
-    `${p0(RULE.lowerTo)}까지 채우면 기억할 숫자가 하나입니다. 25%까지만 채우면 연 ${ppRange([s04, s99].map((s) => s.to25.cagr - s.plan.cagr))} 높지만 파는 횟수가 늘었습니다(${[s04, s99].map((s) => `${s.plan.sells.length}번에서 ${s.to25.sells.length}번`).join(', ')}).`,
+  ], `세 구간에서 현금 ${p0(RULE.upper)} 이상으로 산 날, QQQ가 최고가보다 낮았던 폭`, hbars(upperBuys.map((e) => ({ label: ymK(e.d), v: -e.qdd, text: p0(-e.qdd) })), { L: 86, R: 40, max: 1 }))}
+  ${why(2, `현금이 ${p0(RULE.lower)} 이하면 팝니다`, [
+    `하한이 없으면 오르는 장에서 현금이 ${p0(Math.min(s04.nolower.minCash, s99.nolower.minCash))}까지 줄었습니다. 그러면 현금이 다시 ${p0(RULE.upper)}가 될 일이 없어 살 일도 없어집니다.`,
+    '첫날부터 봅니다. 1번 규칙 전에 하한을 꺼 두면 현금이 9%까지 줄고, 1번이 걸린 직후 급락 중에 QQQ를 파는 경우가 생겼습니다(독립 검토).',
+    `현금이 ${p0(RULE.lower)}까지 줄어드는 때는 나머지 자산이 크게 오른 뒤입니다. 그때 파는 자산은 값이 오른 뒤에 파는 것입니다.`,
   ], '가장 낮았던 현금 비중', hbars(SCEN.flatMap((s) => [{ label: `${short(s)} 하한 있음`, v: s.plan.minCash, text: p0(s.plan.minCash) }, { label: `${short(s)} 하한 없음`, v: s.nolower.minCash, text: p0(s.nolower.minCash), color: C.base }]), { L: 128, R: 40, rh: 18, max: 0.3 }))}
 </section>
 
 <section class="page">
   <div class="kicker">설계 배경 2</div>
   <h2>규칙마다 그렇게 정한 이유 (이어서)</h2>
-  ${why(4, `금과 암호화폐 ${p0(RULE.fillTo)} 채우기`, [
-    `금과 암호화폐는 따로 사지 않고, 2번으로 살 때와 3번으로 팔 때만 ${p0(RULE.fillTo)}까지 채웁니다.`,
-    `살 때만 채우면 금이 유지되지 않았습니다. 살 때는 다른 자산이 크게 내려 금 비중이 이미 높기 때문입니다. 2004년 시작 구간에서 금 비중의 중앙값이 ${p0(s04.qonly.medW('gold'))}였습니다.`,
-    `3번으로 팔 때도 채우면 중앙값이 ${p0(s04.plan.medW('gold'))}가 됩니다. 대신 연수익률이 ${pct(s04.qonly.cagr)}에서 ${pct(s04.plan.cagr)}로 낮아집니다.`,
-  ], '2004년 시작 구간의 금 비중 (중앙값과 마지막 날)', hbars([
-    { label: '팔 때도 채움, 중앙값', v: s04.plan.medW('gold'), text: p0(s04.plan.medW('gold')), color: C.gold }, { label: '팔 때도 채움, 마지막', v: s04.plan.final.w.gold, text: p0(s04.plan.final.w.gold), color: C.gold },
-    { label: '살 때만 채움, 중앙값', v: s04.qonly.medW('gold'), text: p0(s04.qonly.medW('gold')), color: C.base }, { label: '살 때만 채움, 마지막', v: s04.qonly.final.w.gold, text: p0(s04.qonly.final.w.gold), color: C.base },
-  ], { L: 138, R: 40, rh: 18, max: 0.15 }))}
-  ${why(5, '새로 들어오는 돈', [
+  ${why(2, '전부 기준 비중으로 되돌립니다', [
+    '현금만 맞추지 않고 QQQ, 금, 암호화폐도 함께 기준 비중으로 되돌립니다. 규칙이 한 줄로 끝납니다.',
+    `필요한 만큼만 사고파는 방식(비중이 큰 금이나 암호화폐부터 팔고, 모자라면 채우는 세부 규칙)과 견줘 세 구간의 연수익률 차이가 ${pp(Math.max(0.001, ...SCEN.map((s) => Math.abs(s.plan.cagr - s.partial.cagr))))} 안이었습니다.`,
+    `되돌릴 때마다 금과 암호화폐가 ${p0(RULE.fillTo)}로 맞춰집니다. 2004년 시작 구간에서 금 비중의 중앙값이 ${p0(s04.plan.medW('gold'))}였습니다.`,
+  ], '연수익률: 전부 되돌리는 경우와 필요한 만큼만 사고파는 경우', hbars(SCEN.flatMap((s) => [{ label: `${short(s)} 전부 되돌림`, v: s.plan.cagr, text: pct(s.plan.cagr) }, { label: `${short(s)} 필요한 만큼만`, v: s.partial.cagr, text: pct(s.partial.cagr), color: C.base }]), { L: 138, R: 50, rh: 18, max: 0.2 }))}
+  ${why(3, '새로 들어오는 돈', [
     '현금이 기준보다 적을 때 새로 들어오는 돈을 현금에 두면, 팔지 않고도 현금이 채워집니다. 세금이 들지 않습니다.',
     '현금이 기준 이상이면 기준 비중보다 모자란 자산을 삽니다. 정기 리밸런싱을 따로 하지 않아도 됩니다.',
     `현금 기준을 1번 규칙 전에는 ${p0(RULE.startCash)}로 둡니다. ${p0(RULE.target)}로 두면 지금 들어오는 돈이 전부 QQQ로 가서, 1번을 위해 남겨 둔 현금이 줄어듭니다.`,
-  ], '3번 규칙으로 판 횟수 (해마다 새로 들어오는 돈이 자산의 몇 %인지에 따라)', hbars(SCEN.flatMap((s) => [['들어오는 돈 없음', s.plan, C.base], ['해마다 3%', s.c3, C.plan], ['해마다 6%', s.c6, C.plan]].map(([l, r, color]) => ({ label: `${short(s)} ${l}`, v: r.sells.length, text: `${r.sells.length}번`, color }))), { L: 150, R: 40, rh: 15.5, max: 10 }))}
-  ${why(6, `금, 암호화폐 상한 ${p0(RULE.trimAt)}`, [
-    `한 자산이 너무 커지면 전체가 그 자산을 따라 움직입니다. 상한이 없었다면 비트코인이 전체의 ${p0(maxOf(s14.notrim, 'btc'))}까지 커졌고(상한이 있으면 ${p0(maxOf(s14.plan, 'btc'))}), 전체의 변동성이 ${pct(s14.plan.vol)}에서 ${pct(s14.notrim.vol)}로 커졌습니다.`,
+  ], `현금 ${p0(RULE.lower)} 이하가 되어 판 횟수 (해마다 새로 들어오는 돈이 자산의 몇 %인지에 따라)`, hbars(SCEN.flatMap((s) => [['들어오는 돈 없음', s.plan, C.base], ['해마다 3%', s.c3, C.plan], ['해마다 6%', s.c6, C.plan]].map(([l, r, color]) => ({ label: `${short(s)} ${l}`, v: r.sells.length, text: `${r.sells.length}번`, color }))), { L: 150, R: 40, rh: 15.5, max: 10 }))}
+  ${why(4, `금, 암호화폐 상한 ${p0(RULE.trimAt)}`, [
+    `금이나 암호화폐가 커지는 것은 현금 비중으로 잡히지 않습니다. 상한이 없었다면 비트코인이 전체의 ${p0(maxOf(s14.notrim, 'btc'))}까지 커졌고(상한이 있으면 ${p0(maxOf(s14.plan, 'btc'))}), 전체의 변동성이 ${pct(s14.plan.vol)}에서 ${pct(s14.notrim.vol)}로 커졌습니다.`,
     `${p0(RULE.trimTo)}로 줄이는 것은 기준 비중이 ${p0(RULE.trimTo)}이기 때문입니다. 판 돈은 현금이 되어 다음에 살 돈이 됩니다. ${ymK(s14.plan.firstBuy)}에 쓴 현금 ${p0(s14.plan.buys[0].from)}가 그렇게 쌓인 돈입니다.`,
   ], '전체에서 비트코인이 차지한 비중 (2014년 시작 구간)', twoLines(s14.dates, btcW(s14.plan), btcW(s14.notrim), { labelA: '상한 있음', labelB: '상한 없음, 최고', rule: RULE.trimAt }))}
-  <p class="foot">단계별 하락 기준(−20, −35, −50%), 회복 뒤 현금 되돌리기, QQQ 80% 상한, 2번 규칙에 QQQ 하락 조건 붙이기도 검토했습니다. 현금 상한과 하한만으로 같은 역할을 하거나 결과 차이가 없어 뺐습니다.</p>
+  <p class="foot">단계별 하락 기준(−20, −35, −50%), 회복 뒤 현금 되돌리기, QQQ 80% 상한, 현금 상한에 QQQ 하락 조건 붙이기도 검토했습니다. 현금 20%와 40%만으로 같은 역할을 하거나 결과 차이가 없어 뺐습니다.</p>
 </section>
 
 ${SCEN.map((s, i) => scenarioPage(s, i + 1)).join('\n')}
@@ -716,9 +782,8 @@ ${recordsPage()}
     ${cmpRow('그냥 둔 경우 (금, 암호화폐 상한만 적용)', 'hold')}
     ${cmpRow('기준 비중으로 시작해 매달 되돌린 경우', 'fixed')}
     ${cmpRow('규칙대로 한 경우', 'plan', 'pick')}
-    ${cmpRow('3번에서 QQQ만 팔고 금을 채우지 않는 경우', 'qonly')}
+    ${cmpRow('전부 되돌리지 않고 필요한 만큼만 사고파는 경우', 'partial')}
     ${cmpRow('현금 하한을 뺀 경우', 'nolower')}
-    ${cmpRow('하한에서 25%까지만 채우는 경우', 'to25')}
     ${cmpRow('현금 상한이 35%인 경우', 'up35')}
     ${cmpRow('해마다 자산의 3%만큼 돈이 새로 들어오는 경우', 'c3')}
     ${cmpRow('해마다 자산의 6%만큼 돈이 새로 들어오는 경우', 'c6')}
@@ -750,18 +815,17 @@ ${recordsPage()}
 
   <h3>규칙대로 하면 받아들여야 하는 것</h3>
   <table class="t dense"><tbody>
-    <tr><td style="width:34%">검증한 사례가 적습니다</td><td>2번과 3번 규칙이 움직인 것은 주로 2000년과 2008년 두 번의 폭락 전후입니다. 1번 규칙이 지금 조건(현금 40%에서 30%로)대로 쓰인 사례는 계산에 없습니다. 세 구간은 기간이 겹칩니다.</td></tr>
+    <tr><td style="width:34%">검증한 사례가 적습니다</td><td>2번 규칙이 움직인 것은 주로 2000년과 2008년 두 번의 폭락 전후입니다. 1번 규칙이 지금 조건(현금 40%에서 30%로)대로 쓰인 사례는 계산에 없습니다. 세 구간은 기간이 겹칩니다.</td></tr>
     <tr><td>깊지 않은 하락에는 대개 사지 않습니다</td><td>2014년 시작 구간에서는 ${ymK(s14.plan.firstBuy)}에 처음 산 뒤 2020년과 2022년 하락에 사지 않았습니다.</td></tr>
     <tr><td>긴 하락에서는 손실이 더 큽니다</td><td>닷컴 구간의 전체 낙폭은 ${pct(s99.plan.mdd)}였습니다. 사지 않았다면 ${pct(s99.hold.mdd)}였습니다.</td></tr>
     <tr><td>1번 규칙 전에는 현금이 쌓일 수 있습니다</td><td>금이나 암호화폐를 판 돈을 1번 규칙 때까지 쓰지 않습니다. 2014년 시작 구간에서 ${p0(s14.plan.maxCash)}까지 쌓였습니다.</td></tr>
-    <tr><td>환율과 국내 가격은 계산에 없습니다</td><td>과거 계산은 달러 기준입니다. KRX 금값과 거래소 원화 시세가 국제 값과 벌어지는 것은 넣지 못했습니다.</td></tr>
   </tbody></table>
 </section>
 
 <section class="page">
   <div class="kicker">세금과 남은 결정</div>
   <h2>팔 때의 세금</h2>
-  <p class="sub">파는 경우는 3번(현금 하한), 6번(금, 암호화폐 상한), 그리고 2번으로 살 때 현금(단기 국채 ETF)을 파는 경우입니다. 아래는 일반 규정이고 세법은 자주 바뀝니다. 팔기 전에 확인해야 합니다.</p>
+  <p class="sub">파는 경우는 2번 규칙으로 되돌릴 때 기준보다 많은 자산, 4번 규칙의 금과 암호화폐, 그리고 살 때 쓰는 현금(단기 국채 ETF)입니다. 아래는 일반 규정이고 세법은 자주 바뀝니다. 팔기 전에 확인해야 합니다.</p>
   <table class="t"><thead><tr><th style="width:30%">자산</th><th>팔 때</th></tr></thead><tbody>
     <tr><td>미국 상장 QQQ</td><td>차익의 22%를 냅니다. 한 해 250만 원까지는 공제합니다. 차익은 원화로 계산하므로 환율이 오른 만큼도 차익에 들어갑니다. 같은 해 해외 주식의 이익과 손실을 합쳐서 계산하고, 다음 해 5월에 신고합니다.</td></tr>
     <tr><td>미국 상장 달러 단기 국채 ETF</td><td>QQQ와 같은 규정입니다. 값은 거의 오르지 않지만, 산 뒤 환율이 올랐으면 그만큼이 차익입니다. 분배금에는 배당소득세가 붙고 금융소득에 합산됩니다.</td></tr>
@@ -772,7 +836,7 @@ ${recordsPage()}
   </tbody></table>
   <ul class="take">
     <li>세금은 다음 해에 냅니다. 판 해에는 낼 세금만큼을 현금 비중 계산에서 빼 둡니다.</li>
-    <li>3번 규칙으로 QQQ를 팔면 오래 든 것이라 차익이 큽니다. 독립 검토의 계산으로는 한 번에 전체 자산의 0.7~2.1%가 세금이었습니다.</li>
+    <li>현금이 ${p0(RULE.lower)} 이하가 되어 QQQ를 팔면 오래 든 것이라 차익이 큽니다. 독립 검토의 계산으로는 한 번에 전체 자산의 0.7~2.1%가 세금이었습니다.</li>
     <li>같은 해에 손실이 난 해외 종목이 있으면 함께 팔아 이익과 합칩니다.</li>
   </ul>
 
@@ -780,9 +844,9 @@ ${recordsPage()}
   <table class="t"><thead><tr><th style="width:26%">항목</th><th style="width:34%">지금</th><th>고를 수 있는 것</th></tr></thead><tbody>
     <tr><td>암호화폐 안의 구성</td><td>합계로만 봅니다. 계산에는 비트코인만 넣었습니다.</td><td>채울 때 비트코인만 사기 / 비트코인, 이더리움, 관련 주식의 비율 정하기</td></tr>
     <tr><td>새로 들어온 돈을 나누는 방법</td><td>기준 비중보다 가장 모자란 자산 하나를 삽니다.</td><td>그대로 두기 / 모자란 만큼 비례해서 나누기</td></tr>
-    <tr><td>큰 돈이 들어오거나 나갈 때</td><td>정하지 않았습니다. 하락장에서 현금을 크게 꺼내면 3번 규칙이 걸려 낮은 값에 팔게 됩니다.</td><td>나갈 돈은 따로 떼어 비중 계산에서 빼 두기 / QQQ가 크게 내린 동안에는 3번을 미루기</td></tr>
+    <tr><td>큰 돈이 들어오거나 나갈 때</td><td>정하지 않았습니다. 하락장에서 현금을 크게 꺼내면 현금이 ${p0(RULE.lower)} 이하가 되어 낮은 값에 팔게 됩니다.</td><td>나갈 돈은 따로 떼어 비중 계산에서 빼 두기 / QQQ가 크게 내린 동안에는 파는 것을 미루기</td></tr>
     <tr><td>국내 값이 국제 값보다 비쌀 때</td><td>정하지 않았습니다. 그때 채우면 비싸게 삽니다.</td><td>차이가 3%를 넘으면 그 자산의 매수를 미루기 / 그대로 사기</td></tr>
-    <tr><td>실물 금이 금의 대부분일 때</td><td>사고파는 것은 KRX 금현물 계좌에서만 합니다.</td><td>KRX 계좌의 금이 모자라 6번을 못 지킬 때 실물을 팔지 정하기</td></tr>
+    <tr><td>실물 금이 금의 대부분일 때</td><td>사고파는 것은 KRX 금현물 계좌에서만 합니다.</td><td>KRX 계좌의 금이 모자라 4번 규칙을 못 지킬 때 실물을 팔지 정하기</td></tr>
   </tbody></table>
   <p class="foot">계산 방법: 일별 수정주가(배당 재투자 가정)를 썼고, 현금에는 미국 3개월 국채 금리로 이자를 붙였습니다. 그날 종가로 판단하고 다음 거래일 종가에 사고팔았습니다. QQQ 최고가는 각 구간을 시작한 뒤의 최고 종가입니다. 금은 GLD, 비트코인은 BTC-USD입니다. 돈이 새로 들어오는 경우의 수익률은 그 돈이 들어온 효과를 뺀 값입니다. '독립 검토'라고 적은 수치는 docs/research/reserve-plan/review.pdf의 것으로, 이 규칙을 고치기 전의 계산입니다. 생성: scripts/reserve/build-report.mjs</p>
 </section>
