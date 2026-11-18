@@ -756,7 +756,7 @@ const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>
   <h2>규칙마다 그렇게 정한 이유 (이어서)</h2>
   ${why(2, '전부 기준 비중으로 되돌립니다', [
     '현금만 맞추지 않고 QQQ, 금, 암호화폐도 함께 기준 비중으로 되돌립니다. 규칙이 한 줄로 끝납니다.',
-    `필요한 만큼만 사고파는 방식(비중이 큰 금이나 암호화폐부터 팔고, 모자라면 채우는 세부 규칙)과 견줘 세 구간의 연수익률 차이가 ${pp(Math.max(0.001, ...SCEN.map((s) => Math.abs(s.plan.cagr - s.partial.cagr))))} 안이었습니다.`,
+    `필요한 만큼만 사고파는 방식(비중이 큰 금이나 암호화폐부터 팔고, 모자라면 채우는 세부 규칙)과 비교하면 세 구간의 연수익률 차이가 ${pp(Math.max(0.001, ...SCEN.map((s) => Math.abs(s.plan.cagr - s.partial.cagr))))} 안이었습니다.`,
     `되돌릴 때마다 금과 암호화폐가 ${p0(RULE.fillTo)}로 맞춰집니다. 2004년 시작 구간에서 금 비중의 중앙값이 ${p0(s04.plan.medW('gold'))}였습니다.`,
   ], '연수익률: 전부 되돌리는 경우와 필요한 만큼만 사고파는 경우', hbars(SCEN.flatMap((s) => [{ label: `${short(s)} 전부 되돌림`, v: s.plan.cagr, text: pct(s.plan.cagr) }, { label: `${short(s)} 필요한 만큼만`, v: s.partial.cagr, text: pct(s.partial.cagr), color: C.base }]), { L: 138, R: 50, rh: 18, max: 0.2 }))}
   ${why(3, '새로 들어오는 돈', [
