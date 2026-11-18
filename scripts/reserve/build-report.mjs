@@ -1,6 +1,6 @@
 // 현금 비중으로 사고파는 규칙 — 규칙 도해와 과거 데이터 점검 보고서 (HTML → PDF)
 // 사용: node scripts/reserve/build-report.mjs   → docs/research/reserve-plan/reserve-plan.html · .pdf
-// 자료: data-src/reserve/*.csv (야후 수정주가 일별 스냅숏, 2026-10-30까지). 달러 기준(환율 제외). 세금은 비교표의 세금 줄에만 넣는다.
+// 자료: data-src/reserve/*.csv (야후 수정주가 일별 스냅숏). 달러 기준(환율 제외). 세금은 비교표의 세금 줄에만 넣는다.
 // 결정은 그날 종가, 체결은 다음 거래일 종가. 수치는 전부 이 스크립트의 계산 결과를 그대로 넣고, 본문 서술은 check()로 계산과 맞춘다.
 import fs from 'node:fs'
 import path from 'node:path'
@@ -187,6 +187,21 @@ for (const s of SCEN) {
 }
 // 2014년 구간에서 비트코인을 뺀 경우(그 몫은 QQQ에)
 const NOBTC = (() => { const assets = [A_QQQ, A_GOLD], base = { qqq: 0.5, gold: 0.1, cash: 0.4 }, dates = datesFor(SCEN[0].start, assets); return { plan: sim(dates, assets, base, {}), hold: sim(dates, assets, base, { rule: false }), fixed: simFixed(dates, assets, baseline(base)) } })()
+
+// 최근 5년(비트코인이 처음 크게 오른 때가 빠진 구간)과, 끝은 같고 시작한 달만 바꾼 경우. 비중과 규칙은 2014년 구간과 같다
+const annual = (px, dates) => (px.get(dates.at(-1)) / px.get(dates[0])) ** ((365.25 * 864e5) / (Date.parse(dates.at(-1)) - Date.parse(dates[0]))) - 1
+const RECENT = (() => {
+  const { assets, base } = SCEN[0], end = SCEN[0].dates.at(-1)
+  const mk = (back) => {
+    const dates = datesFor(`${+end.slice(0, 4) - back}${end.slice(4)}`, assets), run = (opt) => sim(dates, assets, base, opt)
+    return { back, dates, assets, base, plan: run({}), hold: run({ rule: false }), fixed: simFixed(dates, assets, baseline(base)), ann: { qqq: annual(QQQ, dates), btc: annual(BTC, dates), gold: annual(GLD, dates) } }
+  }
+  const five = mk(5), run = (opt) => sim(five.dates, assets, base, opt)
+  Object.assign(five, { id: 's5y', title: `최근 5년 (${five.dates[0].slice(0, 4)}년 ${+five.dates[0].slice(5, 7)}월~)`, sub: SCEN[0].sub, nolower: run({ lower: false }), nobtc: sim(five.dates, [A_QQQ, A_GOLD], { qqq: 0.5, gold: 0.1, cash: 0.4 }, {}), now30: sim(five.dates, assets, baseline(base), { startStepped: true }), tax: run({ tax: RULE.taxRate }), holdTax: run({ rule: false, tax: RULE.taxRate }) })
+  const afterStep = five.plan.series.filter((q) => q.d > five.plan.stepDay)
+  five.lowQdd = Math.min(...afterStep.map((q) => q.qdd)); five.maxCashAfter = Math.max(...afterStep.slice(1).map((q) => q.w.cash))
+  return { five, byStart: [9, 8, 7, 6, 5, 4, 3].map((b) => (b === 5 ? five : mk(b))), ann14: { qqq: annual(QQQ, SCEN[0].dates), btc: annual(BTC, SCEN[0].dates), gold: annual(GLD, SCEN[0].dates) } }
+})()
 
 // ── 표기 ────────────────────────────────────────────────────────────────────
 const pct = (x, d = 1) => `${x < 0 ? '−' : ''}${Math.abs(x * 100).toFixed(d)}%`
@@ -389,6 +404,13 @@ check(Math.abs(s14.plan.cagr - s14.fixed.cagr) < 0.005 && Math.abs(s14.plan.shar
 check(s14.hold.avgCash - s14.plan.avgCash > 0.05 && NOBTC.plan.cagr < NOBTC.hold.cagr, '2014~: 그냥 둔 경우가 현금을 5%p 넘게 더 들었고, 비트코인을 빼면 규칙이 낮음')
 check(SCEN.every((s) => Math.abs(s.now30.cagr - s.plan.cagr) < 0.006), '기다리지 않고 기준 비중으로 시작해도 연수익률 차이는 0.6%p 안')
 check(SCEN.every((s) => s.plan.minCash > 0.19) && s14.plan.maxCash > 0.55, '규칙대로면 현금이 19% 아래로 가지 않고, 2014~에서는 1번 전에 55% 넘게 쌓임')
+check(RECENT.five.ann.btc < 0.05 && RECENT.ann14.btc > 0.3, '최근 5년 비트코인 연수익률은 5% 아래, 2014년부터는 30% 위')
+check(RECENT.byStart.every((r) => r.plan.cagr > r.hold.cagr), '시작한 달 일곱 가지 모두 규칙대로가 그냥 둔 경우보다 높음')
+check(RECENT.byStart.every((r) => r.plan.cagr >= RECENT.five.plan.cagr), '최근 5년이 일곱 가지 시작점 중 가장 낮음')
+check(Math.abs(RECENT.five.plan.cagr - RECENT.five.fixed.cagr) < 0.005 && RECENT.byStart.some((r) => r.plan.cagr < r.fixed.cagr), '최근 5년에서 규칙대로와 매달 되돌림은 0.5%p 안, 시작점에 따라 매달 되돌림이 더 높기도 함')
+check(RECENT.five.plan.buys.length === 1 && RECENT.five.plan.buys[0].first && RECENT.five.lowQdd < -0.3 && RECENT.five.maxCashAfter < RULE.upper, '최근 5년: 1번 규칙으로 한 번 샀고, 그 뒤 QQQ가 30% 넘게 내렸어도 현금은 40%에 닿지 않음')
+check(SCEN[0].plan.cagr - NOBTC.plan.cagr > 0.04 && RECENT.five.plan.cagr - RECENT.five.nobtc.cagr < 0.005, '비트코인이 더한 연수익률: 2014년부터는 4%p 넘고 최근 5년은 0.5%p 아래')
+check(SCEN[0].plan.cagr - RECENT.five.plan.cagr > 0.05, '2014년부터와 최근 5년의 연수익률 차이는 5%p 넘음')
 check(SCEN.every((s) => Math.abs(s.plan.cagr - s.partial.cagr) < 0.004), '전부 되돌리는 경우와 필요한 만큼만 사고파는 경우의 연수익률 차이는 0.4%p 안')
 check(s04.plan.medW('gold') > 0.085, '2004~: 금 비중의 중앙값이 8.5% 넘음')
 check(UP_CASES.slice(0, 4).every(([, m]) => Math.abs(moved(m).cash - RULE.upper) < 0.003) && UP_CASES.slice(4).every(([, m]) => moved(m).cash < RULE.upper - 0.01), '현금 40%가 되는 경우 표')
@@ -761,13 +783,56 @@ const strip = (s) => `<div class="strip">
 </div>`
 const trio = (f) => `<div class="trio">${SCEN.map((s) => `<div><div class="cap">${s.title.replace(/ \(.*\)/, '')}</div>${f(s)}</div>`).join('')}</div>`
 
+/** 시작한 달만 바꾼 결과: 시작점마다 규칙대로 한 점과 그냥 둔 점 */
+const startChart = () => {
+  const rs = RECENT.byStart, Wd = W, H = 208, L = 46, R = 14, T = 16, PB = 132, n = rs.length
+  const vals = rs.flatMap((r) => [r.plan.cagr, r.hold.cagr]), y0 = Math.floor(Math.min(...vals) * 50) / 50 - 0.02, y1 = Math.ceil(Math.max(...vals) * 50) / 50 + 0.02
+  const cw = (Wd - L - R) / n, cx = (i) => L + cw * (i + 0.5), y = (v) => T + (1 - (v - y0) / (y1 - y0)) * (PB - T)
+  const ticks = []; for (let v = Math.ceil(y0 * 20) / 20; v <= y1 + 1e-9; v += 0.05) ticks.push(v)
+  const rowY = [PB + 20, PB + 38, PB + 53, PB + 68]
+  return `<svg viewBox="0 0 ${Wd} ${H}" role="img" aria-label="시작한 달에 따른 연수익률">
+    ${rs.map((r, i) => (r.back === 5 ? `<rect x="${(L + cw * i + 4).toFixed(1)}" y="${T - 12}" width="${(cw - 8).toFixed(1)}" height="${H - T + 10}" rx="6" fill="#f4f6f9"/>` : '')).join('')}
+    ${ticks.map((v) => `<line x1="${L}" x2="${Wd - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="${C.grid}"/><text x="${L - 6}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end" class="tick">${p0(v)}</text>`).join('')}
+    ${rs.map((r, i) => `<line x1="${cx(i).toFixed(1)}" x2="${cx(i).toFixed(1)}" y1="${y(r.plan.cagr).toFixed(1)}" y2="${y(r.hold.cagr).toFixed(1)}" stroke="${C.ink3}" stroke-width="1.5"/>
+      <circle cx="${cx(i).toFixed(1)}" cy="${y(r.hold.cagr).toFixed(1)}" r="4.5" fill="${C.base}" stroke="#fff" stroke-width="1.5"/><circle cx="${cx(i).toFixed(1)}" cy="${y(r.plan.cagr).toFixed(1)}" r="5.5" fill="${C.plan}" stroke="#fff" stroke-width="1.5"/>
+      <text x="${(cx(i) + 9).toFixed(1)}" y="${(y(r.plan.cagr) + 3.5).toFixed(1)}" class="lbl">${pct(r.plan.cagr)}</text><text x="${(cx(i) + 9).toFixed(1)}" y="${(y(r.hold.cagr) + 3.5).toFixed(1)}" class="lbl2">${pct(r.hold.cagr)}</text>
+      <text x="${cx(i).toFixed(1)}" y="${rowY[0]}" text-anchor="middle" class="lbl">${ymK(r.dates[0])}</text>
+      <text x="${cx(i).toFixed(1)}" y="${rowY[1]}" text-anchor="middle" class="lbl2">${pct(r.ann.qqq, 0)}</text><text x="${cx(i).toFixed(1)}" y="${rowY[2]}" text-anchor="middle" class="lbl2" style="${r.ann.btc < 0.05 ? `fill:${C.btc};font-weight:700` : ''}">${pct(r.ann.btc, 0)}</text><text x="${cx(i).toFixed(1)}" y="${rowY[3]}" text-anchor="middle" class="lbl2">${pct(r.ann.gold, 0)}</text>`).join('')}
+    ${[['시작', 0], ['QQQ', 1], ['비트코인', 2], ['금', 3]].map(([t, k]) => `<text x="${L - 6}" y="${rowY[k]}" text-anchor="end" class="tick">${t}</text>`).join('')}
+  </svg>`
+}
+const pp = (v) => `${v < 0 ? '−' : '+'}${Math.abs(v * 100).toFixed(1)}%p`
+const recentPage = () => { const f = RECENT.five, a5 = f.ann, a14 = RECENT.ann14, gap = RECENT.byStart.map((r) => r.plan.cagr - r.fixed.cagr); return `<section class="page">
+  <div class="kicker">최근 5년</div>
+  <h2>비트코인이 오르지 않은 5년으로 좁히면</h2>
+  <p class="sub">${ymK(f.dates[0])}은 QQQ와 비트코인이 함께 고점이던 때입니다. 같은 규칙의 연수익률이 2014년부터는 ${pct(SCEN[0].plan.cagr)}, 이때부터 5년은 ${pct(f.plan.cagr)}입니다.</p>
+  <div class="cols">
+    <div><div class="cap">자산별 연수익률 <span class="hint">옅은 색이 2014년부터, 진한 색이 최근 5년</span></div>
+      ${hbars([['QQQ', 'qqq'], ['비트코인', 'btc'], ['금', 'gold']].flatMap(([nm, k]) => [{ label: `${nm} 2014년부터`, v: a14[k], text: pct(a14[k]), color: `${C[k]}66` }, { label: `${nm} 최근 5년`, v: a5[k], text: pct(a5[k]), color: C[k] }]), { Wd: 330, L: 112, R: 48, rh: 17 })}</div>
+    <div><div class="cap">최근 5년의 결과 <span class="hint">연수익률, 괄호는 최대 낙폭</span></div>
+      ${hbars([['규칙대로', f.plan, C.plan], ['매달 되돌림', f.fixed, C.ink2], ['처음부터 현금 30%', f.now30, C.ink3], ['그냥 둠', f.hold, C.base]].map(([l, r, color]) => ({ label: l, v: r.cagr, text: `${pct(r.cagr)} (${pct(r.mdd)})`, color })), { Wd: 330, L: 112, R: 96, rh: 17 })}
+      <p class="foot">세금 ${p0(RULE.taxRate)}를 넣으면 규칙대로 ${pct(f.tax.cagr)}, 그냥 둠 ${pct(f.holdTax.cagr)}입니다.</p></div>
+  </div>
+  ${strip(f)}
+  <p class="foot" style="margin-bottom:4pt">${ymK(f.plan.stepDay)}에 1번 규칙으로 샀습니다. QQQ는 그 뒤 최고가보다 ${p0(-f.lowQdd)}까지 내렸지만 현금은 ${p0(f.maxCashAfter)}에서 멈춰 더 사지 않았습니다.${f.plan.sells.length ? ` ${ymK(f.plan.sells[0].d)}에는 현금이 ${p0(RULE.lower)}로 줄어 한 번 팔았습니다.` : ''}</p>
+  <h3>시작한 달만 바꾸면 <span class="hint">끝은 모두 ${ymK(f.dates.at(-1))}. 아래 세 줄은 그 기간 자산별 연수익률</span></h3>
+  ${legend([['dot', C.plan, '규칙대로'], ['dot', C.base, '그냥 둠']])}
+  ${startChart()}
+  <div class="stats">
+    ${stat(`${pp(SCEN[0].plan.cagr - NOBTC.plan.cagr).replace('%p', '')} → ${pp(f.plan.cagr - f.nobtc.cagr)}`, '비트코인이 연수익률에 더한 폭(2014년부터 → 최근 5년). 비트코인 몫을 QQQ에 넣은 경우와 비교')}
+    ${stat(pp(f.plan.cagr - f.hold.cagr), `그냥 둔 경우보다 높은 폭. 현금을 평균 ${p0(f.plan.avgCash)}로 덜 들었기 때문입니다`)}
+    ${stat(`${pp(Math.min(...gap)).replace('%p', '')}~${pp(Math.max(...gap))}`, '시작한 달 일곱 가지에서 매달 되돌린 경우와의 차이. 규칙이 더 버는 것은 아닙니다')}
+  </div>
+  <p class="foot">최근 5년은 일곱 가지 시작점 중 가장 나쁜 경우입니다. 앞으로를 낮춰 잡는 기준으로는 쓸 만하지만, 한 구간의 결과입니다.</p>
+</section>` }
+
 const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>현금 비중으로 사고파는 규칙</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>${css}</style></head><body>
 
 <section class="page">
-  <div class="kicker">운용 규칙, 2026.11.19 고침, 자료는 ${ymd(s14.dates.at(-1))}까지</div>
+  <div class="kicker">운용 규칙, 2026.11.18 고침, 자료는 ${ymd(QNOW.lastDay)}까지</div>
   <h1>현금 비중으로 사고파는 규칙</h1>
   <p class="lead">현금이 ${p0(RULE.lower)} 이하나 ${p0(RULE.upper)} 이상이 되면 전부 기준 비중으로 되돌립니다.</p>
   ${heroGauge()}
@@ -843,6 +908,8 @@ const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>
       <p class="foot">2014년 구간의 차이는 현금을 덜 들었기 때문입니다. 비트코인을 빼면 규칙대로 ${pct(NOBTC.plan.cagr)}, 그냥 둠 ${pct(NOBTC.hold.cagr)}입니다.</p></div>
   </div>
 </section>
+
+${recentPage()}
 
 <section class="page">
   <div class="kicker">근거</div>
@@ -934,6 +1001,7 @@ ${recordsPage()}
 
 fs.mkdirSync(OUT, { recursive: true })
 fs.writeFileSync(path.join(OUT, 'reserve-plan.html'), html)
+console.log(`${RECENT.five.title}: 규칙 ${pct(RECENT.five.plan.cagr)} / ${pct(RECENT.five.plan.mdd)}, 매달 되돌림 ${pct(RECENT.five.fixed.cagr)} / ${pct(RECENT.five.fixed.mdd)}, 그냥 둔 경우 ${pct(RECENT.five.hold.cagr)} / ${pct(RECENT.five.hold.mdd)}`)
 for (const s of SCEN) console.log(`${s.title}: 규칙 ${pct(s.plan.cagr)} / ${pct(s.plan.mdd)}, 그냥 둔 경우 ${pct(s.hold.cagr)} / ${pct(s.hold.mdd)}, 산 횟수 ${s.plan.buys.length}, 판 횟수 ${s.plan.sells.length}, 세금 반영 ${pct(s.tax.cagr)} (그냥 둔 경우 ${pct(s.holdTax.cagr)})`)
 
 const { chromium } = createRequire(import.meta.url)('playwright')
