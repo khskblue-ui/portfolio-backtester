@@ -9,7 +9,7 @@ import { createRequire } from 'node:module'
 const ROOT = path.resolve(import.meta.dirname, '../..')
 const OUT = path.join(ROOT, 'docs/research/reserve-plan')
 const csv = (name) => new Map(fs.readFileSync(path.join(ROOT, 'data-src/reserve', `${name}.csv`), 'utf8').trim().split('\n').slice(1).map((l) => { const [d, v] = l.split(','); return [d, +v] }))
-const QQQ = csv('QQQ'), GLD = csv('GLD'), BTC = csv('BTC-USD'), IRX = csv('IRX')
+const QQQ = csv('QQQ'), GLD = csv('GLD'), BTC = csv('BTC-USD'), IRX = csv('IRX'), ETH = csv('ETH-USD')
 
 // ── 규칙 (문서와 계산이 같은 값을 쓴다) ──────────────────────────────────────
 const RULE = {
@@ -189,6 +189,7 @@ for (const s of SCEN) {
 const NOBTC = (() => { const assets = [A_QQQ, A_GOLD], base = { qqq: 0.5, gold: 0.1, cash: 0.4 }, dates = datesFor(SCEN[0].start, assets); return { plan: sim(dates, assets, base, {}), hold: sim(dates, assets, base, { rule: false }), fixed: simFixed(dates, assets, baseline(base)) } })()
 
 // 최근 5년(비트코인이 처음 크게 오른 때가 빠진 구간)과, 끝은 같고 시작한 달만 바꾼 경우. 비중과 규칙은 2014년 구간과 같다
+const CRYPTO = { btc: 0.8, eth: 0.2 } // 암호화폐 몫 안의 구성(사용자 결정)
 const annual = (px, dates) => (px.get(dates.at(-1)) / px.get(dates[0])) ** ((365.25 * 864e5) / (Date.parse(dates.at(-1)) - Date.parse(dates[0]))) - 1
 const RECENT = (() => {
   const { assets, base } = SCEN[0], end = SCEN[0].dates.at(-1)
@@ -197,10 +198,16 @@ const RECENT = (() => {
     return { back, dates, assets, base, plan: run({}), hold: run({ rule: false }), fixed: simFixed(dates, assets, baseline(base)), ann: { qqq: annual(QQQ, dates), btc: annual(BTC, dates), gold: annual(GLD, dates) } }
   }
   const five = mk(5), run = (opt) => sim(five.dates, assets, base, opt)
+  // 암호화폐 몫을 비트코인 80, 이더리움 20으로 둔 경우. 둘의 비율을 매일 맞춘 값을 암호화폐 한 자산으로 넣는다(실제로는 규칙이 걸릴 때만 맞추므로 근사)
+  const mixDays = [...BTC.keys()].sort().filter((d) => ETH.has(d)), MIX = new Map([[mixDays[0], 100]])
+  for (let i = 1; i < mixDays.length; i++) MIX.set(mixDays[i], MIX.get(mixDays[i - 1]) * ((CRYPTO.btc * BTC.get(mixDays[i])) / BTC.get(mixDays[i - 1]) + (CRYPTO.eth * ETH.get(mixDays[i])) / ETH.get(mixDays[i - 1])))
+  const mixAssets = [A_QQQ, A_GOLD, { key: 'btc', name: '암호화폐', px: MIX }]
+  const mixRun = (r) => { const dates = r.dates.filter((d) => MIX.has(d)); return { dates, plan: sim(dates, mixAssets, base, {}), hold: sim(dates, mixAssets, base, { rule: false }), btcOnly: sim(dates, assets, base, {}), annEth: annual(ETH, dates), annMix: annual(MIX, dates) } }
   Object.assign(five, { id: 's5y', title: `최근 5년 (${five.dates[0].slice(0, 4)}년 ${+five.dates[0].slice(5, 7)}월~)`, sub: SCEN[0].sub, nolower: run({ lower: false }), nobtc: sim(five.dates, [A_QQQ, A_GOLD], { qqq: 0.5, gold: 0.1, cash: 0.4 }, {}), now30: sim(five.dates, assets, baseline(base), { startStepped: true }), tax: run({ tax: RULE.taxRate }), holdTax: run({ rule: false, tax: RULE.taxRate }) })
   const afterStep = five.plan.series.filter((q) => q.d > five.plan.stepDay)
   five.lowQdd = Math.min(...afterStep.map((q) => q.qdd)); five.maxCashAfter = Math.max(...afterStep.slice(1).map((q) => q.w.cash))
-  return { five, byStart: [9, 8, 7, 6, 5, 4, 3].map((b) => (b === 5 ? five : mk(b))), ann14: { qqq: annual(QQQ, SCEN[0].dates), btc: annual(BTC, SCEN[0].dates), gold: annual(GLD, SCEN[0].dates) } }
+  five.mix = mixRun(five)
+  return { five, mixLong: mixRun(mk(9)), byStart: [9, 8, 7, 6, 5, 4, 3].map((b) => (b === 5 ? five : mk(b))), ann14: { qqq: annual(QQQ, SCEN[0].dates), btc: annual(BTC, SCEN[0].dates), gold: annual(GLD, SCEN[0].dates) } }
 })()
 
 // ── 표기 ────────────────────────────────────────────────────────────────────
@@ -410,6 +417,7 @@ check(RECENT.byStart.every((r) => r.plan.cagr >= RECENT.five.plan.cagr), '최근
 check(Math.abs(RECENT.five.plan.cagr - RECENT.five.fixed.cagr) < 0.005 && RECENT.byStart.some((r) => r.plan.cagr < r.fixed.cagr), '최근 5년에서 규칙대로와 매달 되돌림은 0.5%p 안, 시작점에 따라 매달 되돌림이 더 높기도 함')
 check(RECENT.five.plan.buys.length === 1 && RECENT.five.plan.buys[0].first && RECENT.five.lowQdd < -0.3 && RECENT.five.maxCashAfter < RULE.upper, '최근 5년: 1번 규칙으로 한 번 샀고, 그 뒤 QQQ가 30% 넘게 내렸어도 현금은 40%에 닿지 않음')
 check(SCEN[0].plan.cagr - NOBTC.plan.cagr > 0.04 && RECENT.five.plan.cagr - RECENT.five.nobtc.cagr < 0.005, '비트코인이 더한 연수익률: 2014년부터는 4%p 넘고 최근 5년은 0.5%p 아래')
+check([RECENT.five.mix, RECENT.mixLong].every((m) => Math.abs(m.plan.cagr - m.btcOnly.cagr) < 0.01 && Math.abs(m.plan.mdd - m.btcOnly.mdd) < 0.03), '암호화폐 몫에 이더리움 20%를 섞어도 연수익률 차이는 1%p 안, 최대 낙폭 차이는 3%p 안')
 check(SCEN[0].plan.cagr - RECENT.five.plan.cagr > 0.05, '2014년부터와 최근 5년의 연수익률 차이는 5%p 넘음')
 check(SCEN.every((s) => Math.abs(s.plan.cagr - s.partial.cagr) < 0.004), '전부 되돌리는 경우와 필요한 만큼만 사고파는 경우의 연수익률 차이는 0.4%p 안')
 check(s04.plan.medW('gold') > 0.085, '2004~: 금 비중의 중앙값이 8.5% 넘음')
@@ -612,7 +620,7 @@ const accounts = () => {
   const seg = [['qqq', 'QQQ'], ['cash', '달러 단기 국채 ETF'], ['gold', '금'], ['btc', '암호화폐']]
   const card = (title, keys, note) => `<div class="acct"><div class="acct-t">${title}</div><div class="acct-k">${keys.map((k) => `<span class="lg"><span class="sw" style="--c:${C[k]}"></span>${seg.find(([key]) => key === k)[1]}</span>`).join('')}</div><div class="acct-n">${note}</div></div>`
   return `<div class="pbar">${seg.map(([k, label]) => `<div class="blk" style="flex:${BASELINE[k]};background-color:${C[k]}">${label}<small>${Math.round(BASELINE[k] * 100)}%</small></div>`).join('')}</div>
-  <div class="accts">${card('증권사 계좌', ['qqq', 'cash'], '사고파는 일은 대부분 여기서 합니다. 살 때는 단기 국채 ETF를 팔아 삽니다.')}${card('KRX 금현물 계좌와 실물', ['gold'], '사고파는 것은 KRX 계좌에서만 합니다. 실물은 비중 계산에만 넣습니다.')}${card('거래소 계좌', ['btc'], '비트코인, 이더리움, 관련 주식을 합쳐 한 자산으로 봅니다.')}</div>`
+  <div class="accts">${card('증권사 계좌', ['qqq', 'cash'], '사고파는 일은 대부분 여기서 합니다. 살 때는 단기 국채 ETF를 팔아 삽니다.')}${card('KRX 금현물 계좌와 실물', ['gold'], '사고파는 것은 KRX 계좌에서만 합니다. 실물은 비중 계산에만 넣습니다.')}${card('거래소 계좌', ['btc'], `비트코인 ${CRYPTO.btc * 10}, 이더리움 ${CRYPTO.eth * 10}로 맞춥니다. 상한 ${p0(RULE.trimAt)}는 둘을 합친 비중으로 봅니다.`)}</div>`
 }
 /** 지금 확인할 숫자 세 가지를 계기판처럼 */
 const dials = () => {
@@ -824,6 +832,7 @@ const recentPage = () => { const f = RECENT.five, a5 = f.ann, a14 = RECENT.ann14
     ${stat(`${pp(Math.min(...gap)).replace('%p', '')}~${pp(Math.max(...gap))}`, '시작한 달 일곱 가지에서 매달 되돌린 경우와의 차이. 규칙이 더 버는 것은 아닙니다')}
   </div>
   <p class="foot">최근 5년은 일곱 가지 시작점 중 가장 나쁜 경우입니다. 앞으로를 낮춰 잡는 기준으로는 쓸 만하지만, 한 구간의 결과입니다.</p>
+  <p class="foot">암호화폐 몫을 비트코인 ${CRYPTO.btc * 10}, 이더리움 ${CRYPTO.eth * 10}로 두면 최근 5년 ${pct(f.mix.plan.cagr)} / ${pct(f.mix.plan.mdd)}, ${ymK(RECENT.mixLong.dates[0])}부터는 ${pct(RECENT.mixLong.plan.cagr)} / ${pct(RECENT.mixLong.plan.mdd)}입니다(비트코인만이면 ${pct(RECENT.mixLong.btcOnly.cagr)} / ${pct(RECENT.mixLong.btcOnly.mdd)}). 위 그림은 비트코인만으로 계산했습니다.</p>
 </section>` }
 
 const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>현금 비중으로 사고파는 규칙</title>
@@ -1002,6 +1011,7 @@ ${recordsPage()}
 fs.mkdirSync(OUT, { recursive: true })
 fs.writeFileSync(path.join(OUT, 'reserve-plan.html'), html)
 console.log(`${RECENT.five.title}: 규칙 ${pct(RECENT.five.plan.cagr)} / ${pct(RECENT.five.plan.mdd)}, 매달 되돌림 ${pct(RECENT.five.fixed.cagr)} / ${pct(RECENT.five.fixed.mdd)}, 그냥 둔 경우 ${pct(RECENT.five.hold.cagr)} / ${pct(RECENT.five.hold.mdd)}`)
+for (const [t, m] of [['최근 5년', RECENT.five.mix], ['2017년 11월부터', RECENT.mixLong]]) console.log(`암호화폐 비트코인 80 + 이더리움 20, ${t} (${m.dates[0]}~${m.dates.at(-1)}): 규칙 ${pct(m.plan.cagr)} / ${pct(m.plan.mdd)} (비트코인만 ${pct(m.btcOnly.cagr)} / ${pct(m.btcOnly.mdd)}), 줄인 날 ${m.plan.trims.length} (비트코인만 ${m.btcOnly.trims.length}), 이더리움 연 ${pct(m.annEth)}, 섞은 값 연 ${pct(m.annMix)}`)
 for (const s of SCEN) console.log(`${s.title}: 규칙 ${pct(s.plan.cagr)} / ${pct(s.plan.mdd)}, 그냥 둔 경우 ${pct(s.hold.cagr)} / ${pct(s.hold.mdd)}, 산 횟수 ${s.plan.buys.length}, 판 횟수 ${s.plan.sells.length}, 세금 반영 ${pct(s.tax.cagr)} (그냥 둔 경우 ${pct(s.holdTax.cagr)})`)
 
 const { chromium } = createRequire(import.meta.url)('playwright')
