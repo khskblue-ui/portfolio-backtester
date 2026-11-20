@@ -1,6 +1,7 @@
 // 현금 비중으로 사고파는 규칙 — 규칙 도해와 과거 데이터 점검 보고서 (HTML → PDF)
 // 사용: node scripts/reserve/build-report.mjs   → docs/research/reserve-plan/reserve-plan.html · .pdf
 // 자료: data-src/reserve/*.csv (야후 수정주가 일별 스냅숏). 달러 기준(환율 제외). 세금은 비교표의 세금 줄에만 넣는다.
+// 1번 규칙(QQQ가 최고가보다 20% 내리면 현금 40 → 30)은 2026년 11월에 썼다. 그래서 본문 계산은 기준 비중(현금 30%)에서 시작하고, 기다린 경우는 비교용(wait)으로만 둔다.
 // 결정은 그날 종가, 체결은 다음 거래일 종가. 수치는 전부 이 스크립트의 계산 결과를 그대로 넣고, 본문 서술은 check()로 계산과 맞춘다.
 import fs from 'node:fs'
 import path from 'node:path'
@@ -163,30 +164,32 @@ function summarize(dates, series, events, rets, rfs, extra) {
 
 const A_QQQ = { key: 'qqq', name: 'QQQ', px: QQQ }, A_GOLD = { key: 'gold', name: '금', px: GLD }, A_BTC = { key: 'btc', name: '비트코인', px: BTC }
 const SCEN = [
-  { id: 's2014', title: '2014~2026년', sub: 'QQQ 40, 금 10, 비트코인 10, 현금 40으로 시작', start: '2014-09-17', assets: [A_QQQ, A_GOLD, A_BTC], base: { qqq: 0.4, gold: 0.1, btc: 0.1, cash: 0.4 }, note: '지금 구성과 같은 비중입니다. 비트코인 자료가 2014년 9월부터라 이때 시작합니다.' },
-  { id: 's2004', title: '2004~2026년 (2008년 포함)', sub: 'QQQ 50, 금 10, 현금 40으로 시작', start: '2004-11-18', assets: [A_QQQ, A_GOLD], base: { qqq: 0.5, gold: 0.1, cash: 0.4 }, note: '비트코인이 없던 시기라 그 몫을 QQQ에 더했습니다. 금 ETF(GLD) 상장일부터입니다.' },
-  { id: 's1999', title: '1999~2026년 (닷컴 버블 포함)', sub: 'QQQ 60, 현금 40으로 시작', start: '1999-03-10', assets: [A_QQQ], base: { qqq: 0.6, cash: 0.4 }, note: '금 ETF도 없던 시기라 금과 비트코인 몫을 QQQ에 더했습니다. 가장 나쁜 경우를 보려는 구간입니다.' },
+  { id: 's2014', title: '2014~2026년', sub: 'QQQ 50, 금 10, 비트코인 10, 현금 30으로 시작', start: '2014-09-17', assets: [A_QQQ, A_GOLD, A_BTC], base0: { qqq: 0.4, gold: 0.1, btc: 0.1, cash: 0.4 }, note: '지금 구성과 같은 비중입니다. 비트코인 자료가 2014년 9월부터라 이때 시작합니다.' },
+  { id: 's2004', title: '2004~2026년 (2008년 포함)', sub: 'QQQ 60, 금 10, 현금 30으로 시작', start: '2004-11-18', assets: [A_QQQ, A_GOLD], base0: { qqq: 0.5, gold: 0.1, cash: 0.4 }, note: '비트코인이 없던 시기라 그 몫을 QQQ에 더했습니다. 금 ETF(GLD) 상장일부터입니다.' },
+  { id: 's1999', title: '1999~2026년 (닷컴 버블 포함)', sub: 'QQQ 70, 현금 30으로 시작', start: '1999-03-10', assets: [A_QQQ], base0: { qqq: 0.6, cash: 0.4 }, note: '금 ETF도 없던 시기라 금과 비트코인 몫을 QQQ에 더했습니다. 가장 나쁜 경우를 보려는 구간입니다.' },
 ]
 const datesFor = (start, assets) => [...QQQ.keys()].sort().filter((d) => d >= start && assets.every((a) => a.px.has(d)))
 const baseline = (base) => ({ ...base, cash: RULE.target, qqq: base.qqq + (base.cash - RULE.target) })
+// 1번 규칙은 2026년 11월에 이미 썼다. 그래서 모든 계산은 기준 비중에서 시작하고 현금 상한과 하한을 첫날부터 본다
 for (const s of SCEN) {
   s.dates = datesFor(s.start, s.assets)
-  const run = (opt) => sim(s.dates, s.assets, s.base, opt)
+  s.base = baseline(s.base0)
+  const run = (opt) => sim(s.dates, s.assets, s.base, { startStepped: true, ...opt })
   s.plan = run({})
   s.hold = run({ rule: false })
-  s.fixed = simFixed(s.dates, s.assets, baseline(s.base))
+  s.fixed = simFixed(s.dates, s.assets, s.base)
   s.nolower = run({ lower: false })
   s.partial = run({ partial: true })
   s.up35 = run({ upper: 0.35 })
   s.notrim = run({ trim: false })
-  s.now30 = sim(s.dates, s.assets, baseline(s.base), { startStepped: true }) // 기다리지 않고 기준 비중으로 시작
+  s.wait = sim(s.dates, s.assets, s.base0, {}) // 현금 40%에서 시작해 1번 규칙을 기다린 경우(이전 계획)
   s.c3 = run({ contrib: 0.03 })
   s.c6 = run({ contrib: 0.06 })
   s.tax = run({ tax: RULE.taxRate })
   s.holdTax = run({ rule: false, tax: RULE.taxRate })
 }
 // 2014년 구간에서 비트코인을 뺀 경우(그 몫은 QQQ에)
-const NOBTC = (() => { const assets = [A_QQQ, A_GOLD], base = { qqq: 0.5, gold: 0.1, cash: 0.4 }, dates = datesFor(SCEN[0].start, assets); return { plan: sim(dates, assets, base, {}), hold: sim(dates, assets, base, { rule: false }), fixed: simFixed(dates, assets, baseline(base)) } })()
+const NOBTC = (() => { const assets = [A_QQQ, A_GOLD], base = { qqq: 0.6, gold: 0.1, cash: RULE.target }, dates = datesFor(SCEN[0].start, assets); return { plan: sim(dates, assets, base, { startStepped: true }), hold: sim(dates, assets, base, { rule: false }), fixed: simFixed(dates, assets, base) } })()
 
 // 최근 5년(비트코인이 처음 크게 오른 때가 빠진 구간)과, 끝은 같고 시작한 달만 바꾼 경우. 비중과 규칙은 2014년 구간과 같다
 const CRYPTO = { btc: 0.8, eth: 0.2 } // 암호화폐 몫 안의 구성(사용자 결정)
@@ -194,18 +197,17 @@ const annual = (px, dates) => (px.get(dates.at(-1)) / px.get(dates[0])) ** ((365
 const RECENT = (() => {
   const { assets, base } = SCEN[0], end = SCEN[0].dates.at(-1)
   const mk = (back) => {
-    const dates = datesFor(`${+end.slice(0, 4) - back}${end.slice(4)}`, assets), run = (opt) => sim(dates, assets, base, opt)
-    return { back, dates, assets, base, plan: run({}), hold: run({ rule: false }), fixed: simFixed(dates, assets, baseline(base)), ann: { qqq: annual(QQQ, dates), btc: annual(BTC, dates), gold: annual(GLD, dates) } }
+    const dates = datesFor(`${+end.slice(0, 4) - back}${end.slice(4)}`, assets), run = (opt) => sim(dates, assets, base, { startStepped: true, ...opt })
+    return { back, dates, assets, base, plan: run({}), hold: run({ rule: false }), fixed: simFixed(dates, assets, base), ann: { qqq: annual(QQQ, dates), btc: annual(BTC, dates), gold: annual(GLD, dates) } }
   }
-  const five = mk(5), run = (opt) => sim(five.dates, assets, base, opt)
+  const five = mk(5), run = (opt) => sim(five.dates, assets, base, { startStepped: true, ...opt })
   // 암호화폐 몫을 비트코인 80, 이더리움 20으로 둔 경우. 둘의 비율을 매일 맞춘 값을 암호화폐 한 자산으로 넣는다(실제로는 규칙이 걸릴 때만 맞추므로 근사)
   const mixDays = [...BTC.keys()].sort().filter((d) => ETH.has(d)), MIX = new Map([[mixDays[0], 100]])
   for (let i = 1; i < mixDays.length; i++) MIX.set(mixDays[i], MIX.get(mixDays[i - 1]) * ((CRYPTO.btc * BTC.get(mixDays[i])) / BTC.get(mixDays[i - 1]) + (CRYPTO.eth * ETH.get(mixDays[i])) / ETH.get(mixDays[i - 1])))
   const mixAssets = [A_QQQ, A_GOLD, { key: 'btc', name: '암호화폐', px: MIX }]
-  const mixRun = (r) => { const dates = r.dates.filter((d) => MIX.has(d)); return { dates, plan: sim(dates, mixAssets, base, {}), hold: sim(dates, mixAssets, base, { rule: false }), btcOnly: sim(dates, assets, base, {}), annEth: annual(ETH, dates), annMix: annual(MIX, dates) } }
-  Object.assign(five, { id: 's5y', title: `최근 5년 (${five.dates[0].slice(0, 4)}년 ${+five.dates[0].slice(5, 7)}월~)`, sub: SCEN[0].sub, nolower: run({ lower: false }), nobtc: sim(five.dates, [A_QQQ, A_GOLD], { qqq: 0.5, gold: 0.1, cash: 0.4 }, {}), now30: sim(five.dates, assets, baseline(base), { startStepped: true }), tax: run({ tax: RULE.taxRate }), holdTax: run({ rule: false, tax: RULE.taxRate }) })
-  const afterStep = five.plan.series.filter((q) => q.d > five.plan.stepDay)
-  five.lowQdd = Math.min(...afterStep.map((q) => q.qdd)); five.maxCashAfter = Math.max(...afterStep.slice(1).map((q) => q.w.cash))
+  const mixRun = (r) => { const dates = r.dates.filter((d) => MIX.has(d)); return { dates, plan: sim(dates, mixAssets, base, { startStepped: true }), hold: sim(dates, mixAssets, base, { rule: false }), btcOnly: sim(dates, assets, base, { startStepped: true }), annEth: annual(ETH, dates), annMix: annual(MIX, dates) } }
+  Object.assign(five, { id: 's5y', title: `최근 5년 (${five.dates[0].slice(0, 4)}년 ${+five.dates[0].slice(5, 7)}월~)`, sub: SCEN[0].sub, nolower: run({ lower: false }), nobtc: sim(five.dates, [A_QQQ, A_GOLD], { qqq: 0.6, gold: 0.1, cash: RULE.target }, { startStepped: true }), wait: sim(five.dates, assets, SCEN[0].base0, {}), tax: run({ tax: RULE.taxRate }), holdTax: run({ rule: false, tax: RULE.taxRate }) })
+  five.lowQdd = Math.min(...five.plan.series.map((q) => q.qdd)); five.maxCash = five.plan.maxCash
   five.mix = mixRun(five)
   return { five, mixLong: mixRun(mk(9)), byStart: [9, 8, 7, 6, 5, 4, 3].map((b) => (b === 5 ? five : mk(b))), ann14: { qqq: annual(QQQ, SCEN[0].dates), btc: annual(BTC, SCEN[0].dates), gold: annual(GLD, SCEN[0].dates) } }
 })()
@@ -236,7 +238,7 @@ function cashChart(s, { PH = 116, LH = 30 } = {}) {
     { label: '팔아서 채운 날', note: '현금이 늘어남', ev: r.sells, mark: (cx, cy) => `<path d="M${cx},${cy - 5.5}l5.5,5.5l-5.5,5.5l-5.5,-5.5z" fill="#fff" stroke="${C.ink}" stroke-width="1.8"/>` },
     { label: `${[...new Set(r.trims.map((e) => NAME[e.key]))].join(', ')}을 줄인 날`, note: '현금이 늘어남', ev: r.trims, mark: (cx, cy, e) => `<path d="M${cx},${cy - 5.5}l6,10.5h-12z" fill="${C[e.key]}" stroke="#fff" stroke-width="1.2"/>` },
   ].filter((row) => row.ev.length)
-  const T = 24, GAP = 10, B = 20, H = T + PH + GAP + rows.length * LH + B
+  const T = 10, GAP = 10, B = 20, H = T + PH + GAP + rows.length * LH + B
   const laneY = (i) => T + PH + GAP + i * LH + LH / 2 + 3
   const delta = (e) => (e.type === 'trim' ? e.cashTo - e.cashFrom : e.to - e.from) // 그날 현금 비중이 바뀐 폭
   const signed = (v) => `${v > 0 ? '+' : '−'}${Math.abs(v * 100).toFixed(0)}`
@@ -246,7 +248,6 @@ function cashChart(s, { PH = 116, LH = 30 } = {}) {
   const y = (v) => T + (1 - v / hi) * PH
   const ticks = []; for (let v = 0; v <= hi + 1e-9; v += 0.1) ticks.push(v)
   const lines = [[RULE.upper, `현금 상한 ${p0(RULE.upper)}`, C.ink2, ''], [RULE.target, `기준 ${p0(RULE.target)}`, C.ink3, ' stroke-dasharray="3 3"'], [RULE.lower, `현금 하한 ${p0(RULE.lower)}`, C.ink2, '']]
-  const x0 = x(s.dates[0]), x1 = x(r.stepDay ?? s.dates.at(-1))
   const lane = (row, i) => {
     let lastX = -99, below = false
     return `<rect x="${ML}" y="${laneY(i) - LH / 2 + 1}" width="${W - MR - ML}" height="${LH - 2}" fill="#f4f6f9"/>
@@ -254,8 +255,6 @@ function cashChart(s, { PH = 116, LH = 30 } = {}) {
       ${row.ev.map((e) => { const cx = x(e.d); below = cx - lastX < 19 ? !below : false; lastX = cx; return `<text x="${cx.toFixed(1)}" y="${(laneY(i) + (below ? 15 : -8)).toFixed(1)}" text-anchor="middle" class="lbl">${signed(delta(e))}</text>${row.mark(cx.toFixed(1), laneY(i), e)}` }).join('')}`
   }
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="현금 비중과 사고판 기록">
-    <path d="M${x0.toFixed(1)},${T - 8}v-5H${x1.toFixed(1)}v5" fill="none" stroke="${C.ink2}" stroke-width="1"/>
-    <text x="${(x0 + 4).toFixed(1)}" y="${T - 15}" class="lbl2">1번 규칙으로 처음 사기 전에는 현금이 ${p0(RULE.upper)}를 넘어도 사지 않습니다</text>
     ${ticks.map((v) => `<line x1="${ML}" x2="${W - MR}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="${C.grid}"/><text x="${ML - 6}" y="${(y(v) + 3.5).toFixed(1)}" text-anchor="end" class="tick">${p0(v)}</text>`).join('')}
     <rect x="${ML}" y="${y(RULE.upper).toFixed(1)}" width="${W - MR - ML}" height="${(y(RULE.lower) - y(RULE.upper)).toFixed(1)}" fill="${C.cash}" opacity="0.1"/>
     ${lines.map(([v, label, color, dash]) => `<line x1="${ML}" x2="${W - MR}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="${color}" stroke-width="1"${dash}/><text x="${W - MR + 6}" y="${(y(v) + 3.5).toFixed(1)}" class="lbl2">${label}</text>`).join('')}
@@ -271,7 +270,7 @@ const legend = (items) => `<div class="legend">${items.map(([kind, color, label]
 
 // ── 본문 조각 ───────────────────────────────────────────────────────────────
 /** 본문에 적은 서술이 계산 결과와 어긋나면 만들지 않는다 */
-const check = (cond, msg) => { if (!cond) throw new Error(`본문 서술과 계산이 어긋남: ${msg}`) }
+const check = (cond, msg) => { if (cond) return; if (process.env.SOFT) console.log(`[어긋남] ${msg}`); else throw new Error(`본문 서술과 계산이 어긋남: ${msg}`) }
 const winMdd = (r, from, to) => { let pk = 0, m = 0; for (const p of r.series) if (p.d >= from && p.d <= to) { pk = Math.max(pk, p.V); m = Math.min(m, p.V / pk - 1) } return m }
 const short = (s) => s.title.replace(/ \(.*\)/, '').replace('년', '')
 
@@ -309,7 +308,7 @@ const eventTable = (s) => {
   const rows = s.plan.events.map((e) => (e.type === 'trim'
     ? `<tr><td>${ymd(e.d)}</td><td>줄임</td><td class="n">${p0(e.pct)}</td><td class="n">${p0(e.cashFrom)} → ${p0(e.cashTo)}</td><td class="n"></td><td>4번 규칙: ${NAME[e.key]} ${p0(e.from)} → ${p0(RULE.trimTo)}</td></tr>`
     : e.type === 'buy'
-    ? `<tr><td>${ymd(e.d)}</td><td>삼</td><td class="n">${p0(e.pct)}</td><td class="n">${p0(e.from)} → ${p0(e.to)}</td><td class="n">${p0(e.qdd)}</td><td>${e.first ? '1번 규칙' : `2번 규칙(현금 ${p0(RULE.upper)} 이상)`}: ${partsText(s, e.parts)} 삼${partsText(s, e.sells) ? `, ${partsText(s, e.sells)} 팖` : ''}</td></tr>`
+    ? `<tr><td>${ymd(e.d)}</td><td>삼</td><td class="n">${p0(e.pct)}</td><td class="n">${p0(e.from)} → ${p0(e.to)}</td><td class="n">${p0(Math.min(0, e.qdd))}</td><td>${e.first ? '1번 규칙' : `2번 규칙(현금 ${p0(RULE.upper)} 이상)`}: ${partsText(s, e.parts)} 삼${partsText(s, e.sells) ? `, ${partsText(s, e.sells)} 팖` : ''}</td></tr>`
     : `<tr><td>${ymd(e.d)}</td><td>팖</td><td class="n">${p0(e.pct)}</td><td class="n">${p0(e.from)} → ${p0(e.to)}</td><td class="n"></td><td>2번 규칙(현금 ${p0(RULE.lower)} 이하): ${partsText(s, e.sells)} 팖${partsText(s, e.fills) ? `, ${partsText(s, e.fills)} 삼` : ''}</td></tr>`))
   return `<table class="t dense"><thead><tr><th style="width:13%">날짜</th><th style="width:8%">한 일</th><th class="n" style="width:14%">크기 (전체 대비)</th><th class="n" style="width:15%">현금 비중</th><th class="n" style="width:11%">QQQ 낙폭</th><th>규칙과 산 것, 판 것</th></tr></thead><tbody>${rows.join('') || '<tr><td colspan="6">없음</td></tr>'}</tbody></table>`
 }
@@ -347,7 +346,8 @@ const HITS = (() => {
   })
   return out
 })()
-const upperBuys = SCEN.flatMap((s) => s.plan.buys.filter((e) => !e.first).map((e) => ({ ...e, s })))
+const upperBuys = SCEN.flatMap((s) => s.plan.buys.map((e) => ({ ...e, s })))
+const HITS_PAST = HITS.filter((h) => h.d < '2026-01-01') // 이번 하락 전에 QQQ가 최고가보다 20% 내렸던 때
 const up35calm = SCEN.flatMap((s) => s.up35.buys.filter((e) => !e.first && e.qdd > -0.1))
 /** 기준 비중에서 자산이 m만큼 움직인 뒤의 비중 */
 const moved = (m) => { const v = { cash: BASELINE.cash, qqq: BASELINE.qqq * (1 + (m.qqq ?? 0)), gold: BASELINE.gold * (1 + (m.gold ?? 0)), btc: BASELINE.btc * (1 + (m.btc ?? 0)) }, T = v.cash + v.qqq + v.gold + v.btc; return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, x / T])) }
@@ -380,10 +380,10 @@ const PAST = [['2000~2002년', '2000-01-01', '2002-12-31'], ['2007~2008년', '20
 const fallFor = (c) => 1 - (c / RULE.upper - c) / (1 - c) // 현금 c에서 상한이 되려면 나머지 자산이 내려야 하는 폭
 const usd = (x) => `${x.toFixed(2)}달러`
 /** 자료 마지막 날 기준 QQQ 최고 종가와 1번 규칙의 기준가 */
-const QNOW = (() => { const dates = [...QQQ.keys()].sort(); let pk = 0, pd = ''; for (const d of dates) if (QQQ.get(d) > pk) { pk = QQQ.get(d); pd = d } const last = dates.at(-1); return { peak: pk, peakDay: pd, trigger: pk * (1 + RULE.firstDd), last: QQQ.get(last), lastDay: last, dd: QQQ.get(last) / pk - 1 } })()
+const QNOW = (() => { const dates = [...QQQ.keys()].sort(); let pk = 0, pd = ''; for (const d of dates) if (QQQ.get(d) > pk) { pk = QQQ.get(d); pd = d } const last = dates.at(-1); const after = dates.filter((d) => d >= pd), lowDay = after.reduce((m, d) => (QQQ.get(d) < QQQ.get(m) ? d : m)); return { peak: pk, peakDay: pd, trigger: pk * (1 + RULE.firstDd), last: QQQ.get(last), lastDay: last, dd: QQQ.get(last) / pk - 1, lowDay, lowDd: QQQ.get(lowDay) / pk - 1 } })()
 /** 견줄 기저율: 같은 시기의 아무 날에 샀을 때 3년 뒤 QQQ 수익률의 중앙값 */
 const BASE3Y = (() => {
-  const dates = [...QQQ.keys()].sort(), from = `${+HITS[1].d.slice(0, 4) - 2}-01-01`, out = []
+  const dates = [...QQQ.keys()].sort(), from = `${+HITS_PAST[1].d.slice(0, 4) - 2}-01-01`, out = []
   let j = 0
   dates.forEach((d) => { if (d < from) return; const t = `${+d.slice(0, 4) + 3}${d.slice(4)}`; while (j < dates.length && dates[j] < t) j++; if (j < dates.length) out.push(QQQ.get(dates[j]) / QQQ.get(d) - 1) })
   out.sort((a, b) => a - b)
@@ -396,27 +396,27 @@ const dd22 = { plan: winMdd(s04.plan, ...BEAR22), hold: winMdd(s04.hold, ...BEAR
 const cmpRow = (label, key, cls = '') => `<tr${cls ? ` class="${cls}"` : ''}><td>${label}</td>${SCEN.map((s) => `<td class="n">${pct(s[key].cagr)}</td><td class="n">${pct(s[key].mdd)}</td>`).join('')}</tr>`
 
 // 본문 서술을 계산이 뒷받침하는지 확인
-check(HITS.length === 5 && HITS[0].d.startsWith('2000') && HITS[0].after3 < -0.5 && HITS.slice(1, 4).every((h) => h.after3 > 0.3), 'QQQ -20%는 5번, 2000년만 3년 뒤 크게 낮고 그 뒤 세 번은 30% 넘게 높음')
-check(upperBuys.length >= 4 && upperBuys.every((e) => e.qdd <= -0.4), '2번 규칙으로 산 날은 모두 QQQ가 최고가보다 40% 넘게 낮았음')
+check(HITS_PAST.length === 5 && HITS_PAST[0].d.startsWith('2000') && HITS_PAST[0].after3 < -0.5 && HITS_PAST.slice(1, 4).every((h) => h.after3 > 0.3) && QNOW.lowDd < -0.19, 'QQQ -20%는 이번 전에 5번, 2000년만 3년 뒤 크게 낮고 그 뒤 세 번은 30% 넘게 높음. 이번 하락은 19% 넘게 내림')
+check(upperBuys.length >= 6 && [s04, s99].every((s) => s.plan.buys.every((e) => e.qdd <= -0.4)) && s14.plan.buys.every((e) => e.qdd > -0.2 && s14.plan.trims.filter((t) => t.d <= e.d).length >= 3), '현금 40%로 산 날: 2004~와 1999~에서는 모두 QQQ가 40% 넘게 낮았고, 2014~의 두 번은 비트코인을 세 번 넘게 줄인 뒤라 20%보다 덜 내렸을 때')
 check(up35calm.length >= 1, '상한 35%면 QQQ가 최고가 근처일 때 산 날이 있음')
-check(s14.plan.cagr - s14.hold.cagr > 0.02 && s14.plan.buys[0].first && s14.plan.buys[0].from > 0.5, '2014~: 규칙이 2%p 넘게 높고 처음 살 때 현금이 50%를 넘음')
-for (const s of [s04, s99]) check(Math.abs(s.plan.cagr - s.hold.cagr) < 0.005 && s.tax.cagr < s.holdTax.cagr, `${s.id}: 규칙과 그냥 둔 경우가 0.5%p 안, 세금 넣으면 규칙이 낮음`)
+check(s14.plan.cagr - s14.hold.cagr > 0.015, '2014~: 규칙이 그냥 둔 경우보다 1.5%p 넘게 높음')
+for (const s of [s04, s99]) check(s.plan.cagr <= s.hold.cagr + 0.001 && s.tax.cagr < s.holdTax.cagr, `${s.id}: 그냥 둔 경우가 규칙과 같거나 높고, 세금을 넣으면 규칙이 낮음`)
 check(dd22.plan > dd22.hold + 0.03 && s04.hold.final.w.qqq > 0.85, '2004~: 2022년 낙폭은 규칙이 3%p 넘게 얕고 그냥 둔 경우는 QQQ 85% 초과')
 for (const s of [s04, s99]) check(s.nolower.cagr > s.plan.cagr + 0.01 && s.nolower.minCash < 0.05, `${s.id}: 하한을 빼면 수익률은 1%p 넘게 높고 현금은 5% 아래까지`)
-check(SCEN.every((s) => s.c6.sells.length === 0) && SCEN.every((s) => s.c3.sells.length <= 2), '돈이 6% 들어오면 판 적 없음, 3%면 2번 이하')
+check([s04, s99].every((s) => s.c6.sells.length < s.c3.sells.length && s.c3.sells.length < s.plan.sells.length) && [s14.plan, s14.c3, s14.c6].every((r) => r.sells.length <= 1), '돈이 들어올수록 판 횟수가 줄어듦(2004~, 1999~). 2014~는 어느 쪽이든 1번 이하')
 check(s14.plan.buys.every((e) => e.d < '2020-01-01'), '2014~: 2020년과 2022년에는 사지 않음')
-check(s99.plan.mdd < s99.hold.mdd, '1999~: 규칙의 최대 낙폭이 더 깊음')
+check(s99.plan.mdd < -0.6 && s99.plan.buys.length >= 3, '1999~: 최대 낙폭이 60%보다 깊고 내리는 동안 세 번 넘게 삼')
 check(maxOf(s14.notrim, 'btc') > maxOf(s14.plan, 'btc') + 0.05 && s14.notrim.vol > s14.plan.vol + 0.01, '2014~: 상한이 없으면 비트코인 비중과 변동성이 더 큼')
 check(Math.abs(s14.plan.cagr - s14.fixed.cagr) < 0.005 && Math.abs(s14.plan.sharpe - s14.fixed.sharpe) < 0.05, '2014~: 매달 되돌린 경우와 연수익률 0.5%p, 샤프 0.05 안')
 check(s14.hold.avgCash - s14.plan.avgCash > 0.05 && NOBTC.plan.cagr < NOBTC.hold.cagr, '2014~: 그냥 둔 경우가 현금을 5%p 넘게 더 들었고, 비트코인을 빼면 규칙이 낮음')
-check(SCEN.every((s) => Math.abs(s.now30.cagr - s.plan.cagr) < 0.006), '기다리지 않고 기준 비중으로 시작해도 연수익률 차이는 0.6%p 안')
-check(SCEN.every((s) => s.plan.minCash > 0.19) && s14.plan.maxCash > 0.55, '규칙대로면 현금이 19% 아래로 가지 않고, 2014~에서는 1번 전에 55% 넘게 쌓임')
+check([...SCEN, RECENT.five].every((s) => Math.abs(s.wait.cagr - s.plan.cagr) < 0.006), '현금 40%에서 1번 규칙을 기다린 경우와 기준 비중으로 시작한 경우의 연수익률 차이는 0.6%p 안')
+check(SCEN.every((s) => s.plan.minCash > 0.19 && s.plan.maxCash < 0.45), '규칙대로면 현금이 19% 아래로도, 45% 위로도 가지 않음')
 check(RECENT.five.ann.btc < 0.05 && RECENT.ann14.btc > 0.3, '최근 5년 비트코인 연수익률은 5% 아래, 2014년부터는 30% 위')
-check(RECENT.byStart.every((r) => r.plan.cagr > r.hold.cagr), '시작한 달 일곱 가지 모두 규칙대로가 그냥 둔 경우보다 높음')
+check(RECENT.byStart.every((r) => r.plan.cagr > r.hold.cagr - 0.001), '시작한 달 일곱 가지 모두 규칙대로가 그냥 둔 경우보다 낮지 않음')
 check(RECENT.byStart.every((r) => r.plan.cagr >= RECENT.five.plan.cagr), '최근 5년이 일곱 가지 시작점 중 가장 낮음')
-check(Math.abs(RECENT.five.plan.cagr - RECENT.five.fixed.cagr) < 0.005 && RECENT.byStart.some((r) => r.plan.cagr < r.fixed.cagr), '최근 5년에서 규칙대로와 매달 되돌림은 0.5%p 안, 시작점에 따라 매달 되돌림이 더 높기도 함')
-check(RECENT.five.plan.buys.length === 1 && RECENT.five.plan.buys[0].first && RECENT.five.lowQdd < -0.3 && RECENT.five.maxCashAfter < RULE.upper, '최근 5년: 1번 규칙으로 한 번 샀고, 그 뒤 QQQ가 30% 넘게 내렸어도 현금은 40%에 닿지 않음')
-check(SCEN[0].plan.cagr - NOBTC.plan.cagr > 0.04 && RECENT.five.plan.cagr - RECENT.five.nobtc.cagr < 0.005, '비트코인이 더한 연수익률: 2014년부터는 4%p 넘고 최근 5년은 0.5%p 아래')
+check(RECENT.byStart.every((r) => Math.abs(r.plan.cagr - r.fixed.cagr) < 0.011) && RECENT.byStart.some((r) => r.plan.cagr < r.fixed.cagr), '시작한 달 일곱 가지에서 규칙대로와 매달 되돌림은 1.1%p 안, 시작점에 따라 매달 되돌림이 더 높기도 함')
+check(RECENT.five.plan.buys.length === 1 && RECENT.five.plan.buys[0].qdd < -0.3 && RECENT.five.plan.sells.length === 0 && RECENT.five.plan.cagr - RECENT.five.hold.cagr > 0.01, '최근 5년: QQQ가 30% 넘게 내렸을 때 한 번 샀고 판 날은 없으며, 그냥 둔 경우보다 1%p 넘게 높음')
+check(SCEN[0].plan.cagr - NOBTC.plan.cagr > 0.04 && RECENT.five.plan.cagr - RECENT.five.nobtc.cagr < 0.02, '비트코인이 더한 연수익률: 2014년부터는 4%p 넘고 최근 5년은 2%p 아래')
 check([RECENT.five.mix, RECENT.mixLong].every((m) => Math.abs(m.plan.cagr - m.btcOnly.cagr) < 0.01 && Math.abs(m.plan.mdd - m.btcOnly.mdd) < 0.03), '암호화폐 몫에 이더리움 20%를 섞어도 연수익률 차이는 1%p 안, 최대 낙폭 차이는 3%p 안')
 check(SCEN[0].plan.cagr - RECENT.five.plan.cagr > 0.05, '2014년부터와 최근 5년의 연수익률 차이는 5%p 넘음')
 check(SCEN.every((s) => Math.abs(s.plan.cagr - s.partial.cagr) < 0.004), '전부 되돌리는 경우와 필요한 만큼만 사고파는 경우의 연수익률 차이는 0.4%p 안')
@@ -447,7 +447,7 @@ const heroGauge = () => {
     <text x="${x(RULE.target)}" y="${Y - 62}" text-anchor="middle" class="zt">기준 ${p0(RULE.target)}</text>
     <text x="${x(RULE.target)}" y="${Y - 48}" text-anchor="middle" class="lbl2">${mixText(BASELINE)}</text>
     ${[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6].map((c) => `<line x1="${x(c)}" x2="${x(c)}" y1="${Y + BH}" y2="${Y + BH + 5}" stroke="${C.ink3}"/><text x="${x(c)}" y="${Y + BH + 17}" text-anchor="middle" class="tick">${p0(c)}</text>`).join('')}
-    <path d="M${x(RULE.startCash)},${Y + BH + 24}l-6,10h12z" fill="${C.ink}"/><text x="${x(RULE.startCash) + 10}" y="${Y + BH + 35}" class="lbl">지금 ${p0(RULE.startCash)} (1번 규칙을 쓰기 전이라 아직 사지 않음)</text>
+    <path d="M${x(RULE.target)},${Y + BH + 24}l-6,10h12z" fill="${C.ink}"/><text x="${x(RULE.target) + 10}" y="${Y + BH + 35}" class="lbl">지금은 기준 비중 근처 (1번 규칙은 2026년 11월 하락에서 씀)</text>
     <text x="${x(0)}" y="${H - 2}" class="axis">전체 자산에서 현금이 차지하는 비중</text>
   </svg>`
 }
@@ -491,7 +491,7 @@ const CYCLE = (() => {
   const pts = []
   for (let k = 1; k < nodes.length; k++) { const [t0, p0_] = nodes[k - 1], [t1, p1] = nodes[k]; for (let t = t0; t < t1; t += 0.25) pts.push([t, p0_ + ((p1 - p0_) * (t - t0)) / (t1 - t0)]) }
   pts.push(nodes.at(-1))
-  let cash = RULE.startCash * 100, sh = ((1 - RULE.startCash) * 100) / pts[0][1], peak = 0, stepped = false
+  let cash = RULE.target * 100, sh = ((1 - RULE.target) * 100) / pts[0][1], peak = 0, stepped = true // 1번 규칙은 이미 썼다
   const out = [], ev = []
   for (const [t, p] of pts) {
     peak = Math.max(peak, p)
@@ -501,7 +501,8 @@ const CYCLE = (() => {
     T = cash + sh * p
     out.push({ t, p, cw: cash / T, pre: ev.at(-1)?.t === t ? ev.at(-1).from : cash / T })
   }
-  return { out, ev, tMax: nodes.at(-1)[0] }
+  const before = out.filter((o) => o.t < ev[0].t), calm = before.reduce((m, o) => (o.p < m.p ? o : m)), top = Math.max(...before.filter((o) => o.t <= calm.t).map((o) => o.p))
+  return { out, ev, tMax: nodes.at(-1)[0], calm: { ...calm, dd: calm.p / top - 1 } }
 })()
 const cycleChart = () => {
   const Wd = 688, L = 54, R = 20, T1 = 24, H1 = 112, G = 34, H2 = 112, H = T1 + H1 + G + H2 + 26
@@ -524,6 +525,8 @@ const cycleChart = () => {
       <circle cx="${cx}" cy="${y2(e.from)}" r="4" fill="${C.ink}" stroke="#fff" stroke-width="1.5"/>
       <text x="${tx}" y="${y1(e.p) - (e.kind === 'sell' ? 14 : -18)}" text-anchor="${an}" class="lbl">${n[1]}</text>
       <text x="${tx}" y="${y2(e.from) + (e.kind === 'sell' ? 16 : -8)}" text-anchor="${an}" class="lbl">${n[2]}</text>` }).join('')}
+    <circle cx="${x(CYCLE.calm.t)}" cy="${y1(CYCLE.calm.p)}" r="5" fill="#fff" stroke="${C.ink}" stroke-width="2"/><circle cx="${x(CYCLE.calm.t)}" cy="${y2(CYCLE.calm.cw)}" r="4" fill="#fff" stroke="${C.ink}" stroke-width="1.5"/>
+    <text x="${x(CYCLE.calm.t) + 12}" y="${y1(CYCLE.calm.p) + 16}" class="lbl2">QQQ ${pct(CYCLE.calm.dd, 0)}: 현금 ${p0(CYCLE.calm.cw)}, 그대로 둠</text>
     <text x="${Wd - R}" y="${H - 6}" text-anchor="end" class="axis">시간 →</text>
   </svg>`
 }
@@ -533,7 +536,6 @@ const rail = () => {
   const steps = [
     ['금이나 암호화폐가<br>20% 이상인가', '10%로 줄이고<br>판 돈은 현금에', '4번 규칙'],
     ['현금이<br>20% 이하인가', '전부 기준 비중으로<br>(팔아서 채움)', '2번 규칙'],
-    ['1번 규칙 전이고 QQQ가<br>20% 이상 내렸나', '기준 비중으로<br>(현금 40 → 30)', '1번 규칙'],
     ['현금이<br>40% 이상인가', '전부 기준 비중으로<br>(현금으로 삼)', '2번 규칙'],
     ['새로 들어온<br>돈이 있나', '현금이 기준보다 적으면<br>현금에, 아니면 모자란 자산', '3번 규칙'],
   ]
@@ -606,12 +608,12 @@ const qqqDrawdown = () => {
   const Wd = 688, H = 150, L = 46, R = 16, T = 10, B = 22
   const dates = [...QQQ.keys()].sort(), t0 = Date.parse(dates[0]), t1 = Date.parse(dates.at(-1)), x = (d) => L + ((Date.parse(d) - t0) / (t1 - t0)) * (Wd - L - R), y = (v) => T + (v / -0.9) * (H - T - B)
   let pk = 0
-  const dd = dates.map((d) => { pk = Math.max(pk, QQQ.get(d)); return [d, QQQ.get(d) / pk - 1] }), keep = new Set(HITS.map((h) => h.d)), pts = dd.filter(([d], i) => i % 5 === 0 || keep.has(d))
+  const dd = dates.map((d) => { pk = Math.max(pk, QQQ.get(d)); return [d, QQQ.get(d) / pk - 1] }), keep = new Set(HITS_PAST.map((h) => h.d)), pts = dd.filter(([d], i) => i % 5 === 0 || keep.has(d))
   const line = pathOf(pts.map(([d, v]) => [x(d), y(v)]))
   return `<svg viewBox="0 0 ${Wd} ${H}" role="img" aria-label="QQQ가 최고가에서 내린 폭">
     ${[0, -0.2, -0.4, -0.6, -0.8].map((v) => `<line x1="${L}" x2="${Wd - R}" y1="${y(v)}" y2="${y(v)}" stroke="${v === RULE.firstDd ? C.ink : C.grid}"${v === RULE.firstDd ? ' stroke-dasharray="4 3"' : ''}/><text x="${L - 6}" y="${y(v) + 3.5}" text-anchor="end" class="tick">${p0(v)}</text>`).join('')}
     <path d="${line}L${x(dates.at(-1))},${y(0)}L${x(dates[0])},${y(0)}Z" fill="${C.qqq}" opacity="0.12"/><path d="${line}" fill="none" stroke="${C.qqq}" stroke-width="1.5"/>
-    ${HITS.map((h) => `<circle cx="${x(h.d).toFixed(1)}" cy="${y(RULE.firstDd)}" r="5" fill="${C.ink}" stroke="#fff" stroke-width="1.5"/><text x="${x(h.d).toFixed(1)}" y="${y(RULE.firstDd) - 9}" text-anchor="middle" class="lbl">${h.d.slice(0, 4)}</text>`).join('')}
+    ${HITS_PAST.map((h) => `<circle cx="${x(h.d).toFixed(1)}" cy="${y(RULE.firstDd)}" r="5" fill="${C.ink}" stroke="#fff" stroke-width="1.5"/><text x="${x(h.d).toFixed(1)}" y="${y(RULE.firstDd) - 9}" text-anchor="middle" class="lbl">${h.d.slice(0, 4)}</text>`).join('')}
     ${[2000, 2005, 2010, 2015, 2020, 2025].map((yr) => `<text x="${x(`${yr}-01-01`)}" y="${H - 6}" text-anchor="middle" class="tick">${yr}</text>`).join('')}
   </svg>`
 }
@@ -634,8 +636,8 @@ const dials = () => {
       <text x="${x0}" y="${H - 6}" class="lbl2">${note}</text>`
   }
   return `<svg viewBox="0 0 ${Wd} ${H}" role="img" aria-label="지금 확인할 숫자">
-    ${track(0, 'QQQ 종가', QNOW.trigger * 0.9, QNOW.peak, [[QNOW.trigger * 0.9, QNOW.trigger, TINT.buy]], [[QNOW.trigger, '기준가', C.ink, true], [QNOW.last, '자료 마지막 날', C.qqq, false], [QNOW.peak, '최고가', C.ink3, true]], (v) => v.toFixed(1), QNOW.last <= QNOW.trigger ? '기준가 이하: 1번 규칙 조건이 됨' : `${1 - QNOW.trigger / QNOW.last < 0.01 ? pct(1 - QNOW.trigger / QNOW.last, 1) : p0(1 - QNOW.trigger / QNOW.last)} 더 내리면 1번 규칙`)}
-    ${track(colW + gap, '현금 비중', 0, 0.6, [[0, RULE.lower, TINT.sell], [RULE.lower, RULE.upper, TINT.hold], [RULE.upper, 0.6, TINT.buy]], [[RULE.startCash, '지금', C.ink, false], [RULE.lower, '', C.ink3, true], [RULE.upper, '', C.ink3, true]], p0, `${p0(RULE.lower)} 이하면 팔아서, 1번 뒤 ${p0(RULE.upper)} 이상이면 사서 되돌림`)}
+    ${track(0, 'QQQ 종가', QNOW.last * 0.42, QNOW.peak, [[QNOW.last * 0.42, QNOW.last * (1 + qqqMoveFor(RULE.upper)), TINT.buy]], [[QNOW.last * (1 + qqqMoveFor(RULE.upper)), '현금 40% 근처', C.ink, true], [QNOW.last, '자료 마지막 날', C.qqq, false], [QNOW.peak, '최고가', C.ink3, true]], (v) => v.toFixed(0), `지금이 기준 비중이면 QQQ만 ${p0(-qqqMoveFor(RULE.upper))} 더 내려야 현금 ${p0(RULE.upper)}`)}
+    ${track(colW + gap, '현금 비중', 0, 0.6, [[0, RULE.lower, TINT.sell], [RULE.lower, RULE.upper, TINT.hold], [RULE.upper, 0.6, TINT.buy]], [[RULE.target, '지금 약', C.ink, false], [RULE.lower, '', C.ink3, true], [RULE.upper, '', C.ink3, true]], p0, `${p0(RULE.lower)} 이하면 팔아서, ${p0(RULE.upper)} 이상이면 사서 되돌림`)}
     ${track(2 * (colW + gap), '금, 암호화폐 비중', 0, 0.25, [[0, RULE.trimAt, TINT.hold], [RULE.trimAt, 0.25, TINT.sell]], [[NOW.gold, '지금 각각', C.ink, false], [RULE.trimAt, '상한', C.ink3, true]], p0, `${p0(RULE.trimAt)} 이상이면 ${p0(RULE.trimTo)}로 줄임`)}
   </svg>`
 }
@@ -729,9 +731,10 @@ table.t tr.pick td { background: #f4f7ff; font-weight: 600; }
 .rti { border: 1px solid #e0e3eb; border-radius: 8px; padding: 8pt 9pt; font-size: 8.8pt; line-height: 1.45; }
 .rti .no, .evt .no { display: inline-block; width: 15pt; height: 15pt; line-height: 15pt; text-align: center; border-radius: 50%; background: #2962ff; color: #fff; font-size: 8pt; font-weight: 700; margin-right: 5pt; }
 .rti b { font-size: 9.8pt; }
+.rti.done { background: #f4f6f9; } .rti.done .no { background: ${C.ink3}; } .rti.done svg { opacity: 0.45; } .rti em { font-style: normal; font-size: 8pt; font-weight: 700; color: ${C.ink2}; border: 1px solid ${C.ink3}; border-radius: 9px; padding: 0 5pt; margin-left: 5pt; }
 .rti p { margin: 2pt 0 0; color: ${C.ink2}; }
 .ic { width: 100%; height: auto; margin: 6pt 0 2pt; }
-.rail { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; margin: 6pt 0 8pt; }
+.rail { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin: 6pt 0 8pt; }
 .rs { display: grid; grid-template-rows: 42pt 22pt auto; text-align: center; font-size: 8.8pt; line-height: 1.4; position: relative; }
 .rq { font-weight: 600; align-self: end; padding: 0 4pt 4pt; }
 .rn { position: relative; }
@@ -803,7 +806,7 @@ const startChart = () => {
     ${ticks.map((v) => `<line x1="${L}" x2="${Wd - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="${C.grid}"/><text x="${L - 6}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end" class="tick">${p0(v)}</text>`).join('')}
     ${rs.map((r, i) => `<line x1="${cx(i).toFixed(1)}" x2="${cx(i).toFixed(1)}" y1="${y(r.plan.cagr).toFixed(1)}" y2="${y(r.hold.cagr).toFixed(1)}" stroke="${C.ink3}" stroke-width="1.5"/>
       <circle cx="${cx(i).toFixed(1)}" cy="${y(r.hold.cagr).toFixed(1)}" r="4.5" fill="${C.base}" stroke="#fff" stroke-width="1.5"/><circle cx="${cx(i).toFixed(1)}" cy="${y(r.plan.cagr).toFixed(1)}" r="5.5" fill="${C.plan}" stroke="#fff" stroke-width="1.5"/>
-      <text x="${(cx(i) + 9).toFixed(1)}" y="${(y(r.plan.cagr) + 3.5).toFixed(1)}" class="lbl">${pct(r.plan.cagr)}</text><text x="${(cx(i) + 9).toFixed(1)}" y="${(y(r.hold.cagr) + 3.5).toFixed(1)}" class="lbl2">${pct(r.hold.cagr)}</text>
+      <text x="${(cx(i) + 9).toFixed(1)}" y="${(y(r.plan.cagr) + 3.5).toFixed(1)}" class="lbl">${pct(r.plan.cagr)}</text><text x="${(cx(i) + 9).toFixed(1)}" y="${Math.max(y(r.hold.cagr) + 3.5, y(r.plan.cagr) + 14.5).toFixed(1)}" class="lbl2">${pct(r.hold.cagr)}</text>
       <text x="${cx(i).toFixed(1)}" y="${rowY[0]}" text-anchor="middle" class="lbl">${ymK(r.dates[0])}</text>
       <text x="${cx(i).toFixed(1)}" y="${rowY[1]}" text-anchor="middle" class="lbl2">${pct(r.ann.qqq, 0)}</text><text x="${cx(i).toFixed(1)}" y="${rowY[2]}" text-anchor="middle" class="lbl2" style="${r.ann.btc < 0.05 ? `fill:${C.btc};font-weight:700` : ''}">${pct(r.ann.btc, 0)}</text><text x="${cx(i).toFixed(1)}" y="${rowY[3]}" text-anchor="middle" class="lbl2">${pct(r.ann.gold, 0)}</text>`).join('')}
     ${[['시작', 0], ['QQQ', 1], ['비트코인', 2], ['금', 3]].map(([t, k]) => `<text x="${L - 6}" y="${rowY[k]}" text-anchor="end" class="tick">${t}</text>`).join('')}
@@ -818,17 +821,17 @@ const recentPage = () => { const f = RECENT.five, a5 = f.ann, a14 = RECENT.ann14
     <div><div class="cap">자산별 연수익률 <span class="hint">옅은 색이 2014년부터, 진한 색이 최근 5년</span></div>
       ${hbars([['QQQ', 'qqq'], ['비트코인', 'btc'], ['금', 'gold']].flatMap(([nm, k]) => [{ label: `${nm} 2014년부터`, v: a14[k], text: pct(a14[k]), color: `${C[k]}66` }, { label: `${nm} 최근 5년`, v: a5[k], text: pct(a5[k]), color: C[k] }]), { Wd: 330, L: 112, R: 48, rh: 17 })}</div>
     <div><div class="cap">최근 5년의 결과 <span class="hint">연수익률, 괄호는 최대 낙폭</span></div>
-      ${hbars([['규칙대로', f.plan, C.plan], ['매달 되돌림', f.fixed, C.ink2], ['처음부터 현금 30%', f.now30, C.ink3], ['그냥 둠', f.hold, C.base]].map(([l, r, color]) => ({ label: l, v: r.cagr, text: `${pct(r.cagr)} (${pct(r.mdd)})`, color })), { Wd: 330, L: 112, R: 96, rh: 17 })}
+      ${hbars([['규칙대로', f.plan, C.plan], ['매달 되돌림', f.fixed, C.ink2], ['현금 40%에서 기다림', f.wait, C.ink3], ['그냥 둠', f.hold, C.base]].map(([l, r, color]) => ({ label: l, v: r.cagr, text: `${pct(r.cagr)} (${pct(r.mdd)})`, color })), { Wd: 330, L: 112, R: 96, rh: 17 })}
       <p class="foot">세금 ${p0(RULE.taxRate)}를 넣으면 규칙대로 ${pct(f.tax.cagr)}, 그냥 둠 ${pct(f.holdTax.cagr)}입니다.</p></div>
   </div>
   ${strip(f)}
-  <p class="foot" style="margin-bottom:4pt">${ymK(f.plan.stepDay)}에 1번 규칙으로 샀습니다. QQQ는 그 뒤 최고가보다 ${p0(-f.lowQdd)}까지 내렸지만 현금은 ${p0(f.maxCashAfter)}에서 멈춰 더 사지 않았습니다.${f.plan.sells.length ? ` ${ymK(f.plan.sells[0].d)}에는 현금이 ${p0(RULE.lower)}로 줄어 한 번 팔았습니다.` : ''}</p>
+  <p class="foot" style="margin-bottom:4pt">${ymK(f.plan.buys[0].d)}에 현금이 ${p0(RULE.upper)}가 되어 한 번 샀습니다. 그때 QQQ는 최고가보다 ${p0(-f.plan.buys[0].qdd)} 낮았습니다. 현금이 ${p0(RULE.lower)}가 되어 판 날은 없습니다.</p>
   <h3>시작한 달만 바꾸면 <span class="hint">끝은 모두 ${ymK(f.dates.at(-1))}. 아래 세 줄은 그 기간 자산별 연수익률</span></h3>
   ${legend([['dot', C.plan, '규칙대로'], ['dot', C.base, '그냥 둠']])}
   ${startChart()}
   <div class="stats">
     ${stat(`${pp(SCEN[0].plan.cagr - NOBTC.plan.cagr).replace('%p', '')} → ${pp(f.plan.cagr - f.nobtc.cagr)}`, '비트코인이 연수익률에 더한 폭(2014년부터 → 최근 5년). 비트코인 몫을 QQQ에 넣은 경우와 비교')}
-    ${stat(pp(f.plan.cagr - f.hold.cagr), `그냥 둔 경우보다 높은 폭. 현금을 평균 ${p0(f.plan.avgCash)}로 덜 들었기 때문입니다`)}
+    ${stat(pp(f.plan.cagr - f.hold.cagr), `그냥 둔 경우보다 높은 폭. ${ymK(f.plan.buys[0].d)}에 현금 ${p0(RULE.upper)}가 되어 한 번 산 덕입니다`)}
     ${stat(`${pp(Math.min(...gap)).replace('%p', '')}~${pp(Math.max(...gap))}`, '시작한 달 일곱 가지에서 매달 되돌린 경우와의 차이. 규칙이 더 버는 것은 아닙니다')}
   </div>
   <p class="foot">최근 5년은 일곱 가지 시작점 중 가장 나쁜 경우입니다. 앞으로를 낮춰 잡는 기준으로는 쓸 만하지만, 한 구간의 결과입니다.</p>
@@ -850,9 +853,9 @@ const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>
   ${triptych()}
   ${legend([['sw', C.cash, '현금 (달러 단기 국채 ETF)'], ['sw', C.gold, '금'], ['sw', C.qqq, 'QQQ'], ['sw', C.btc, '암호화폐']])}
 
-  <h3>규칙 네 가지</h3>
+  <h3>규칙 네 가지 <span class="hint">1번은 이미 썼습니다. 지금부터는 2, 3, 4번만 봅니다</span></h3>
   <div class="rt">
-    <div class="rti"><span class="no">1</span><b>처음 한 번</b>${icon(1)}<p>QQQ가 최고가보다 ${p0(-RULE.firstDd)} 이상 내리면 기준 비중으로. 현금 ${p0(RULE.startCash)} → ${p0(RULE.target)}</p></div>
+    <div class="rti done"><span class="no">1</span><b>처음 한 번</b><em>완료</em>${icon(1)}<p>2026년 11월, QQQ가 최고가보다 ${p0(-RULE.firstDd)} 가까이 내렸을 때 썼습니다. 현금 ${p0(RULE.startCash)} → ${p0(RULE.target)}</p></div>
     <div class="rti"><span class="no">2</span><b>현금 ${p0(RULE.lower)}와 ${p0(RULE.upper)}</b>${icon(2)}<p>${p0(RULE.lower)} 이하나 ${p0(RULE.upper)} 이상이면 전부 기준 비중으로</p></div>
     <div class="rti"><span class="no">3</span><b>새로 들어오는 돈</b>${icon(3)}<p>현금이 기준보다 적으면 현금에, 아니면 모자란 자산에</p></div>
     <div class="rti"><span class="no">4</span><b>금, 암호화폐 상한</b>${icon(4)}<p>${p0(RULE.trimAt)} 이상이면 ${p0(RULE.trimTo)}로 줄이고 현금에</p></div>
@@ -875,7 +878,7 @@ const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>
 
   <h3>지금 확인할 숫자 <span class="hint">자료의 수정주가 기준입니다. 증권사 화면의 종가로 다시 확인해야 합니다</span></h3>
   ${dials()}
-  <p class="foot">QQQ 역대 최고 종가 ${usd(QNOW.peak)}(${ymdK(QNOW.peakDay)}), 1번 규칙의 기준가 ${usd(QNOW.trigger)}, 자료 마지막 날 ${usd(QNOW.last)}. 새 최고가가 나오면 기준가도 올라갑니다.</p>
+  <p class="foot">QQQ 역대 최고 종가 ${usd(QNOW.peak)}(${ymdK(QNOW.peakDay)}), 자료 마지막 날 ${usd(QNOW.last)}(최고 종가보다 ${pct(-QNOW.dd)} 낮음). 1번 규칙은 이 하락에서 썼고, 다음에 사는 때는 현금이 ${p0(RULE.upper)}가 되는 날입니다.</p>
 </section>
 
 <section class="page">
@@ -896,6 +899,7 @@ const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>
 <section class="page">
   <div class="kicker">과거 자료</div>
   <h2>과거에 이 규칙대로 했다면</h2>
+  <p class="sub">지금처럼 기준 비중에서 시작해 현금 ${p0(RULE.lower)}와 ${p0(RULE.upper)}, 금과 암호화폐 상한만으로 움직인 기록입니다.</p>
   ${legend([['ln', C.cash, '현금 비중'], ['band', C.cash, '사고팔지 않는 범위'], ['dot', C.ink, '산 날'], ['dia', C.ink, '팔아서 현금을 채운 날'], ['tri', C.btc, '비트코인을 줄인 날'], ['tri', C.gold, '금을 줄인 날']])}
   <p class="foot" style="margin:2pt 0 6pt">아래 줄의 숫자는 그날 현금 비중이 바뀐 폭(%p)입니다. 세로 점선을 따라 올라가면 그 자리입니다.</p>
   ${SCEN.map(strip).join('')}
@@ -923,14 +927,14 @@ ${recentPage()}
 <section class="page">
   <div class="kicker">근거</div>
   <h2>규칙마다 그렇게 정한 이유</h2>
-  ${evid(`<span class="no">1</span>QQQ가 최고가에서 ${p0(-RULE.firstDd)} 내린 것은 27년에 ${HITS.length}번`, qqqDrawdown(), `${HITS[0].d.slice(0, 4)}년에는 그 뒤로 ${p0(-HITS[0].more)} 더 내렸습니다. 그래서 한 번에 10%p만 씁니다. 기다리지 않고 바로 현금 ${p0(RULE.target)}로 시작해도 연수익률은 ${SCEN.map((s) => pct(s.now30.cagr)).join(', ')}로 거의 같았습니다(규칙대로 ${SCEN.map((s) => pct(s.plan.cagr)).join(', ')}).`)}
+  ${evid(`<span class="no">1</span>이미 쓴 규칙: QQQ가 최고가에서 ${p0(-RULE.firstDd)} 내린 것은 이번 전에 ${HITS_PAST.length}번`, qqqDrawdown(), `이번 하락에서는 최고 종가보다 ${pct(-QNOW.lowDd)} 낮은 값까지 왔고, 이때 1번 규칙을 썼습니다. ${HITS_PAST[0].d.slice(0, 4)}년에는 ${p0(-RULE.firstDd)} 내린 뒤로 ${p0(-HITS_PAST[0].more)} 더 내렸습니다. 그래서 10%p만 썼고, 나머지는 현금이 ${p0(RULE.upper)}가 될 때 씁니다. 현금 ${p0(RULE.startCash)}에서 기다렸다 산 경우의 연수익률은 ${SCEN.map((s) => pct(s.wait.cagr)).join(', ')}로, 기준 비중에서 시작한 경우(${SCEN.map((s) => pct(s.plan.cagr)).join(', ')})와 거의 같았습니다.`)}
   <div class="evg">
-    ${evid(`<span class="no">2</span>현금 ${p0(RULE.upper)}로 산 날은 QQQ가 크게 내린 때`, hbars(upperBuys.map((e) => ({ label: ymK(e.d), v: -e.qdd, text: `−${p0(-e.qdd)}` })), { Wd: 330, L: 84, R: 44, rh: 17, max: 1 }), '금이나 암호화폐를 판 직후에는 현금이 많아 얕은 하락에도 삽니다.')}
+    ${evid(`<span class="no">2</span>현금 ${p0(RULE.upper)}로 산 날은 대부분 QQQ가 크게 내린 때`, hbars([...upperBuys].sort((a, b) => (a.d < b.d ? -1 : 1)).map((e) => ({ label: ymK(e.d), v: Math.max(0, -e.qdd), text: e.qdd > -0.005 ? '최고가 근처' : `−${p0(-e.qdd)}`, color: e.s === s14 ? C.btc : C.plan })), { Wd: 330, L: 84, R: 60, rh: 15, max: 1 }), '주황색 두 번은 비트코인을 줄인 돈이 현금에 쌓인 뒤라 덜 내렸을 때 샀습니다.')}
     ${evid(`<span class="no">2</span>하한이 없으면 현금이 ${p0(Math.min(s04.nolower.minCash, s99.nolower.minCash))}까지 줄어든다`, twoLines(s04.dates, cashW(s04.plan), cashW(s04.nolower), { Wd: 330, H: 118, R: 84, labelA: '하한 있음', labelB: '하한 없음, 최저', rule: RULE.lower, ruleLabel: '하한', colorA: C.cash, mark: 'min', dyA: -7 }), '2004년 시작 구간의 현금 비중입니다.')}
     ${evid(`<span class="no">2</span>필요한 만큼만 사고팔아도 결과는 같다`, hbars(SCEN.flatMap((s) => [{ label: `${short(s).slice(0, 4)}~ 전부 되돌림`, v: s.plan.cagr, text: pct(s.plan.cagr) }, { label: `${short(s).slice(0, 4)}~ 필요한 만큼만`, v: s.partial.cagr, text: pct(s.partial.cagr), color: C.base }]), { Wd: 330, L: 126, R: 44, rh: 16, max: 0.2 }), '그래서 규칙이 짧은 쪽을 골랐습니다.')}
     ${evid(`<span class="no">3</span>돈이 새로 들어오면 팔 일이 줄어든다`, hbars(SCEN.flatMap((s) => [['없음', s.plan, C.base], ['해마다 3%', s.c3, C.plan], ['해마다 6%', s.c6, C.plan]].map(([l, r, color]) => ({ label: `${short(s).slice(0, 4)}~ ${l}`, v: r.sells.length, text: `${r.sells.length}번`, color }))), { Wd: 330, L: 110, R: 40, rh: 13.5, max: 8 }), `현금 ${p0(RULE.lower)} 이하가 되어 판 횟수입니다.`)}
     ${evid(`<span class="no">4</span>상한이 없으면 비트코인이 ${p0(maxOf(s14.notrim, 'btc'))}까지 커진다`, twoLines(s14.dates, btcW(s14.plan), btcW(s14.notrim), { Wd: 330, H: 118, R: 84, labelA: '상한 있음', labelB: '상한 없음, 최고', rule: RULE.trimAt }), `전체의 변동성이 ${pct(s14.plan.vol)}에서 ${pct(s14.notrim.vol)}로 커졌습니다.`)}
-    ${evid(`<span class="no">1</span>${p0(-RULE.firstDd)} 하락 뒤 3년, 좋았지만 특별하지는 않다`, hbars(HITS.map((h) => ({ label: ymK(h.d), v: h.after3, text: h.after3 == null ? '3년이 안 됨' : `${h.after3 > 0 ? '+' : '−'}${p0(Math.abs(h.after3))}`, color: h.after3 < 0 ? C.btc : C.plan })), { Wd: 330, L: 84, R: 50, rh: 17 }), `${BASE3Y.from.slice(0, 4)}년 이후에는 아무 날에 사도 3년 뒤 중앙값이 +${p0(BASE3Y.med)}였습니다.`)}
+    ${evid(`<span class="no">1</span>${p0(-RULE.firstDd)} 하락 뒤 3년, 좋았지만 특별하지는 않다`, hbars(HITS_PAST.map((h) => ({ label: ymK(h.d), v: h.after3, text: h.after3 == null ? '3년이 안 됨' : `${h.after3 > 0 ? '+' : '−'}${p0(Math.abs(h.after3))}`, color: h.after3 < 0 ? C.btc : C.plan })), { Wd: 330, L: 84, R: 50, rh: 17 }), `${BASE3Y.from.slice(0, 4)}년 이후에는 아무 날에 사도 3년 뒤 중앙값이 +${p0(BASE3Y.med)}였습니다.`)}
   </div>
 </section>
 
@@ -940,12 +944,19 @@ ${recentPage()}
   <h3>어디에 두나 <span class="hint">칸의 너비가 기준 비중입니다</span></h3>
   ${accounts()}
 
-  <h3>1번 규칙을 쓰기 전(지금) 켜져 있는 것</h3>
+  <h3>지금 켜져 있는 것 <span class="hint">1번 규칙을 쓴 뒤라 전부 켜져 있습니다</span></h3>
   <div class="tgs">
-    ${toggle(true, `현금 ${p0(RULE.lower)} 이하면 되돌림`, '첫날부터 봅니다')}
-    ${toggle(false, `현금 ${p0(RULE.upper)} 이상이면 되돌림`, `1번 규칙 뒤부터. 그 전에는 현금이 쌓입니다(2014년 구간 ${p0(s14.plan.maxCash)})`)}
-    ${toggle(true, '새로 들어오는 돈', `현금 기준을 ${p0(RULE.startCash)}로 봅니다`)}
-    ${toggle(true, `금, 암호화폐 상한 ${p0(RULE.trimAt)}`, '둘을 따로 봅니다')}
+    ${toggle(true, `현금 ${p0(RULE.lower)} 이하면 되돌림`, '팔아서 현금을 채웁니다')}
+    ${toggle(true, `현금 ${p0(RULE.upper)} 이상이면 되돌림`, '현금으로 삽니다. 1번 규칙을 써서 켜졌습니다')}
+    ${toggle(true, '새로 들어오는 돈', `현금 기준을 ${p0(RULE.target)}로 봅니다`)}
+    ${toggle(true, `금, 암호화폐 상한 ${p0(RULE.trimAt)}`, '금과 암호화폐를 따로 봅니다')}
+  </div>
+
+  <h3>그 밖에 정해 둔 것</h3>
+  <div class="pipe three">
+    <div><b>돈을 뺄 때는 현금에서</b><span>그래서 현금이 ${p0(RULE.lower)} 이하가 되면 2번 규칙대로 되돌립니다</span></div>
+    <div><b>규칙에 없는 주식</b><span>일반 주식은 QQQ 몫에, 암호화폐 관련 주식은 암호화폐 몫에 넣어 셉니다</span></div>
+    <div><b>전부 일반 계좌에서</b><span>언제 현금이 필요할지 모르기 때문입니다</span></div>
   </div>
 
   <h3>비중을 재는 법</h3>
@@ -971,21 +982,18 @@ ${recentPage()}
   <div class="kicker">받아들일 것과 남은 결정</div>
   <h2>이 규칙으로 치르는 것</h2>
   <div class="stats">
-    ${stat(pct(s99.plan.mdd), `닷컴 구간의 전체 낙폭. 사지 않았다면 ${pct(s99.hold.mdd)}`)}
-    ${stat(p0(s14.plan.maxCash), '1번 규칙 전에 쌓인 현금 (2014년 구간)')}
-    ${stat('0번', '2014년 구간에서 2020년, 2022년 하락에 산 횟수')}
-    ${stat('2번', '규칙이 크게 움직인 폭락의 수 (2000년, 2008년)')}
+    ${stat(pct(s99.plan.mdd), '닷컴 구간의 전체 낙폭 (QQQ 70, 현금 30으로 시작)')}
+    ${stat(p0(FALL), `현금 ${p0(RULE.upper)}가 되려면 현금 외 자산이 내려야 하는 폭. 그 전까지는 내려도 지켜봅니다`)}
+    ${stat(SCEN.map((s) => `${s.plan.buys.length}번`).join(' '), `세 구간에서 현금 ${p0(RULE.upper)}가 되어 산 횟수. 살 기회는 드뭅니다`)}
+    ${stat(SCEN.map((s) => `${s.plan.sells.length}번`).join(' '), `세 구간에서 현금 ${p0(RULE.lower)}가 되어 판 횟수. 팔 때마다 세금이 나갑니다`)}
     ${stat(`${SCEN.map((s) => p0(s.plan.avgCash)).join(' ')}`, '세 구간의 평균 현금 비중. 오르는 장에서는 그만큼 덜 법니다')}
     ${stat('없음', '환율과 국내 가격(KRX 금값, 거래소 원화 시세)은 계산에 없습니다')}
   </div>
 
   <h2 style="margin-top:16pt">아직 정하지 않은 것</h2>
   <table class="t"><thead><tr><th style="width:26%">항목</th><th style="width:34%">지금</th><th>고를 수 있는 것</th></tr></thead><tbody>
-    <tr><td>암호화폐 안의 구성</td><td>합계로만 봅니다. 계산에는 비트코인만 넣었습니다.</td><td>채울 때 비트코인만 사기 / 비율 정하기</td></tr>
     <tr><td>새로 들어온 돈을 나누는 방법</td><td>가장 모자란 자산 하나를 삽니다.</td><td>그대로 두기 / 모자란 만큼 비례해서 나누기</td></tr>
-    <tr><td>큰 돈이 들어오거나 나갈 때</td><td>정하지 않았습니다.</td><td>나갈 돈은 비중 계산에서 빼 두기 / QQQ가 크게 내린 동안에는 파는 것을 미루기</td></tr>
     <tr><td>국내 값이 국제 값보다 비쌀 때</td><td>정하지 않았습니다.</td><td>차이가 3%를 넘으면 매수를 미루기 / 그대로 사기</td></tr>
-    <tr><td>실물 금이 금의 대부분일 때</td><td>사고파는 것은 KRX 금현물 계좌에서만 합니다.</td><td>4번 규칙을 못 지킬 때 실물을 팔지 정하기</td></tr>
   </tbody></table>
 
   <h2 style="margin-top:16pt">부록 1. 숫자로 보기</h2>
@@ -995,6 +1003,7 @@ ${recentPage()}
     ${cmpRow('기준 비중으로 시작해 매달 되돌린 경우', 'fixed')}
     ${cmpRow('규칙대로 한 경우', 'plan', 'pick')}
     ${cmpRow('필요한 만큼만 사고파는 경우', 'partial')}
+    ${cmpRow(`현금 ${p0(RULE.startCash)}에서 시작해 1번 규칙을 기다린 경우`, 'wait')}
     ${cmpRow('현금 하한을 뺀 경우', 'nolower')}
     ${cmpRow('현금 상한이 35%인 경우', 'up35')}
     ${cmpRow('해마다 자산의 3%만큼 돈이 새로 들어오는 경우', 'c3')}
