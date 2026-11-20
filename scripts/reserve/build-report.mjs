@@ -634,7 +634,7 @@ const dials = () => {
       <text x="${x0}" y="${H - 6}" class="lbl2">${note}</text>`
   }
   return `<svg viewBox="0 0 ${Wd} ${H}" role="img" aria-label="지금 확인할 숫자">
-    ${track(0, 'QQQ 종가', QNOW.trigger * 0.9, QNOW.peak, [[QNOW.trigger * 0.9, QNOW.trigger, TINT.buy]], [[QNOW.trigger, '기준가', C.ink, true], [QNOW.last, '자료 마지막 날', C.qqq, false], [QNOW.peak, '최고가', C.ink3, true]], (v) => v.toFixed(0), `${p0(1 - QNOW.trigger / QNOW.last)} 더 내리면 1번 규칙`)}
+    ${track(0, 'QQQ 종가', QNOW.trigger * 0.9, QNOW.peak, [[QNOW.trigger * 0.9, QNOW.trigger, TINT.buy]], [[QNOW.trigger, '기준가', C.ink, true], [QNOW.last, '자료 마지막 날', C.qqq, false], [QNOW.peak, '최고가', C.ink3, true]], (v) => v.toFixed(1), QNOW.last <= QNOW.trigger ? '기준가 이하: 1번 규칙 조건이 됨' : `${1 - QNOW.trigger / QNOW.last < 0.01 ? pct(1 - QNOW.trigger / QNOW.last, 1) : p0(1 - QNOW.trigger / QNOW.last)} 더 내리면 1번 규칙`)}
     ${track(colW + gap, '현금 비중', 0, 0.6, [[0, RULE.lower, TINT.sell], [RULE.lower, RULE.upper, TINT.hold], [RULE.upper, 0.6, TINT.buy]], [[RULE.startCash, '지금', C.ink, false], [RULE.lower, '', C.ink3, true], [RULE.upper, '', C.ink3, true]], p0, `${p0(RULE.lower)} 이하면 팔아서, 1번 뒤 ${p0(RULE.upper)} 이상이면 사서 되돌림`)}
     ${track(2 * (colW + gap), '금, 암호화폐 비중', 0, 0.25, [[0, RULE.trimAt, TINT.hold], [RULE.trimAt, 0.25, TINT.sell]], [[NOW.gold, '지금 각각', C.ink, false], [RULE.trimAt, '상한', C.ink3, true]], p0, `${p0(RULE.trimAt)} 이상이면 ${p0(RULE.trimTo)}로 줄임`)}
   </svg>`
@@ -841,7 +841,7 @@ const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>
 <style>${css}</style></head><body>
 
 <section class="page">
-  <div class="kicker">운용 규칙, 2026.11.18 고침, 자료는 ${ymd(QNOW.lastDay)}까지</div>
+  <div class="kicker">운용 규칙, 2026.11.21 고침, 자료는 ${ymd(QNOW.lastDay)}까지</div>
   <h1>현금 비중으로 사고파는 규칙</h1>
   <p class="lead">현금이 ${p0(RULE.lower)} 이하나 ${p0(RULE.upper)} 이상이 되면 전부 기준 비중으로 되돌립니다.</p>
   ${heroGauge()}
