@@ -2,19 +2,19 @@
   "notified": {
     "tripod": "2026-11-20"
   },
-  "asOf": "2026-11-20",
+  "asOf": "2026-11-23",
   "strategies": {
     "tripod": {
       "exposure": 0,
       "holding": "현금 100%",
       "since": "2026-11-20",
-      "changedToday": true
+      "changedToday": false
     },
     "t2": {
       "exposure": 0,
       "holding": "현금 100%",
       "since": "2026-11-20",
-      "changedToday": true
+      "changedToday": false
     },
     "te3": {
       "exposure": 0,
@@ -35,5 +35,5 @@
       "changedToday": false
     }
   },
-  "nextExecution": "2026-11-23"
+  "nextExecution": "2026-11-24"
 }
