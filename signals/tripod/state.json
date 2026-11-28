@@ -2,7 +2,7 @@
   "notified": {
     "tripod": "2026-11-20"
   },
-  "asOf": "2026-11-25",
+  "asOf": "2026-11-27",
   "strategies": {
     "tripod": {
       "exposure": 0,
@@ -35,5 +35,5 @@
       "changedToday": false
     }
   },
-  "nextExecution": "2026-11-27"
+  "nextExecution": "2026-11-30"
 }
